@@ -27,3 +27,4 @@ Prebuilt versions will be available in the Releases section.
 ## Author
 
 Susankar Karmakar
+Testing GitHub Actions build
