@@ -252,7 +252,7 @@ function App() {
       {/* Content Area */}
       <div className="content-area">
         {tabs.map(tab => (
-          <webview
+          <webview // @ts-ignore
             key={tab.id}
             className={tab.id === activeTabId ? 'active' : ''}
             src={tab.id === activeTabId && !webviewRefs.current[tab.id] ? tab.url : undefined}

@@ -5,6 +5,9 @@ on:
     tags:
       - 'v*'
 
+permissions:
+  contents: write
+
 jobs:
   build:
     runs-on: windows-latest
@@ -16,8 +19,19 @@ jobs:
       - name: Run build script
         run: build-browser.bat
 
-      - name: Upload build
+      - name: Upload build as Artifact
         uses: actions/upload-artifact@v4
         with:
           name: probaho-browser-build
-          path: .
+          path: app/release/*.exe
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          files: |
+            app/release/*.exe
+          name: Release ${{ github.ref_name }}
+          draft: false
+          prerelease: false
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

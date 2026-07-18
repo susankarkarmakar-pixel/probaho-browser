@@ -24,13 +24,20 @@
       "electron/**/*"
     ],
     "win": {
-      "target": ["nsis", "portable"]
+      "target": [
+        "nsis",
+        "portable"
+      ]
     },
     "mac": {
-      "target": ["dmg"]
+      "target": [
+        "dmg"
+      ]
     },
     "linux": {
-      "target": ["AppImage"]
+      "target": [
+        "AppImage"
+      ]
     }
   },
   "dependencies": {
@@ -43,7 +50,7 @@
     "@types/react-dom": "^18.2.15",
     "@vitejs/plugin-react": "^4.2.0",
     "concurrently": "^8.2.2",
-    "electron": "^27.1.0",
+    "electron": "^22.3.27",
     "electron-builder": "^24.9.1",
     "typescript": "^5.2.2",
     "vite": "^5.0.0",
