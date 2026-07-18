@@ -41,11 +41,14 @@
     }
   },
   "dependencies": {
+    "@capacitor/core": "^8.4.2",
     "lucide-react": "^0.292.0",
     "react": "^18.2.0",
     "react-dom": "^18.2.0"
   },
   "devDependencies": {
+    "@capacitor/android": "^8.4.2",
+    "@capacitor/cli": "^8.4.2",
     "@types/react": "^18.2.37",
     "@types/react-dom": "^18.2.15",
     "@vitejs/plugin-react": "^4.2.0",
