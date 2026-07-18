@@ -1,0 +1,208 @@
+:root {
+  --primary-color: #7b2cbf;
+  --bg-color: #1a1a1a;
+  --tab-bg: #2d2d2d;
+  --tab-active-bg: #3d3d3d;
+  --text-color: #e0e0e0;
+  --border-color: #404040;
+}
+
+body {
+  margin: 0;
+  padding: 0;
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
+  background-color: var(--bg-color);
+  color: var(--text-color);
+  overflow: hidden;
+  user-select: none;
+}
+
+.browser-container {
+  display: flex;
+  flex-direction: column;
+  height: 100vh;
+}
+
+.titlebar {
+  display: flex;
+  align-items: center;
+  background-color: var(--bg-color);
+  -webkit-app-region: drag;
+  padding-left: 10px;
+}
+
+.tabs {
+  display: flex;
+  flex: 1;
+  overflow-x: auto;
+  overflow-y: hidden;
+  height: 36px;
+  -webkit-app-region: no-drag;
+}
+
+.tabs::-webkit-scrollbar {
+  display: none;
+}
+
+.tab {
+  display: flex;
+  align-items: center;
+  background-color: var(--tab-bg);
+  color: #aaa;
+  border-right: 1px solid var(--border-color);
+  border-top-left-radius: 8px;
+  border-top-right-radius: 8px;
+  margin-top: 4px;
+  margin-right: 2px;
+  padding: 0 10px;
+  min-width: 120px;
+  max-width: 200px;
+  height: 32px;
+  cursor: pointer;
+}
+
+.tab.active {
+  background-color: var(--tab-active-bg);
+  color: var(--text-color);
+}
+
+.tab-title {
+  flex: 1;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  font-size: 12px;
+}
+
+.tab-close {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+  margin-left: 5px;
+}
+
+.tab-close:hover {
+  background-color: rgba(255, 255, 255, 0.1);
+}
+
+.new-tab-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  margin-top: 6px;
+  margin-left: 5px;
+  border-radius: 50%;
+  background: transparent;
+  border: none;
+  color: var(--text-color);
+  cursor: pointer;
+  -webkit-app-region: no-drag;
+}
+
+.new-tab-btn:hover {
+  background-color: rgba(255, 255, 255, 0.1);
+}
+
+.window-controls {
+  display: flex;
+  -webkit-app-region: no-drag;
+}
+
+.control-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 46px;
+  height: 36px;
+  background: transparent;
+  border: none;
+  color: var(--text-color);
+  cursor: pointer;
+}
+
+.control-btn:hover {
+  background-color: rgba(255, 255, 255, 0.1);
+}
+
+.control-btn.close:hover {
+  background-color: #e81123;
+}
+
+.toolbar {
+  display: flex;
+  align-items: center;
+  padding: 6px 10px;
+  background-color: var(--tab-active-bg);
+  border-bottom: 1px solid var(--border-color);
+}
+
+.nav-buttons {
+  display: flex;
+  gap: 8px;
+  margin-right: 12px;
+}
+
+.nav-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  border-radius: 4px;
+  background: transparent;
+  border: none;
+  color: var(--text-color);
+  cursor: pointer;
+}
+
+.nav-btn:hover {
+  background-color: rgba(255, 255, 255, 0.1);
+}
+
+.address-bar-container {
+  display: flex;
+  align-items: center;
+  flex: 1;
+  background-color: var(--bg-color);
+  border-radius: 16px;
+  padding: 0 12px;
+  height: 32px;
+  border: 1px solid var(--border-color);
+}
+
+.security-icon {
+  margin-right: 8px;
+  display: flex;
+  align-items: center;
+  color: #888;
+}
+
+.address-input {
+  flex: 1;
+  background: transparent;
+  border: none;
+  color: var(--text-color);
+  font-size: 13px;
+  outline: none;
+}
+
+.content-area {
+  flex: 1;
+  background-color: #fff;
+  position: relative;
+}
+
+webview {
+  display: inline-flex;
+  width: 100%;
+  height: 100%;
+}
+
+webview:not(.active) {
+  display: none;
+}
