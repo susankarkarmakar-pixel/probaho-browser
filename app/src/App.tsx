@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import {
   ArrowLeft, ArrowRight, RotateCw, Home, Plus,
-  Lock, X, Minus, Square, Search
+  Lock, X, Minus, Square, Search, Star, Bookmark
 } from 'lucide-react';
 
 interface Tab {
@@ -22,6 +22,8 @@ declare global {
       minimize: () => void;
       maximize: () => void;
       close: () => void;
+      onNewTab: (callback: () => void) => void;
+      onCloseTab: (callback: () => void) => void;
     };
   }
 }
@@ -38,6 +40,15 @@ function App() {
   }]);
   const [activeTabId, setActiveTabId] = useState<string>(tabs[0].id);
   const [inputUrl, setInputUrl] = useState(DEFAULT_URL);
+  const [bookmarks, setBookmarks] = useState<{title: string, url: string}[]>(() => {
+    const saved = localStorage.getItem('bookmarks');
+    return saved ? JSON.parse(saved) : [];
+  });
+  const [showBookmarks, setShowBookmarks] = useState(false);
+
+  useEffect(() => {
+    localStorage.setItem('bookmarks', JSON.stringify(bookmarks));
+  }, [bookmarks]);
 
   // Keep a ref of the active tab id to avoid stale closures in event listeners
   const activeTabIdRef = useRef<string>(activeTabId);
@@ -46,6 +57,44 @@ function App() {
   }, [activeTabId]);
 
   const webviewRefs = useRef<{ [key: string]: any }>({});
+
+  useEffect(() => {
+    if (window.electronAPI?.onNewTab) {
+      window.electronAPI.onNewTab(() => {
+        // use setTabs with callback to create a new tab safely
+        const newTab = {
+          id: Date.now().toString(),
+          url: DEFAULT_URL,
+          title: 'New Tab',
+          loading: false,
+          canGoBack: false,
+          canGoForward: false,
+          isSecure: true
+        };
+        setTabs(prev => {
+          setActiveTabId(newTab.id);
+          return [...prev, newTab];
+        });
+      });
+    }
+
+    if (window.electronAPI?.onCloseTab) {
+      window.electronAPI.onCloseTab(() => {
+        const idToClose = activeTabIdRef.current;
+        setTabs(prev => {
+          if (prev.length === 1) {
+            window.electronAPI?.close();
+            return prev;
+          }
+          const newTabs = prev.filter(t => t.id !== idToClose);
+          setActiveTabId(newTabs[newTabs.length - 1].id);
+          return newTabs;
+        });
+        delete webviewRefs.current[idToClose];
+      });
+    }
+  }, []);
+
 
   const activeTab = tabs.find(t => t.id === activeTabId);
 
@@ -65,22 +114,28 @@ function App() {
       canGoForward: false,
       isSecure: true
     };
-    setTabs([...tabs, newTab]);
+    setTabs(prev => [...prev, newTab]);
     setActiveTabId(newTab.id);
   };
 
-  const closeTab = (e: React.MouseEvent, id: string) => {
-    e.stopPropagation();
-    if (tabs.length === 1) {
-      window.electronAPI?.close();
-      return;
-    }
-    const newTabs = tabs.filter(t => t.id !== id);
-    if (activeTabId === id) {
-      setActiveTabId(newTabs[newTabs.length - 1].id);
-    }
-    setTabs(newTabs);
+  const closeTabId = (id: string) => {
+    setTabs(prev => {
+      if (prev.length === 1) {
+        window.electronAPI?.close();
+        return prev;
+      }
+      const newTabs = prev.filter(t => t.id !== id);
+      if (activeTabIdRef.current === id) {
+        setActiveTabId(newTabs[newTabs.length - 1].id);
+      }
+      return newTabs;
+    });
     delete webviewRefs.current[id];
+  };
+
+  const closeTab = (e: React.MouseEvent | null, id: string) => {
+    if (e) e.stopPropagation();
+    closeTabId(id);
   };
 
   const updateTab = (id: string, updates: Partial<Tab>) => {
@@ -182,6 +237,19 @@ function App() {
     navigate(DEFAULT_URL);
   };
 
+  const toggleBookmark = () => {
+    const tab = tabs.find(t => t.id === activeTabIdRef.current);
+    if (!tab) return;
+    const isBookmarked = bookmarks.some(b => b.url === tab.url);
+    if (isBookmarked) {
+      setBookmarks(prev => prev.filter(b => b.url !== tab.url));
+    } else {
+      setBookmarks(prev => [...prev, { title: tab.title, url: tab.url }]);
+    }
+  };
+
+  const isCurrentBookmarked = activeTab ? bookmarks.some(b => b.url === activeTab.url) : false;
+
   return (
     <div className="browser-container">
       {/* Titlebar with tabs */}
@@ -246,8 +314,36 @@ function App() {
             onChange={(e) => setInputUrl(e.target.value)}
             onFocus={(e) => e.target.select()}
           />
+          <button className="bookmark-toggle-btn" type="button" onClick={toggleBookmark}>
+            <Star size={16} fill={isCurrentBookmarked ? "#f5d44f" : "none"} color={isCurrentBookmarked ? "#f5d44f" : "currentColor"} />
+          </button>
         </form>
+        <button className="nav-btn" onClick={() => setShowBookmarks(!showBookmarks)}>
+          <Bookmark size={16} />
+        </button>
       </div>
+
+      {/* Bookmarks Panel */}
+      {showBookmarks && (
+        <div className="bookmarks-panel">
+          <div className="bookmarks-header">
+            <h3>Bookmarks</h3>
+            <button className="nav-btn" onClick={() => setShowBookmarks(false)}><X size={16} /></button>
+          </div>
+          <div className="bookmarks-list">
+            {bookmarks.length === 0 ? (
+              <div className="no-bookmarks">No bookmarks yet</div>
+            ) : (
+              bookmarks.map((b, i) => (
+                <div key={i} className="bookmark-item" onClick={() => { navigate(b.url); setShowBookmarks(false); }}>
+                  <div className="bookmark-title">{b.title}</div>
+                  <div className="bookmark-url">{b.url}</div>
+                </div>
+              ))
+            )}
+          </div>
+        </div>
+      )}
 
       {/* Content Area */}
       <div className="content-area">

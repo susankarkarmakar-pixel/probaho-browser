@@ -26,15 +26,38 @@ function createWindow() {
   } else {
     mainWindow.loadFile(path.join(__dirname, '../dist/index.html'));
   }
+
+  // Handle local shortcuts
+  mainWindow.webContents.on('before-input-event', (event, input) => {
+    if (input.key === 'F12') {
+      mainWindow.webContents.toggleDevTools();
+      event.preventDefault();
+    }
+    // Handle Ctrl/Cmd+T and Ctrl/Cmd+W
+    if ((input.control || input.meta) && input.key.toLowerCase() === 't') {
+      mainWindow.webContents.send('shortcut-new-tab');
+      event.preventDefault();
+    }
+    if ((input.control || input.meta) && input.key.toLowerCase() === 'w') {
+      mainWindow.webContents.send('shortcut-close-tab');
+      event.preventDefault();
+    }
+  });
 }
+
+
 
 app.whenReady().then(() => {
   createWindow();
+
+
 
   app.on('activate', function () {
     if (BrowserWindow.getAllWindows().length === 0) createWindow();
   });
 });
+
+
 
 app.on('window-all-closed', function () {
   if (process.platform !== 'darwin') app.quit();
