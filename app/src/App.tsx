@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import {
   ArrowLeft, ArrowRight, RotateCw, Home, Plus,
-  Lock, X, Minus, Square, Search, Star, Bookmark, Menu, History, ZoomIn, FileCode, Printer, LogOut
+  Lock, X, Minus, Square, Search, Star, Bookmark, Menu, History, ZoomIn, FileCode, Printer, LogOut, Info
 } from 'lucide-react';
 
 interface Tab {
@@ -53,6 +53,7 @@ function App() {
   });
   const [showHistory, setShowHistory] = useState(false);
   const [showMenu, setShowMenu] = useState(false);
+  const [showAbout, setShowAbout] = useState(false);
 
   useEffect(() => {
     localStorage.setItem('bookmarks', JSON.stringify(bookmarks));
@@ -412,6 +413,11 @@ function App() {
             <div className="menu-item-shortcut">F12</div>
           </div>
           <div className="menu-divider" />
+          <div className="menu-item" onClick={() => { setShowMenu(false); setShowAbout(true); }}>
+            <div className="menu-item-icon"><Info size={16} /></div>
+            <div className="menu-item-text">About Probaho</div>
+          </div>
+          <div className="menu-divider" />
           <div className="menu-item" onClick={() => window.electronAPI?.close()}>
             <div className="menu-item-icon"><LogOut size={16} /></div>
             <div className="menu-item-text">Exit</div>
@@ -440,6 +446,38 @@ function App() {
                 </div>
               ))
             )}
+          </div>
+        </div>
+      )}
+
+
+      {/* About Modal */}
+      {showAbout && (
+        <div className="about-modal-overlay" onClick={() => setShowAbout(false)}>
+          <div className="about-modal" onClick={e => e.stopPropagation()}>
+            <div className="about-header">
+              <h3>About Probaho Browser</h3>
+              <button className="nav-btn" onClick={() => setShowAbout(false)}><X size={16} /></button>
+            </div>
+            <div className="about-content">
+              <div className="about-logo">
+                <div style={{fontSize: '32px', marginBottom: '10px'}}>🌐</div>
+                <h2>PROBAHO BROWSER</h2>
+              </div>
+              <table className="about-table">
+                <tbody>
+                  <tr><td><strong>Version:</strong></td><td>1.0.0</td></tr>
+                  <tr><td><strong>License:</strong></td><td>MIT</td></tr>
+                  <tr><td><strong>Creator:</strong></td><td>Susankar Karmakar</td></tr>
+                </tbody>
+              </table>
+              <p className="about-desc">
+                Probaho Browser is a lightweight, fast, and privacy-focused web browser built with modern web technologies.
+              </p>
+              <div className="about-footer">
+                © 2026 Susankar Karmakar. All rights reserved.
+              </div>
+            </div>
           </div>
         </div>
       )}
