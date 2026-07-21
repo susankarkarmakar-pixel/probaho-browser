@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import {
   ArrowLeft, ArrowRight, RotateCw, Home, Plus,
-  Lock, X, Minus, Square, Search, Star, Bookmark
+  Lock, X, Minus, Square, Search, Star, Bookmark, Menu, History, ZoomIn, FileCode, Printer, LogOut
 } from 'lucide-react';
 
 interface Tab {
@@ -12,6 +12,7 @@ interface Tab {
   canGoBack: boolean;
   canGoForward: boolean;
   isSecure: boolean;
+  zoomLevel: number;
 }
 
 const DEFAULT_URL = 'https://www.google.com';
@@ -36,7 +37,8 @@ function App() {
     loading: false,
     canGoBack: false,
     canGoForward: false,
-    isSecure: true
+    isSecure: true,
+    zoomLevel: 1
   }]);
   const [activeTabId, setActiveTabId] = useState<string>(tabs[0].id);
   const [inputUrl, setInputUrl] = useState(DEFAULT_URL);
@@ -45,10 +47,20 @@ function App() {
     return saved ? JSON.parse(saved) : [];
   });
   const [showBookmarks, setShowBookmarks] = useState(false);
+  const [history, setHistory] = useState<{title: string, url: string, time: string}[]>(() => {
+    const saved = localStorage.getItem('history');
+    return saved ? JSON.parse(saved) : [];
+  });
+  const [showHistory, setShowHistory] = useState(false);
+  const [showMenu, setShowMenu] = useState(false);
 
   useEffect(() => {
     localStorage.setItem('bookmarks', JSON.stringify(bookmarks));
   }, [bookmarks]);
+
+  useEffect(() => {
+    localStorage.setItem('history', JSON.stringify(history));
+  }, [history]);
 
   // Keep a ref of the active tab id to avoid stale closures in event listeners
   const activeTabIdRef = useRef<string>(activeTabId);
@@ -59,39 +71,42 @@ function App() {
   const webviewRefs = useRef<{ [key: string]: any }>({});
 
   useEffect(() => {
+    const handleNewTab = () => {
+      const newTab = {
+        id: Date.now().toString(),
+        url: DEFAULT_URL,
+        title: 'New Tab',
+        loading: false,
+        canGoBack: false,
+        canGoForward: false,
+        isSecure: true,
+        zoomLevel: 1
+      };
+      setTabs(prev => [...prev, newTab]);
+      // Note: We need a slight timeout to let React render the new tab to DOM, or use ref
+      setTimeout(() => setActiveTabId(newTab.id), 0);
+    };
+
     if (window.electronAPI?.onNewTab) {
-      window.electronAPI.onNewTab(() => {
-        // use setTabs with callback to create a new tab safely
-        const newTab = {
-          id: Date.now().toString(),
-          url: DEFAULT_URL,
-          title: 'New Tab',
-          loading: false,
-          canGoBack: false,
-          canGoForward: false,
-          isSecure: true
-        };
-        setTabs(prev => {
-          setActiveTabId(newTab.id);
-          return [...prev, newTab];
-        });
-      });
+      window.electronAPI.onNewTab(handleNewTab);
     }
 
-    if (window.electronAPI?.onCloseTab) {
-      window.electronAPI.onCloseTab(() => {
-        const idToClose = activeTabIdRef.current;
-        setTabs(prev => {
-          if (prev.length === 1) {
-            window.electronAPI?.close();
-            return prev;
-          }
-          const newTabs = prev.filter(t => t.id !== idToClose);
-          setActiveTabId(newTabs[newTabs.length - 1].id);
-          return newTabs;
-        });
-        delete webviewRefs.current[idToClose];
+    const handleCloseTab = () => {
+      const idToClose = activeTabIdRef.current;
+      setTabs(prev => {
+        if (prev.length === 1) {
+          window.electronAPI?.close();
+          return prev;
+        }
+        const newTabs = prev.filter(t => t.id !== idToClose);
+        setTimeout(() => setActiveTabId(newTabs[newTabs.length - 1].id), 0);
+        return newTabs;
       });
+      delete webviewRefs.current[idToClose];
+    };
+
+    if (window.electronAPI?.onCloseTab) {
+      window.electronAPI.onCloseTab(handleCloseTab);
     }
   }, []);
 
@@ -112,7 +127,8 @@ function App() {
       loading: false,
       canGoBack: false,
       canGoForward: false,
-      isSecure: true
+      isSecure: true,
+      zoomLevel: 1
     };
     setTabs(prev => [...prev, newTab]);
     setActiveTabId(newTab.id);
@@ -163,6 +179,7 @@ function App() {
         if (activeTabIdRef.current === id) {
           setInputUrl(e.url);
         }
+        setHistory(prev => [{ title: e.url, url: e.url, time: new Date().toLocaleString() }, ...prev]);
       });
 
       el.addEventListener('did-navigate-in-page', (e: any) => {
@@ -177,6 +194,14 @@ function App() {
 
       el.addEventListener('page-title-updated', (e: any) => {
         updateTab(id, { title: e.title });
+        setHistory(prev => {
+          if (prev.length > 0 && prev[0].url === el.getURL()) {
+            const updated = [...prev];
+            updated[0] = { ...updated[0], title: e.title };
+            return updated;
+          }
+          return prev;
+        });
       });
 
       el.addEventListener('update-target-url', () => {
@@ -250,6 +275,27 @@ function App() {
 
   const isCurrentBookmarked = activeTab ? bookmarks.some(b => b.url === activeTab.url) : false;
 
+  const handleZoom = (delta: number) => {
+    const currentZoom = activeTab?.zoomLevel || 1;
+    const newZoom = Math.max(0.25, Math.min(5, delta === (1 - currentZoom) ? 1 : currentZoom + delta));
+
+    updateTab(activeTabId, { zoomLevel: newZoom });
+    const wv = webviewRefs.current[activeTabId];
+    if (wv) wv.setZoomFactor(newZoom);
+  };
+
+  const handlePrint = () => {
+    const wv = webviewRefs.current[activeTabId];
+    if (wv) wv.print();
+    setShowMenu(false);
+  };
+
+  const toggleDevTools = () => {
+    const wv = webviewRefs.current[activeTabId];
+    if (wv) wv.openDevTools();
+    setShowMenu(false);
+  };
+
   return (
     <div className="browser-container">
       {/* Titlebar with tabs */}
@@ -318,10 +364,85 @@ function App() {
             <Star size={16} fill={isCurrentBookmarked ? "#f5d44f" : "none"} color={isCurrentBookmarked ? "#f5d44f" : "currentColor"} />
           </button>
         </form>
-        <button className="nav-btn" onClick={() => setShowBookmarks(!showBookmarks)}>
+        <button className="nav-btn" onClick={() => { setShowMenu(false); setShowHistory(false); setShowBookmarks(!showBookmarks); }}>
           <Bookmark size={16} />
         </button>
+        <button className="nav-btn" onClick={() => { setShowBookmarks(false); setShowHistory(false); setShowMenu(!showMenu); }}>
+          <Menu size={16} />
+        </button>
       </div>
+
+      {/* Menu Panel */}
+      {showMenu && (
+        <div className="menu-panel">
+          <div className="menu-item" onClick={() => { createTab(); setShowMenu(false); }}>
+            <div className="menu-item-icon"><Plus size={16} /></div>
+            <div className="menu-item-text">New tab</div>
+            <div className="menu-item-shortcut">Ctrl+T</div>
+          </div>
+          <div className="menu-divider" />
+          <div className="menu-item" onClick={() => { setShowMenu(false); setShowHistory(true); }}>
+            <div className="menu-item-icon"><History size={16} /></div>
+            <div className="menu-item-text">History</div>
+          </div>
+          <div className="menu-item" onClick={() => { setShowMenu(false); setShowBookmarks(true); }}>
+            <div className="menu-item-icon"><Bookmark size={16} /></div>
+            <div className="menu-item-text">Bookmarks</div>
+          </div>
+          <div className="menu-divider" />
+          <div className="menu-item" onClick={(e) => e.stopPropagation()}>
+            <div className="menu-item-icon"><ZoomIn size={16} /></div>
+            <div className="menu-item-text">Zoom</div>
+            <div className="zoom-controls">
+              <button className="zoom-btn" onClick={() => handleZoom(-0.1)}>-</button>
+              <span className="zoom-level">{Math.round((activeTab?.zoomLevel || 1) * 100)}%</span>
+              <button className="zoom-btn" onClick={() => handleZoom(0.1)}>+</button>
+              <button className="zoom-btn" onClick={() => handleZoom(1 - (activeTab?.zoomLevel || 1))}><Square size={10} /></button>
+            </div>
+          </div>
+          <div className="menu-item" onClick={handlePrint}>
+            <div className="menu-item-icon"><Printer size={16} /></div>
+            <div className="menu-item-text">Print...</div>
+            <div className="menu-item-shortcut">Ctrl+P</div>
+          </div>
+          <div className="menu-divider" />
+          <div className="menu-item" onClick={toggleDevTools}>
+            <div className="menu-item-icon"><FileCode size={16} /></div>
+            <div className="menu-item-text">Developer tools</div>
+            <div className="menu-item-shortcut">F12</div>
+          </div>
+          <div className="menu-divider" />
+          <div className="menu-item" onClick={() => window.electronAPI?.close()}>
+            <div className="menu-item-icon"><LogOut size={16} /></div>
+            <div className="menu-item-text">Exit</div>
+          </div>
+        </div>
+      )}
+
+      {/* History Panel */}
+      {showHistory && (
+        <div className="bookmarks-panel">
+          <div className="bookmarks-header">
+            <h3>History</h3>
+            <div style={{display: 'flex', gap: '8px', alignItems: 'center'}}>
+              <button className="clear-history-btn" onClick={() => setHistory([])}>Clear</button>
+              <button className="nav-btn" onClick={() => setShowHistory(false)}><X size={16} /></button>
+            </div>
+          </div>
+          <div className="bookmarks-list">
+            {history.length === 0 ? (
+              <div className="no-bookmarks">No history yet</div>
+            ) : (
+              history.map((h, i) => (
+                <div key={i} className="bookmark-item" onClick={() => { navigate(h.url); setShowHistory(false); }}>
+                  <div className="bookmark-title">{h.title}</div>
+                  <div className="bookmark-url">{h.url} • {h.time}</div>
+                </div>
+              ))
+            )}
+          </div>
+        </div>
+      )}
 
       {/* Bookmarks Panel */}
       {showBookmarks && (
