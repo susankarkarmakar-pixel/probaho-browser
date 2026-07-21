@@ -13,7 +13,7 @@ node -v >nul 2>&1
 if errorlevel 1 (
     echo [ERROR] Node.js is not installed!
     echo Please install Node.js 18+ from https://nodejs.org/
-    pause
+    if not "%CI%"=="true" pause
     exit /b 1
 )
 
@@ -29,7 +29,7 @@ call npm install
 
 if errorlevel 1 (
     echo [ERROR] Failed to install dependencies!
-    pause
+    if not "%CI%"=="true" pause
     exit /b 1
 )
 echo [SUCCESS] Dependencies installed successfully!
@@ -40,7 +40,7 @@ call npm run build
 
 if errorlevel 1 (
     echo [ERROR] Failed to build React app!
-    pause
+    if not "%CI%"=="true" pause
     exit /b 1
 )
 echo [SUCCESS] React app built successfully!
@@ -60,7 +60,7 @@ if errorlevel 1 (
         echo [ERROR] Alternative build also failed!
         echo [INFO] You can try running the browser in development mode:
         echo   cd app && npm run electron
-        pause
+        if not "%CI%"=="true" pause
         exit /b 1
     )
 )
@@ -89,4 +89,4 @@ echo.
 echo Thank you for using Probaho Browser!
 echo Built by Susankar Karmakar
 echo.
-pause
+if not "%CI%"=="true" pause
