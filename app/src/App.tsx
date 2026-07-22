@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import {
   ArrowLeft, ArrowRight, RotateCw, Home, Plus,
-  Lock, X, Minus, Square, Search, Star, Bookmark, Menu, History, ZoomIn, FileCode, Printer, LogOut, Info, Download, Folder, Settings, ChevronUp, ChevronDown, Shield
+  Lock, X, Minus, Square, Search, Star, Bookmark, Menu, History, ZoomIn, FileCode, Printer, LogOut, Info, Download, Folder, Settings, ChevronUp, ChevronDown, EyeOff, Shield
 } from 'lucide-react';
 
 interface DownloadItem {
@@ -24,6 +24,7 @@ interface Tab {
   zoomLevel: number;
   webContentsId?: number;
   blockedCount: number;
+  isPrivate?: boolean;
 }
 
 const DEFAULT_URL = 'https://www.google.com';
@@ -35,6 +36,7 @@ declare global {
       maximize: () => void;
       close: () => void;
       onNewTab: (callback: () => void) => void;
+      onNewPrivateTab: (callback: () => void) => void;
       onCloseTab: (callback: () => void) => void;
       onDownloadUpdate: (callback: (item: DownloadItem) => void) => void;
       openFile: (path: string) => void;
@@ -43,6 +45,10 @@ declare global {
       showContextMenu: (params: { x: number, y: number, linkURL: string }) => void;
       onContextMenuAction: (callback: (action: string, x?: number, y?: number) => void) => void;
       onFind: (callback: () => void) => void;
+      onCycleTabPrev: (callback: () => void) => void;
+      onCycleTabNext: (callback: () => void) => void;
+      onJumpTab: (callback: (index: number) => void) => void;
+      onFocusAddress: (callback: () => void) => void;
       setAdBlocker: (enabled: boolean) => void;
       onAdBlocked: (callback: (webContentsId: number) => void) => void;
     };
@@ -53,8 +59,10 @@ function App() {
   const [showSettings, setShowSettings] = useState(false);
   const [showFind, setShowFind] = useState(false);
   const [findText, setFindText] = useState('');
+  const [draggedTabId, setDraggedTabId] = useState<string | null>(null);
   const [findResult, setFindResult] = useState({ activeMatchOrdinal: 0, matches: 0 });
   const findInputRef = useRef<HTMLInputElement>(null);
+  const addressInputRef = useRef<HTMLInputElement>(null);
   const settingsRef = useRef<any>(null);
   const [settings, setSettings] = useState(() => {
     try {
@@ -101,7 +109,8 @@ function App() {
       canGoForward: false,
       isSecure: true,
       zoomLevel: 1,
-      blockedCount: 0
+      blockedCount: 0,
+      isPrivate: false
     }];
   });
 
@@ -171,6 +180,56 @@ function App() {
       });
     }
 
+
+    if (window.electronAPI?.onCycleTabNext) {
+      window.electronAPI.onCycleTabNext(() => {
+        setTabs(prev => {
+          const idx = prev.findIndex(t => t.id === activeTabIdRef.current);
+          if (idx !== -1) {
+            const nextIdx = (idx + 1) % prev.length;
+            setTimeout(() => setActiveTabId(prev[nextIdx].id), 0);
+          }
+          return prev;
+        });
+      });
+    }
+
+    if (window.electronAPI?.onCycleTabPrev) {
+      window.electronAPI.onCycleTabPrev(() => {
+        setTabs(prev => {
+          const idx = prev.findIndex(t => t.id === activeTabIdRef.current);
+          if (idx !== -1) {
+            const prevIdx = (idx - 1 + prev.length) % prev.length;
+            setTimeout(() => setActiveTabId(prev[prevIdx].id), 0);
+          }
+          return prev;
+        });
+      });
+    }
+
+    if (window.electronAPI?.onJumpTab) {
+      window.electronAPI.onJumpTab((index) => {
+        setTabs(prev => {
+          // If index is 9, usually it jumps to the last tab. Otherwise jump to index - 1
+          if (index === 9) {
+            setTimeout(() => setActiveTabId(prev[prev.length - 1].id), 0);
+          } else if (index <= prev.length) {
+            setTimeout(() => setActiveTabId(prev[index - 1].id), 0);
+          }
+          return prev;
+        });
+      });
+    }
+
+    if (window.electronAPI?.onFocusAddress) {
+      window.electronAPI.onFocusAddress(() => {
+        if (addressInputRef.current) {
+          addressInputRef.current.focus();
+          addressInputRef.current.select();
+        }
+      });
+    }
+
     if (window.electronAPI?.onFind) {
       window.electronAPI.onFind(() => {
         setShowFind(true);
@@ -198,8 +257,23 @@ function App() {
   }, []);
 
   useEffect(() => {
-    localStorage.setItem('savedTabs', JSON.stringify(tabs));
-    localStorage.setItem('activeTabId', activeTabId);
+    const publicTabs = tabs.filter(t => !t.isPrivate);
+    localStorage.setItem('savedTabs', JSON.stringify(publicTabs.length > 0 ? publicTabs : [{
+      id: Date.now().toString(),
+      url: settingsRef.current?.homepageUrl || 'https://www.google.com',
+      title: 'New Tab',
+      loading: false,
+      canGoBack: false,
+      canGoForward: false,
+      isSecure: true,
+      zoomLevel: 1,
+      blockedCount: 0,
+      isPrivate: false
+    }]));
+
+    // If active tab is private, fallback the saved active tab to a public one
+    const activeIsPrivate = tabs.find(t => t.id === activeTabId)?.isPrivate;
+    localStorage.setItem('activeTabId', activeIsPrivate ? (publicTabs[0]?.id || '') : activeTabId);
   }, [tabs, activeTabId]);
 
   // Keep a ref of the active tab id to avoid stale closures in event listeners
@@ -221,7 +295,8 @@ function App() {
         canGoForward: false,
         isSecure: true,
         zoomLevel: 1,
-        blockedCount: 0
+        blockedCount: 0,
+        isPrivate: false
       };
       setTabs(prev => [...prev, newTab]);
       // Note: We need a slight timeout to let React render the new tab to DOM, or use ref
@@ -230,6 +305,24 @@ function App() {
 
     if (window.electronAPI?.onNewTab) {
       window.electronAPI.onNewTab(handleNewTab);
+    }
+    if (window.electronAPI?.onNewPrivateTab) {
+      window.electronAPI.onNewPrivateTab(() => {
+        const newTab = {
+          id: Date.now().toString(),
+          url: settingsRef.current?.homepageUrl || 'https://www.google.com',
+          title: 'New Private Tab',
+          loading: false,
+          canGoBack: false,
+          canGoForward: false,
+          isSecure: true,
+          zoomLevel: 1,
+          blockedCount: 0,
+          isPrivate: true
+        };
+        setTabs(prev => [...prev, newTab]);
+        setTimeout(() => setActiveTabId(newTab.id), 0);
+      });
     }
 
     if (window.electronAPI?.onContextMenuAction) {
@@ -310,17 +403,18 @@ function App() {
     }
   }, [activeTabId]);
 
-  const createTab = () => {
+  const createTab = (isPrivate = false) => {
     const newTab: Tab = {
       id: Date.now().toString(),
-      url: settings.homepageUrl,
-      title: 'New Tab',
+      url: settingsRef.current?.homepageUrl || 'https://www.google.com',
+      title: isPrivate ? 'New Private Tab' : 'New Tab',
       loading: false,
       canGoBack: false,
       canGoForward: false,
       isSecure: true,
       zoomLevel: 1,
-      blockedCount: 0
+      blockedCount: 0,
+      isPrivate: isPrivate
     };
     setTabs(prev => [...prev, newTab]);
     setActiveTabId(newTab.id);
@@ -379,7 +473,13 @@ function App() {
         if (activeTabIdRef.current === id) {
           setInputUrl(e.url);
         }
-        setHistory(prev => [{ title: e.url, url: e.url, time: new Date().toLocaleString() }, ...prev]);
+        setTabs(prev => {
+          const tab = prev.find(t => t.id === id);
+          if (tab && !tab.isPrivate) {
+            setHistory(hPrev => [{ title: e.url, url: e.url, time: new Date().toLocaleString() }, ...hPrev]);
+          }
+          return prev;
+        });
       });
 
       el.addEventListener('did-navigate-in-page', (e: any) => {
@@ -394,13 +494,19 @@ function App() {
 
       el.addEventListener('page-title-updated', (e: any) => {
         updateTab(id, { title: e.title });
-        setHistory(prev => {
-          if (prev.length > 0 && prev[0].url === el.getURL()) {
-            const updated = [...prev];
-            updated[0] = { ...updated[0], title: e.title };
-            return updated;
+        setTabs(tPrev => {
+          const tab = tPrev.find(t => t.id === id);
+          if (tab && !tab.isPrivate) {
+            setHistory(prev => {
+              if (prev.length > 0 && prev[0].url === el.getURL()) {
+                const updated = [...prev];
+                updated[0] = { ...updated[0], title: e.title };
+                return updated;
+              }
+              return prev;
+            });
           }
-          return prev;
+          return tPrev;
         });
       });
 
@@ -555,9 +661,36 @@ function App() {
           {tabs.map(tab => (
             <div
               key={tab.id}
-              className={`tab ${tab.id === activeTabId ? 'active' : ''}`}
+              className={`tab ${tab.id === activeTabId ? 'active' : ''} ${tab.isPrivate ? 'private' : ''}`}
               onClick={() => setActiveTabId(tab.id)}
+              draggable
+              onDragStart={(e) => {
+                setDraggedTabId(tab.id);
+                e.dataTransfer.effectAllowed = 'move';
+              }}
+              onDragOver={(e) => {
+                e.preventDefault();
+                e.dataTransfer.dropEffect = 'move';
+              }}
+              onDrop={(e) => {
+                e.preventDefault();
+                if (!draggedTabId || draggedTabId === tab.id) return;
+
+                setTabs(prev => {
+                  const draggedIndex = prev.findIndex(t => t.id === draggedTabId);
+                  const dropIndex = prev.findIndex(t => t.id === tab.id);
+                  if (draggedIndex === -1 || dropIndex === -1) return prev;
+
+                  const newTabs = [...prev];
+                  const [removed] = newTabs.splice(draggedIndex, 1);
+                  newTabs.splice(dropIndex, 0, removed);
+                  return newTabs;
+                });
+                setDraggedTabId(null);
+              }}
+              onDragEnd={() => setDraggedTabId(null)}
             >
+              {tab.isPrivate && <EyeOff size={10} style={{marginRight: '4px', opacity: 0.8}} />}
               <span className="tab-title">{tab.title}</span>
               <div className="tab-close" onClick={(e) => closeTab(e, tab.id)}>
                 <X size={12} />
@@ -565,7 +698,7 @@ function App() {
             </div>
           ))}
         </div>
-        <button className="new-tab-btn" onClick={createTab}>
+        <button className="new-tab-btn" onClick={() => createTab(false)}>
           <Plus size={16} />
         </button>
 
@@ -605,6 +738,7 @@ function App() {
             {activeTab?.isSecure ? <Lock size={14} color="#4caf50" /> : <Search size={14} />}
           </div>
           <input
+            ref={addressInputRef}
             className="address-input"
             type="text"
             value={inputUrl}
@@ -636,6 +770,11 @@ function App() {
             <div className="menu-item-icon"><Plus size={16} /></div>
             <div className="menu-item-text">New tab</div>
             <div className="menu-item-shortcut">Ctrl+T</div>
+          </div>
+          <div className="menu-item" onClick={() => { createTab(true); setShowMenu(false); }}>
+            <div className="menu-item-icon"><EyeOff size={16} /></div>
+            <div className="menu-item-text">New private tab</div>
+            <div className="menu-item-shortcut">Ctrl+Shift+N</div>
           </div>
           <div className="menu-divider" />
           <div className="menu-item" onClick={() => { setShowMenu(false); setShowHistory(true); }}>
@@ -913,6 +1052,7 @@ function App() {
             src={tab.id === activeTabId && !webviewRefs.current[tab.id] ? tab.url : undefined}
             ref={(el: any) => handleWebviewRef(tab.id, el)}
             webpreferences="contextIsolation=yes, nodeIntegration=no, sandbox=yes"
+            partition={tab.isPrivate ? `private-${tab.id}` : undefined}
           />
         ))}
       </div>

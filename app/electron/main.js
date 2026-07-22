@@ -1,4 +1,5 @@
-const { app, BrowserWindow, ipcMain, session, shell, Menu } = require('electron');
+const { app, BrowserWindow, ipcMain, session, shell, Menu, dialog } = require('electron');
+const { autoUpdater } = require('electron-updater');
 const path = require('path');
 const blocklist = require('./blocklist');
 
@@ -35,7 +36,10 @@ function createWindow() {
       event.preventDefault();
     }
     // Handle Ctrl/Cmd+T and Ctrl/Cmd+W
-    if ((input.control || input.meta) && input.key.toLowerCase() === 't') {
+    if ((input.control || input.meta) && input.shift && input.key.toLowerCase() === 'n') {
+      mainWindow.webContents.send('shortcut-new-private-tab');
+      event.preventDefault();
+    } else if ((input.control || input.meta) && input.key.toLowerCase() === 't') {
       mainWindow.webContents.send('shortcut-new-tab');
       event.preventDefault();
     }
@@ -43,10 +47,32 @@ function createWindow() {
       mainWindow.webContents.send('shortcut-close-tab');
       event.preventDefault();
     }
+
     if ((input.control || input.meta) && input.key.toLowerCase() === 'f') {
       mainWindow.webContents.send('shortcut-find');
       event.preventDefault();
     }
+
+    // Tab cycling and jumping
+    if ((input.control || input.meta) && input.key === 'Tab') {
+      if (input.shift) {
+        mainWindow.webContents.send('shortcut-cycle-tab-prev');
+      } else {
+        mainWindow.webContents.send('shortcut-cycle-tab-next');
+      }
+      event.preventDefault();
+    }
+
+    if ((input.control || input.meta) && /^[1-9]$/.test(input.key)) {
+      mainWindow.webContents.send('shortcut-jump-tab', parseInt(input.key, 10));
+      event.preventDefault();
+    }
+
+    if ((input.control || input.meta) && input.key.toLowerCase() === 'l') {
+      mainWindow.webContents.send('shortcut-focus-address');
+      event.preventDefault();
+    }
+
   });
 }
 
@@ -56,6 +82,22 @@ function createWindow() {
 app.whenReady().then(() => {
   createWindow();
 
+  if (app.isPackaged) {
+    autoUpdater.checkForUpdatesAndNotify();
+
+    autoUpdater.on('update-downloaded', () => {
+      dialog.showMessageBox({
+        type: 'info',
+        title: 'Update Ready',
+        message: 'A new version of Probaho Browser is ready. Restart now to install?',
+        buttons: ['Restart Now', 'Later']
+      }).then((result) => {
+        if (result.response === 0) {
+          autoUpdater.quitAndInstall();
+        }
+      });
+    });
+  }
 
   let adBlockerEnabled = true;
 
