@@ -492,3 +492,76 @@ webview:not(.active) {
   display: flex;
   gap: 4px;
 }
+
+/* Light Theme Overrides */
+body.theme-light {
+  --bg-color: #f0f0f0;
+  --tab-bg: #e0e0e0;
+  --tab-active-bg: #ffffff;
+  --text-color: #333333;
+  --border-color: #cccccc;
+}
+
+body.theme-light .tab {
+  color: #555;
+}
+
+body.theme-light .tab.active {
+  color: var(--text-color);
+}
+
+body.theme-light .security-icon {
+  color: #555;
+}
+
+body.theme-light .about-desc {
+  color: #555;
+}
+
+
+
+.find-bar {
+  position: absolute;
+  top: 10px;
+  right: 20px;
+  background-color: var(--tab-bg);
+  border: 1px solid var(--border-color);
+  border-radius: 20px;
+  display: flex;
+  align-items: center;
+  padding: 4px 8px;
+  box-shadow: 0 4px 12px rgba(0,0,0,0.5);
+  z-index: 1000;
+  height: 32px;
+}
+
+.find-input {
+  background: transparent;
+  border: none;
+  color: var(--text-color);
+  font-size: 13px;
+  outline: none;
+  width: 150px;
+  margin-left: 8px;
+}
+
+.find-count {
+  font-size: 12px;
+  color: #888;
+  margin: 0 12px;
+  min-width: 40px;
+  text-align: center;
+}
+
+.find-actions {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+}
+
+.find-divider {
+  width: 1px;
+  height: 16px;
+  background-color: var(--border-color);
+  margin: 0 4px;
+}

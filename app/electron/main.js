@@ -42,6 +42,10 @@ function createWindow() {
       mainWindow.webContents.send('shortcut-close-tab');
       event.preventDefault();
     }
+    if ((input.control || input.meta) && input.key.toLowerCase() === 'f') {
+      mainWindow.webContents.send('shortcut-find');
+      event.preventDefault();
+    }
   });
 }
 

@@ -10,6 +10,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
   onOpenLinkNewTab: (callback) => ipcRenderer.on('open-link-new-tab', (event, url) => callback(url)),
   showContextMenu: (params) => ipcRenderer.send('show-context-menu', params),
   onContextMenuAction: (callback) => ipcRenderer.on('context-menu-action', (event, action, x, y) => callback(action, x, y)),
+  onFind: (callback) => ipcRenderer.on('shortcut-find', () => callback()),
   openFile: (path) => ipcRenderer.send('open-file', path),
   showInFolder: (path) => ipcRenderer.send('show-in-folder', path)
 });
