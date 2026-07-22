@@ -1,4 +1,4 @@
-const { app, BrowserWindow, ipcMain } = require('electron');
+const { app, BrowserWindow, ipcMain, session, shell, Menu } = require('electron');
 const path = require('path');
 
 let mainWindow;
@@ -47,10 +47,55 @@ function createWindow() {
 
 
 
+
 app.whenReady().then(() => {
   createWindow();
 
+  session.defaultSession.on('will-download', (event, item, webContents) => {
+    // Generate a unique ID for the download
+    const downloadId = Date.now().toString();
+    const fileName = item.getFilename();
+    const savePath = path.join(app.getPath('downloads'), fileName);
+    item.setSavePath(savePath);
 
+    // Send initial download state
+    if (mainWindow) {
+      mainWindow.webContents.send('download-update', {
+        id: downloadId,
+        fileName: fileName,
+        state: 'progressing',
+        receivedBytes: 0,
+        totalBytes: item.getTotalBytes(),
+        savePath: savePath
+      });
+    }
+
+    item.on('updated', (event, state) => {
+      if (mainWindow) {
+        mainWindow.webContents.send('download-update', {
+          id: downloadId,
+          fileName: fileName,
+          state: state,
+          receivedBytes: item.getReceivedBytes(),
+          totalBytes: item.getTotalBytes(),
+          savePath: savePath
+        });
+      }
+    });
+
+    item.once('done', (event, state) => {
+      if (mainWindow) {
+        mainWindow.webContents.send('download-update', {
+          id: downloadId,
+          fileName: fileName,
+          state: state, // 'completed', 'cancelled', 'interrupted'
+          receivedBytes: item.getReceivedBytes(),
+          totalBytes: item.getTotalBytes(),
+          savePath: savePath
+        });
+      }
+    });
+  });
 
   app.on('activate', function () {
     if (BrowserWindow.getAllWindows().length === 0) createWindow();
@@ -80,4 +125,55 @@ ipcMain.on('window-maximize', () => {
 
 ipcMain.on('window-close', () => {
   if (mainWindow) mainWindow.close();
+});
+
+
+ipcMain.on('open-file', (event, filePath) => {
+  shell.openPath(filePath);
+});
+
+ipcMain.on('show-in-folder', (event, filePath) => {
+  shell.showItemInFolder(filePath);
+});
+
+ipcMain.on('show-context-menu', (event, params) => {
+  const template = [
+    {
+      label: 'Back',
+      click: () => { if (mainWindow) mainWindow.webContents.send('context-menu-action', 'back'); }
+    },
+    {
+      label: 'Forward',
+      click: () => { if (mainWindow) mainWindow.webContents.send('context-menu-action', 'forward'); }
+    },
+    {
+      label: 'Reload',
+      click: () => { if (mainWindow) mainWindow.webContents.send('context-menu-action', 'reload'); }
+    },
+    { type: 'separator' },
+    { role: 'copy' }
+  ];
+
+  if (params.linkURL) {
+    template.push({ type: 'separator' });
+    template.push({
+      label: 'Open Link in New Tab',
+      click: () => {
+        if (mainWindow) {
+          mainWindow.webContents.send('open-link-new-tab', params.linkURL);
+        }
+      }
+    });
+  }
+
+  template.push({ type: 'separator' });
+  template.push({
+    label: 'Inspect Element',
+    click: () => {
+      if (mainWindow) mainWindow.webContents.send('context-menu-action', 'inspect', params.x, params.y);
+    }
+  });
+
+  const menu = Menu.buildFromTemplate(template);
+  menu.popup();
 });

@@ -1,8 +1,17 @@
 import React, { useState, useEffect, useRef } from 'react';
 import {
   ArrowLeft, ArrowRight, RotateCw, Home, Plus,
-  Lock, X, Minus, Square, Search, Star, Bookmark, Menu, History, ZoomIn, FileCode, Printer, LogOut, Info
+  Lock, X, Minus, Square, Search, Star, Bookmark, Menu, History, ZoomIn, FileCode, Printer, LogOut, Info, Download, Folder
 } from 'lucide-react';
+
+interface DownloadItem {
+  id: string;
+  fileName: string;
+  state: 'progressing' | 'completed' | 'cancelled' | 'interrupted';
+  receivedBytes: number;
+  totalBytes: number;
+  savePath: string;
+}
 
 interface Tab {
   id: string;
@@ -25,6 +34,12 @@ declare global {
       close: () => void;
       onNewTab: (callback: () => void) => void;
       onCloseTab: (callback: () => void) => void;
+      onDownloadUpdate: (callback: (item: DownloadItem) => void) => void;
+      openFile: (path: string) => void;
+      showInFolder: (path: string) => void;
+      onOpenLinkNewTab: (callback: (url: string) => void) => void;
+      showContextMenu: (params: { x: number, y: number, linkURL: string }) => void;
+      onContextMenuAction: (callback: (action: string, x?: number, y?: number) => void) => void;
     };
   }
 }
@@ -82,6 +97,8 @@ function App() {
     return saved ? JSON.parse(saved) : [];
   });
   const [showHistory, setShowHistory] = useState(false);
+  const [showDownloads, setShowDownloads] = useState(false);
+  const [downloads, setDownloads] = useState<DownloadItem[]>([]);
   const [showMenu, setShowMenu] = useState(false);
   const [showAbout, setShowAbout] = useState(false);
 
@@ -92,6 +109,21 @@ function App() {
   useEffect(() => {
     localStorage.setItem('history', JSON.stringify(history));
   }, [history]);
+
+  useEffect(() => {
+    if (window.electronAPI?.onDownloadUpdate) {
+      window.electronAPI.onDownloadUpdate((item) => {
+        setDownloads(prev => {
+          const exists = prev.find(d => d.id === item.id);
+          if (exists) {
+            return prev.map(d => d.id === item.id ? item : d);
+          } else {
+            return [item, ...prev];
+          }
+        });
+      });
+    }
+  }, []);
 
   useEffect(() => {
     localStorage.setItem('savedTabs', JSON.stringify(tabs));
@@ -125,6 +157,47 @@ function App() {
 
     if (window.electronAPI?.onNewTab) {
       window.electronAPI.onNewTab(handleNewTab);
+    }
+
+    if (window.electronAPI?.onContextMenuAction) {
+      window.electronAPI.onContextMenuAction((action, x, y) => {
+        const wv = webviewRefs.current[activeTabIdRef.current];
+        if (!wv) return;
+
+        switch (action) {
+          case 'back':
+            if (wv.canGoBack()) wv.goBack();
+            break;
+          case 'forward':
+            if (wv.canGoForward()) wv.goForward();
+            break;
+          case 'reload':
+            wv.reload();
+            break;
+          case 'inspect':
+            if (x !== undefined && y !== undefined) {
+              wv.inspectElement(x, y);
+            }
+            break;
+        }
+      });
+    }
+
+    if (window.electronAPI?.onOpenLinkNewTab) {
+      window.electronAPI.onOpenLinkNewTab((url) => {
+        const newTab = {
+          id: Date.now().toString(),
+          url: url,
+          title: 'New Tab',
+          loading: false,
+          canGoBack: false,
+          canGoForward: false,
+          isSecure: url.startsWith('https'),
+          zoomLevel: 1
+        };
+        setTabs(prev => [...prev, newTab]);
+        setTimeout(() => setActiveTabId(newTab.id), 0);
+      });
     }
 
     const handleCloseTab = () => {
@@ -253,7 +326,15 @@ function App() {
           canGoBack: el.canGoBack(),
           canGoForward: el.canGoForward()
         });
-      })
+      });
+
+      el.addEventListener('context-menu', (e: any) => {
+        window.electronAPI?.showContextMenu({
+          x: e.params.x,
+          y: e.params.y,
+          linkURL: e.params.linkURL
+        });
+      });
     }
   };
 
@@ -400,10 +481,10 @@ function App() {
             <Star size={16} fill={isCurrentBookmarked ? "#f5d44f" : "none"} color={isCurrentBookmarked ? "#f5d44f" : "currentColor"} />
           </button>
         </form>
-        <button className="nav-btn" onClick={() => { setShowMenu(false); setShowHistory(false); setShowBookmarks(!showBookmarks); }}>
+        <button className="nav-btn" onClick={() => { setShowMenu(false); setShowHistory(false); setShowDownloads(false); setShowBookmarks(!showBookmarks); }}>
           <Bookmark size={16} />
         </button>
-        <button className="nav-btn" onClick={() => { setShowBookmarks(false); setShowHistory(false); setShowMenu(!showMenu); }}>
+        <button className="nav-btn" onClick={() => { setShowBookmarks(false); setShowHistory(false); setShowDownloads(false); setShowMenu(!showMenu); }}>
           <Menu size={16} />
         </button>
       </div>
@@ -420,6 +501,10 @@ function App() {
           <div className="menu-item" onClick={() => { setShowMenu(false); setShowHistory(true); }}>
             <div className="menu-item-icon"><History size={16} /></div>
             <div className="menu-item-text">History</div>
+          </div>
+          <div className="menu-item" onClick={() => { setShowMenu(false); setShowDownloads(true); }}>
+            <div className="menu-item-icon"><Download size={16} /></div>
+            <div className="menu-item-text">Downloads</div>
           </div>
           <div className="menu-item" onClick={() => { setShowMenu(false); setShowBookmarks(true); }}>
             <div className="menu-item-icon"><Bookmark size={16} /></div>
@@ -485,6 +570,52 @@ function App() {
         </div>
       )}
 
+
+
+      {/* Downloads Panel */}
+      {showDownloads && (
+        <div className="bookmarks-panel" style={{width: '350px'}}>
+          <div className="bookmarks-header">
+            <h3>Downloads</h3>
+            <div style={{display: 'flex', gap: '8px', alignItems: 'center'}}>
+              <button className="clear-history-btn" onClick={() => setDownloads([])}>Clear</button>
+              <button className="nav-btn" onClick={() => setShowDownloads(false)}><X size={16} /></button>
+            </div>
+          </div>
+          <div className="bookmarks-list">
+            {downloads.length === 0 ? (
+              <div className="no-bookmarks">No recent downloads</div>
+            ) : (
+              downloads.map((d, i) => (
+                <div key={i} className="download-item">
+                  <div className="download-info">
+                    <div className="bookmark-title" style={{marginBottom: '4px'}}>{d.fileName}</div>
+                    <div className="bookmark-url">
+                      {d.state === 'completed' ? 'Completed' :
+                       d.state === 'progressing' ? `${Math.round(d.receivedBytes / 1024 / 1024 * 10) / 10} MB / ${Math.round(d.totalBytes / 1024 / 1024 * 10) / 10} MB` : d.state}
+                    </div>
+                    {d.state === 'progressing' && (
+                      <div className="download-progress-bar">
+                        <div className="download-progress-fill" style={{width: `${(d.receivedBytes / d.totalBytes) * 100}%`}}></div>
+                      </div>
+                    )}
+                  </div>
+                  {d.state === 'completed' && (
+                    <div className="download-actions">
+                      <button className="nav-btn" title="Open file" onClick={() => window.electronAPI?.openFile(d.savePath)}>
+                        <FileCode size={14} />
+                      </button>
+                      <button className="nav-btn" title="Show in folder" onClick={() => window.electronAPI?.showInFolder(d.savePath)}>
+                        <Folder size={14} />
+                      </button>
+                    </div>
+                  )}
+                </div>
+              ))
+            )}
+          </div>
+        </div>
+      )}
 
       {/* About Modal */}
       {showAbout && (
