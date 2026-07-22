@@ -165,7 +165,19 @@ app.whenReady().then(() => {
     });
   });
 
-  app.on('activate', function () {
+
+app.on('render-process-gone', (event, webContents, details) => {
+  if (mainWindow) {
+    mainWindow.webContents.send('tab-crashed', webContents.id, details.reason);
+  }
+});
+
+app.on('child-process-gone', (event, details) => {
+  // If it's a plugin/child process we might just log it, but if we need to reload tabs based on it:
+  console.log('Child process gone:', details);
+});
+
+app.on('activate', function () {
     if (BrowserWindow.getAllWindows().length === 0) createWindow();
   });
 });

@@ -607,3 +607,149 @@ body.theme-light .tab.private.active {
   background-color: #d1b3ff;
   color: #111;
 }
+
+.crash-overlay {
+  position: absolute;
+  top: 0; left: 0; right: 0; bottom: 0;
+  background-color: var(--bg-color);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 500;
+}
+
+.crash-content {
+  text-align: center;
+}
+
+.crash-content h2 {
+  margin-top: 0;
+  margin-bottom: 10px;
+}
+
+.crash-content p {
+  color: #aaa;
+  margin: 0;
+}
+
+body.theme-light .crash-overlay {
+  background-color: #fff;
+}
+
+body.theme-light .crash-content p {
+  color: #666;
+}
+
+.new-tab-page {
+  position: absolute;
+  top: 0; left: 0; right: 0; bottom: 0;
+  background-color: var(--bg-color);
+  display: flex;
+  justify-content: center;
+  overflow-y: auto;
+  z-index: 100;
+}
+
+.ntp-content {
+  margin-top: 10vh;
+  width: 100%;
+  max-width: 600px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+}
+
+.ntp-logo {
+  text-align: center;
+  margin-bottom: 30px;
+}
+
+.ntp-logo h1 {
+  margin: 0;
+  font-size: 24px;
+  font-weight: 600;
+  letter-spacing: 2px;
+  color: var(--text-color);
+}
+
+.ntp-search {
+  width: 100%;
+  position: relative;
+  display: flex;
+  align-items: center;
+  margin-bottom: 40px;
+}
+
+.ntp-search-input {
+  width: 100%;
+  padding: 14px 20px 14px 44px;
+  border-radius: 24px;
+  border: 1px solid var(--border-color);
+  background-color: var(--tab-bg);
+  color: var(--text-color);
+  font-size: 15px;
+  outline: none;
+  box-shadow: 0 4px 6px rgba(0,0,0,0.1);
+  transition: all 0.2s;
+}
+
+.ntp-search-input:focus {
+  border-color: var(--primary-color);
+  box-shadow: 0 4px 12px rgba(123, 44, 191, 0.2);
+}
+
+.ntp-top-sites {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 20px;
+  width: 100%;
+}
+
+.ntp-tile {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  cursor: pointer;
+  padding: 12px;
+  border-radius: 8px;
+  transition: background-color 0.2s;
+}
+
+.ntp-tile:hover {
+  background-color: var(--tab-bg);
+}
+
+.ntp-tile-icon {
+  width: 48px;
+  height: 48px;
+  border-radius: 50%;
+  background-color: var(--tab-active-bg);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 20px;
+  font-weight: bold;
+  color: var(--text-color);
+  margin-bottom: 12px;
+  border: 1px solid var(--border-color);
+}
+
+.ntp-tile-title {
+  font-size: 12px;
+  color: #aaa;
+  text-align: center;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  width: 100%;
+}
+
+body.theme-light .ntp-search-input {
+  background-color: #fff;
+}
+body.theme-light .ntp-tile-icon {
+  background-color: #fff;
+}
+body.theme-light .ntp-tile-title {
+  color: #555;
+}

@@ -16,6 +16,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
   onCycleTabNext: (callback) => ipcRenderer.on('shortcut-cycle-tab-next', () => callback()),
   onJumpTab: (callback) => ipcRenderer.on('shortcut-jump-tab', (event, index) => callback(index)),
   onFocusAddress: (callback) => ipcRenderer.on('shortcut-focus-address', () => callback()),
+  onTabCrashed: (callback) => ipcRenderer.on('tab-crashed', (event, webContentsId, reason) => callback(webContentsId, reason)),
   openFile: (path) => ipcRenderer.send('open-file', path),
   showInFolder: (path) => ipcRenderer.send('show-in-folder', path),
   setAdBlocker: (enabled) => ipcRenderer.send('set-adblocker', enabled),

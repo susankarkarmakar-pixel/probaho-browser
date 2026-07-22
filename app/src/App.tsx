@@ -25,6 +25,7 @@ interface Tab {
   webContentsId?: number;
   blockedCount: number;
   isPrivate?: boolean;
+  crashed?: boolean;
 }
 
 const DEFAULT_URL = 'https://www.google.com';
@@ -51,6 +52,7 @@ declare global {
       onFocusAddress: (callback: () => void) => void;
       setAdBlocker: (enabled: boolean) => void;
       onAdBlocked: (callback: (webContentsId: number) => void) => void;
+      onTabCrashed: (callback: (webContentsId: number, reason: string) => void) => void;
     };
   }
 }
@@ -75,7 +77,7 @@ function App() {
     } catch (e) {}
     const def = {
       defaultSearchEngine: 'Google',
-      homepageUrl: 'https://www.google.com',
+      homepageUrl: 'probaho://newtab',
       theme: 'dark',
       adBlockerEnabled: true
     };
@@ -230,6 +232,14 @@ function App() {
       });
     }
 
+
+    if (window.electronAPI?.onTabCrashed) {
+      window.electronAPI.onTabCrashed((webContentsId, reason) => {
+        console.error('Tab crashed:', webContentsId, reason);
+        setTabs(prev => prev.map(t => t.webContentsId === webContentsId ? { ...t, crashed: true } : t));
+      });
+    }
+
     if (window.electronAPI?.onFind) {
       window.electronAPI.onFind(() => {
         setShowFind(true);
@@ -260,7 +270,7 @@ function App() {
     const publicTabs = tabs.filter(t => !t.isPrivate);
     localStorage.setItem('savedTabs', JSON.stringify(publicTabs.length > 0 ? publicTabs : [{
       id: Date.now().toString(),
-      url: settingsRef.current?.homepageUrl || 'https://www.google.com',
+      url: settingsRef.current?.homepageUrl || 'probaho://newtab',
       title: 'New Tab',
       loading: false,
       canGoBack: false,
@@ -288,7 +298,7 @@ function App() {
     const handleNewTab = () => {
       const newTab = {
         id: Date.now().toString(),
-        url: settingsRef.current?.homepageUrl || 'https://www.google.com',
+        url: settingsRef.current?.homepageUrl || 'probaho://newtab',
         title: 'New Tab',
         loading: false,
         canGoBack: false,
@@ -310,7 +320,7 @@ function App() {
       window.electronAPI.onNewPrivateTab(() => {
         const newTab = {
           id: Date.now().toString(),
-          url: settingsRef.current?.homepageUrl || 'https://www.google.com',
+          url: settingsRef.current?.homepageUrl || 'probaho://newtab',
           title: 'New Private Tab',
           loading: false,
           canGoBack: false,
@@ -391,7 +401,7 @@ function App() {
 
   useEffect(() => {
     if (activeTab) {
-      setInputUrl(activeTab.url);
+      setInputUrl(activeTab.url === 'probaho://newtab' ? '' : activeTab.url);
     }
     // Hide find bar when switching tabs
     if (showFind) {
@@ -1045,7 +1055,7 @@ function App() {
             </div>
           </div>
         )}
-        {tabs.map(tab => (
+        {tabs.map(tab => tab.url !== 'probaho://newtab' && (
           <webview // @ts-ignore
             key={tab.id}
             className={tab.id === activeTabId ? 'active' : ''}
@@ -1054,6 +1064,84 @@ function App() {
             webpreferences="contextIsolation=yes, nodeIntegration=no, sandbox=yes"
             partition={tab.isPrivate ? `private-${tab.id}` : undefined}
           />
+        ))}
+
+        {tabs.map(tab => tab.id === activeTabId && tab.url === 'probaho://newtab' && (
+          <div key={`ntp-${tab.id}`} className="new-tab-page">
+            <div className="ntp-content">
+              <div className="ntp-logo">
+                <span style={{fontSize: '48px'}}>🌐</span>
+                <h1 style={{marginTop: '10px'}}>PROBAHO</h1>
+              </div>
+              <div className="ntp-search">
+                <Search size={18} color="#888" style={{marginLeft: '16px', position: 'absolute'}} />
+                <input
+                  type="text"
+                  className="ntp-search-input"
+                  placeholder={`Search with ${settings.defaultSearchEngine} or enter address`}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter') {
+                      navigate(e.currentTarget.value);
+                    }
+                  }}
+                  autoFocus
+                />
+              </div>
+
+              <div className="ntp-top-sites">
+                {(() => {
+                  // Compute top 8 sites from history
+                  const siteCounts: Record<string, {count: number, title: string, url: string}> = {};
+                  history.forEach(h => {
+                    try {
+                      const domain = new URL(h.url).hostname;
+                      if (!siteCounts[domain]) {
+                        siteCounts[domain] = { count: 0, title: h.title, url: `https://${domain}` };
+                      }
+                      siteCounts[domain].count++;
+                    } catch(e) {}
+                  });
+
+                  const topSites = Object.values(siteCounts)
+                    .sort((a, b) => b.count - a.count)
+                    .slice(0, 8);
+
+                  if (topSites.length === 0) {
+                     return <div style={{color: '#666'}}>No history yet</div>;
+                  }
+
+                  return topSites.map((site, i) => (
+                    <div key={i} className="ntp-tile" onClick={() => navigate(site.url)}>
+                      <div className="ntp-tile-icon">
+                        {site.title.charAt(0).toUpperCase()}
+                      </div>
+                      <div className="ntp-tile-title">{site.title || site.url}</div>
+                    </div>
+                  ));
+                })()}
+              </div>
+            </div>
+          </div>
+        ))}
+
+        {tabs.map(tab => tab.id === activeTabId && tab.crashed && (
+          <div key={`crash-${tab.id}`} className="crash-overlay">
+            <div className="crash-content">
+              <h2>Aw, Snap!</h2>
+              <p>This tab crashed or stopped responding.</p>
+              <button
+                className="clear-history-btn"
+                style={{padding: '8px 16px', fontSize: '14px', marginTop: '16px', background: 'var(--primary-color)', border: 'none'}}
+                onClick={() => {
+                  const wv = webviewRefs.current[tab.id];
+                  if (wv) wv.reload();
+                  updateTab(tab.id, { crashed: false });
+                }}
+              >
+                Reload Tab
+              </button>
+            </div>
+          </div>
         ))}
       </div>
     </div>
