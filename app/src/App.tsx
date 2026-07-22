@@ -1,8 +1,17 @@
 import React, { useState, useEffect, useRef } from 'react';
 import {
   ArrowLeft, ArrowRight, RotateCw, Home, Plus,
-  Lock, X, Minus, Square, Search, Star, Bookmark, Menu, History, ZoomIn, FileCode, Printer, LogOut, Info
+  Lock, X, Minus, Square, Search, Star, Bookmark, Menu, History, ZoomIn, FileCode, Printer, LogOut, Info, Download, Folder, Settings, ChevronUp, ChevronDown
 } from 'lucide-react';
+
+interface DownloadItem {
+  id: string;
+  fileName: string;
+  state: 'progressing' | 'completed' | 'cancelled' | 'interrupted';
+  receivedBytes: number;
+  totalBytes: number;
+  savePath: string;
+}
 
 interface Tab {
   id: string;
@@ -25,11 +34,42 @@ declare global {
       close: () => void;
       onNewTab: (callback: () => void) => void;
       onCloseTab: (callback: () => void) => void;
+      onDownloadUpdate: (callback: (item: DownloadItem) => void) => void;
+      openFile: (path: string) => void;
+      showInFolder: (path: string) => void;
+      onOpenLinkNewTab: (callback: (url: string) => void) => void;
+      showContextMenu: (params: { x: number, y: number, linkURL: string }) => void;
+      onContextMenuAction: (callback: (action: string, x?: number, y?: number) => void) => void;
+      onFind: (callback: () => void) => void;
     };
   }
 }
 
 function App() {
+  const [showSettings, setShowSettings] = useState(false);
+  const [showFind, setShowFind] = useState(false);
+  const [findText, setFindText] = useState('');
+  const [findResult, setFindResult] = useState({ activeMatchOrdinal: 0, matches: 0 });
+  const findInputRef = useRef<HTMLInputElement>(null);
+  const settingsRef = useRef<any>(null);
+  const [settings, setSettings] = useState(() => {
+    try {
+      const saved = localStorage.getItem('probaho-settings');
+      if (saved) {
+        const parsed = JSON.parse(saved);
+        settingsRef.current = parsed;
+        return parsed;
+      }
+    } catch (e) {}
+    const def = {
+      defaultSearchEngine: 'Google',
+      homepageUrl: 'https://www.google.com',
+      theme: 'dark'
+    };
+    settingsRef.current = def;
+    return def;
+  });
+
   const [tabs, setTabs] = useState<Tab[]>(() => {
     try {
       const saved = localStorage.getItem('savedTabs');
@@ -45,9 +85,10 @@ function App() {
         }
       }
     } catch (e) {}
+    let initialUrl = settingsRef.current?.homepageUrl || 'https://www.google.com';
     return [{
       id: Date.now().toString(),
-      url: DEFAULT_URL,
+      url: initialUrl,
       title: 'New Tab',
       loading: false,
       canGoBack: false,
@@ -82,6 +123,8 @@ function App() {
     return saved ? JSON.parse(saved) : [];
   });
   const [showHistory, setShowHistory] = useState(false);
+  const [showDownloads, setShowDownloads] = useState(false);
+  const [downloads, setDownloads] = useState<DownloadItem[]>([]);
   const [showMenu, setShowMenu] = useState(false);
   const [showAbout, setShowAbout] = useState(false);
 
@@ -92,6 +135,46 @@ function App() {
   useEffect(() => {
     localStorage.setItem('history', JSON.stringify(history));
   }, [history]);
+
+  useEffect(() => {
+    settingsRef.current = settings;
+    localStorage.setItem('probaho-settings', JSON.stringify(settings));
+    document.body.className = settings.theme === 'light' ? 'theme-light' : '';
+  }, [settings]);
+
+  useEffect(() => {
+    settingsRef.current = settings;
+    localStorage.setItem('probaho-settings', JSON.stringify(settings));
+    // Apply theme
+    document.body.className = settings.theme === 'light' ? 'theme-light' : '';
+  }, [settings]);
+
+  useEffect(() => {
+    if (window.electronAPI?.onFind) {
+      window.electronAPI.onFind(() => {
+        setShowFind(true);
+        setTimeout(() => {
+          if (findInputRef.current) {
+            findInputRef.current.focus();
+            findInputRef.current.select();
+          }
+        }, 100);
+      });
+    }
+
+    if (window.electronAPI?.onDownloadUpdate) {
+      window.electronAPI.onDownloadUpdate((item) => {
+        setDownloads(prev => {
+          const exists = prev.find(d => d.id === item.id);
+          if (exists) {
+            return prev.map(d => d.id === item.id ? item : d);
+          } else {
+            return [item, ...prev];
+          }
+        });
+      });
+    }
+  }, []);
 
   useEffect(() => {
     localStorage.setItem('savedTabs', JSON.stringify(tabs));
@@ -110,7 +193,7 @@ function App() {
     const handleNewTab = () => {
       const newTab = {
         id: Date.now().toString(),
-        url: DEFAULT_URL,
+        url: settingsRef.current?.homepageUrl || 'https://www.google.com',
         title: 'New Tab',
         loading: false,
         canGoBack: false,
@@ -125,6 +208,47 @@ function App() {
 
     if (window.electronAPI?.onNewTab) {
       window.electronAPI.onNewTab(handleNewTab);
+    }
+
+    if (window.electronAPI?.onContextMenuAction) {
+      window.electronAPI.onContextMenuAction((action, x, y) => {
+        const wv = webviewRefs.current[activeTabIdRef.current];
+        if (!wv) return;
+
+        switch (action) {
+          case 'back':
+            if (wv.canGoBack()) wv.goBack();
+            break;
+          case 'forward':
+            if (wv.canGoForward()) wv.goForward();
+            break;
+          case 'reload':
+            wv.reload();
+            break;
+          case 'inspect':
+            if (x !== undefined && y !== undefined) {
+              wv.inspectElement(x, y);
+            }
+            break;
+        }
+      });
+    }
+
+    if (window.electronAPI?.onOpenLinkNewTab) {
+      window.electronAPI.onOpenLinkNewTab((url) => {
+        const newTab = {
+          id: Date.now().toString(),
+          url: url,
+          title: 'New Tab',
+          loading: false,
+          canGoBack: false,
+          canGoForward: false,
+          isSecure: url.startsWith('https'),
+          zoomLevel: 1
+        };
+        setTabs(prev => [...prev, newTab]);
+        setTimeout(() => setActiveTabId(newTab.id), 0);
+      });
     }
 
     const handleCloseTab = () => {
@@ -153,12 +277,20 @@ function App() {
     if (activeTab) {
       setInputUrl(activeTab.url);
     }
+    // Hide find bar when switching tabs
+    if (showFind) {
+      const wv = webviewRefs.current[activeTabIdRef.current];
+      if (wv) wv.stopFindInPage('clearSelection');
+      setShowFind(false);
+      setFindText('');
+      setFindResult({ activeMatchOrdinal: 0, matches: 0 });
+    }
   }, [activeTabId]);
 
   const createTab = () => {
     const newTab: Tab = {
       id: Date.now().toString(),
-      url: DEFAULT_URL,
+      url: settings.homepageUrl,
       title: 'New Tab',
       loading: false,
       canGoBack: false,
@@ -253,17 +385,68 @@ function App() {
           canGoBack: el.canGoBack(),
           canGoForward: el.canGoForward()
         });
-      })
+      });
+
+      el.addEventListener('context-menu', (e: any) => {
+        window.electronAPI?.showContextMenu({
+          x: e.params.x,
+          y: e.params.y,
+          linkURL: e.params.linkURL
+        });
+      });
+
+      el.addEventListener('found-in-page', (e: any) => {
+        setFindResult({
+          activeMatchOrdinal: e.result.activeMatchOrdinal,
+          matches: e.result.matches
+        });
+      });
+    }
+  };
+
+  const handleFind = (text: string, forward: boolean = true, findNext: boolean = false) => {
+    setFindText(text);
+    const wv = webviewRefs.current[activeTabIdRef.current];
+    if (!wv) return;
+
+    if (text) {
+      wv.findInPage(text, { forward, findNext });
+    } else {
+      wv.stopFindInPage('clearSelection');
+      setFindResult({ activeMatchOrdinal: 0, matches: 0 });
+    }
+  };
+
+  const closeFind = () => {
+    setShowFind(false);
+    setFindText('');
+    setFindResult({ activeMatchOrdinal: 0, matches: 0 });
+    const wv = webviewRefs.current[activeTabIdRef.current];
+    if (wv) wv.stopFindInPage('clearSelection');
+  };
+
+  const handleFindKeyDown = (e: React.KeyboardEvent) => {
+    if (e.key === 'Enter') {
+      e.preventDefault();
+      handleFind(findText, !e.shiftKey, true);
+    } else if (e.key === 'Escape') {
+      closeFind();
     }
   };
 
   const navigate = (url: string) => {
     let finalUrl = url;
-    if (!url.startsWith('http://') && !url.startsWith('https://')) {
+    if (!url.startsWith('http://') && !url.startsWith('https://') && !url.startsWith('file://')) {
       if (url.includes('.') && !url.includes(' ')) {
         finalUrl = `https://${url}`;
       } else {
-        finalUrl = `https://www.google.com/search?q=${encodeURIComponent(url)}`;
+        if (settings.defaultSearchEngine === 'Bing') {
+          finalUrl = `https://www.bing.com/search?q=${encodeURIComponent(url)}`;
+        } else if (settings.defaultSearchEngine === 'DuckDuckGo') {
+          finalUrl = `https://duckduckgo.com/?q=${encodeURIComponent(url)}`;
+        } else {
+          finalUrl = `https://www.google.com/search?q=${encodeURIComponent(url)}`;
+        }
       }
     }
 
@@ -295,7 +478,7 @@ function App() {
   };
 
   const goHome = () => {
-    navigate(DEFAULT_URL);
+    navigate(settings.homepageUrl);
   };
 
   const toggleBookmark = () => {
@@ -400,10 +583,10 @@ function App() {
             <Star size={16} fill={isCurrentBookmarked ? "#f5d44f" : "none"} color={isCurrentBookmarked ? "#f5d44f" : "currentColor"} />
           </button>
         </form>
-        <button className="nav-btn" onClick={() => { setShowMenu(false); setShowHistory(false); setShowBookmarks(!showBookmarks); }}>
+        <button className="nav-btn" onClick={() => { setShowMenu(false); setShowHistory(false); setShowDownloads(false); setShowBookmarks(!showBookmarks); }}>
           <Bookmark size={16} />
         </button>
-        <button className="nav-btn" onClick={() => { setShowBookmarks(false); setShowHistory(false); setShowMenu(!showMenu); }}>
+        <button className="nav-btn" onClick={() => { setShowBookmarks(false); setShowHistory(false); setShowDownloads(false); setShowMenu(!showMenu); }}>
           <Menu size={16} />
         </button>
       </div>
@@ -420,6 +603,10 @@ function App() {
           <div className="menu-item" onClick={() => { setShowMenu(false); setShowHistory(true); }}>
             <div className="menu-item-icon"><History size={16} /></div>
             <div className="menu-item-text">History</div>
+          </div>
+          <div className="menu-item" onClick={() => { setShowMenu(false); setShowDownloads(true); }}>
+            <div className="menu-item-icon"><Download size={16} /></div>
+            <div className="menu-item-text">Downloads</div>
           </div>
           <div className="menu-item" onClick={() => { setShowMenu(false); setShowBookmarks(true); }}>
             <div className="menu-item-icon"><Bookmark size={16} /></div>
@@ -442,6 +629,10 @@ function App() {
             <div className="menu-item-shortcut">Ctrl+P</div>
           </div>
           <div className="menu-divider" />
+          <div className="menu-item" onClick={() => { setShowMenu(false); setShowSettings(true); }}>
+            <div className="menu-item-icon"><Settings size={16} /></div>
+            <div className="menu-item-text">Settings</div>
+          </div>
           <div className="menu-item" onClick={toggleDevTools}>
             <div className="menu-item-icon"><FileCode size={16} /></div>
             <div className="menu-item-text">Developer tools</div>
@@ -484,6 +675,102 @@ function App() {
           </div>
         </div>
       )}
+
+
+
+      {/* Downloads Panel */}
+      {showDownloads && (
+        <div className="bookmarks-panel" style={{width: '350px'}}>
+          <div className="bookmarks-header">
+            <h3>Downloads</h3>
+            <div style={{display: 'flex', gap: '8px', alignItems: 'center'}}>
+              <button className="clear-history-btn" onClick={() => setDownloads([])}>Clear</button>
+              <button className="nav-btn" onClick={() => setShowDownloads(false)}><X size={16} /></button>
+            </div>
+          </div>
+          <div className="bookmarks-list">
+            {downloads.length === 0 ? (
+              <div className="no-bookmarks">No recent downloads</div>
+            ) : (
+              downloads.map((d, i) => (
+                <div key={i} className="download-item">
+                  <div className="download-info">
+                    <div className="bookmark-title" style={{marginBottom: '4px'}}>{d.fileName}</div>
+                    <div className="bookmark-url">
+                      {d.state === 'completed' ? 'Completed' :
+                       d.state === 'progressing' ? `${Math.round(d.receivedBytes / 1024 / 1024 * 10) / 10} MB / ${Math.round(d.totalBytes / 1024 / 1024 * 10) / 10} MB` : d.state}
+                    </div>
+                    {d.state === 'progressing' && (
+                      <div className="download-progress-bar">
+                        <div className="download-progress-fill" style={{width: `${(d.receivedBytes / d.totalBytes) * 100}%`}}></div>
+                      </div>
+                    )}
+                  </div>
+                  {d.state === 'completed' && (
+                    <div className="download-actions">
+                      <button className="nav-btn" title="Open file" onClick={() => window.electronAPI?.openFile(d.savePath)}>
+                        <FileCode size={14} />
+                      </button>
+                      <button className="nav-btn" title="Show in folder" onClick={() => window.electronAPI?.showInFolder(d.savePath)}>
+                        <Folder size={14} />
+                      </button>
+                    </div>
+                  )}
+                </div>
+              ))
+            )}
+          </div>
+        </div>
+      )}
+
+
+      {/* Settings Modal */}
+      {showSettings && (
+        <div className="about-modal-overlay" onClick={() => setShowSettings(false)}>
+          <div className="about-modal" style={{width: '500px'}} onClick={e => e.stopPropagation()}>
+            <div className="about-header">
+              <h3>Settings</h3>
+              <button className="nav-btn" onClick={() => setShowSettings(false)}><X size={16} /></button>
+            </div>
+            <div className="about-content" style={{textAlign: 'left', padding: '16px 24px'}}>
+              <div style={{marginBottom: '16px'}}>
+                <label style={{display: 'block', marginBottom: '8px', fontSize: '13px', fontWeight: 'bold'}}>Homepage URL</label>
+                <input
+                  type="text"
+                  value={settings.homepageUrl}
+                  onChange={e => setSettings({...settings, homepageUrl: e.target.value})}
+                  style={{width: '100%', padding: '8px', borderRadius: '4px', border: '1px solid var(--border-color)', background: 'var(--bg-color)', color: 'var(--text-color)'}}
+                />
+              </div>
+              <div style={{marginBottom: '16px'}}>
+                <label style={{display: 'block', marginBottom: '8px', fontSize: '13px', fontWeight: 'bold'}}>Default Search Engine</label>
+                <select
+                  value={settings.defaultSearchEngine}
+                  onChange={e => setSettings({...settings, defaultSearchEngine: e.target.value})}
+                  style={{width: '100%', padding: '8px', borderRadius: '4px', border: '1px solid var(--border-color)', background: 'var(--bg-color)', color: 'var(--text-color)'}}
+                >
+                  <option value="Google">Google</option>
+                  <option value="Bing">Bing</option>
+                  <option value="DuckDuckGo">DuckDuckGo</option>
+                </select>
+              </div>
+              <div style={{marginBottom: '16px'}}>
+                <label style={{display: 'block', marginBottom: '8px', fontSize: '13px', fontWeight: 'bold'}}>Theme</label>
+                <select
+                  value={settings.theme}
+                  onChange={e => setSettings({...settings, theme: e.target.value})}
+                  style={{width: '100%', padding: '8px', borderRadius: '4px', border: '1px solid var(--border-color)', background: 'var(--bg-color)', color: 'var(--text-color)'}}
+                >
+                  <option value="dark">Dark</option>
+                  <option value="light">Light</option>
+                </select>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+
 
 
       {/* About Modal */}
@@ -541,12 +828,42 @@ function App() {
 
       {/* Content Area */}
       <div className="content-area">
+
+        {showFind && (
+          <div className="find-bar">
+            <input
+              ref={findInputRef}
+              type="text"
+              placeholder="Find in page..."
+              value={findText}
+              onChange={e => handleFind(e.target.value)}
+              onKeyDown={handleFindKeyDown}
+              className="find-input"
+            />
+            <span className="find-count">
+              {findResult.matches > 0 ? `${findResult.activeMatchOrdinal} / ${findResult.matches}` : '0 / 0'}
+            </span>
+            <div className="find-actions">
+              <button className="nav-btn" onClick={() => handleFind(findText, false, true)} disabled={!findText}>
+                <ChevronUp size={16} />
+              </button>
+              <button className="nav-btn" onClick={() => handleFind(findText, true, true)} disabled={!findText}>
+                <ChevronDown size={16} />
+              </button>
+              <div className="find-divider" />
+              <button className="nav-btn" onClick={closeFind}>
+                <X size={16} />
+              </button>
+            </div>
+          </div>
+        )}
         {tabs.map(tab => (
           <webview // @ts-ignore
             key={tab.id}
             className={tab.id === activeTabId ? 'active' : ''}
             src={tab.id === activeTabId && !webviewRefs.current[tab.id] ? tab.url : undefined}
             ref={(el: any) => handleWebviewRef(tab.id, el)}
+            webpreferences="contextIsolation=yes, nodeIntegration=no, sandbox=yes"
           />
         ))}
       </div>
