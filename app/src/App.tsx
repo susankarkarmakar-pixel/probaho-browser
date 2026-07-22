@@ -30,17 +30,47 @@ declare global {
 }
 
 function App() {
-  const [tabs, setTabs] = useState<Tab[]>([{
-    id: Date.now().toString(),
-    url: DEFAULT_URL,
-    title: 'New Tab',
-    loading: false,
-    canGoBack: false,
-    canGoForward: false,
-    isSecure: true,
-    zoomLevel: 1
-  }]);
-  const [activeTabId, setActiveTabId] = useState<string>(tabs[0].id);
+  const [tabs, setTabs] = useState<Tab[]>(() => {
+    try {
+      const saved = localStorage.getItem('savedTabs');
+      if (saved) {
+        const parsed = JSON.parse(saved);
+        if (Array.isArray(parsed) && parsed.length > 0) {
+          return parsed.map(t => ({
+            ...t,
+            loading: false,
+            canGoBack: false,
+            canGoForward: false
+          }));
+        }
+      }
+    } catch (e) {}
+    return [{
+      id: Date.now().toString(),
+      url: DEFAULT_URL,
+      title: 'New Tab',
+      loading: false,
+      canGoBack: false,
+      canGoForward: false,
+      isSecure: true,
+      zoomLevel: 1
+    }];
+  });
+
+  const [activeTabId, setActiveTabId] = useState<string>(() => {
+    try {
+      const savedId = localStorage.getItem('activeTabId');
+      if (savedId) return savedId;
+    } catch (e) {}
+    return ''; // Will be fixed by useEffect
+  });
+
+  // Ensure valid activeTabId
+  useEffect(() => {
+    if (!tabs.find(t => t.id === activeTabId)) {
+      setActiveTabId(tabs[0].id);
+    }
+  }, [tabs, activeTabId]);
   const [inputUrl, setInputUrl] = useState(DEFAULT_URL);
   const [bookmarks, setBookmarks] = useState<{title: string, url: string}[]>(() => {
     const saved = localStorage.getItem('bookmarks');
@@ -62,6 +92,11 @@ function App() {
   useEffect(() => {
     localStorage.setItem('history', JSON.stringify(history));
   }, [history]);
+
+  useEffect(() => {
+    localStorage.setItem('savedTabs', JSON.stringify(tabs));
+    localStorage.setItem('activeTabId', activeTabId);
+  }, [tabs, activeTabId]);
 
   // Keep a ref of the active tab id to avoid stale closures in event listeners
   const activeTabIdRef = useRef<string>(activeTabId);

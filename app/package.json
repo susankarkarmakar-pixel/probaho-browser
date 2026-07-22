@@ -35,13 +35,15 @@
           ]
         }
       ],
-      "publisherName": "Susankar Karmakar"
+      "publisherName": "Susankar Karmakar",
+      "icon": "build/icon.ico"
     },
     "mac": {
       "target": [
         "dmg"
       ],
-      "category": "public.app-category.productivity"
+      "category": "public.app-category.productivity",
+      "icon": "build/icon.icns"
     },
     "linux": {
       "target": [
@@ -51,7 +53,8 @@
       ],
       "category": "Network",
       "maintainer": "Susankar Karmakar <your-email@example.com>",
-      "vendor": "Susankar Karmakar"
+      "vendor": "Susankar Karmakar",
+      "icon": "build/icon.png"
     }
   },
   "dependencies": {
@@ -69,5 +72,7 @@
     "typescript": "^5.2.2",
     "vite": "^5.0.0",
     "wait-on": "^7.2.0"
-  }
+  },
+  "homepage": "https://github.com/susankarkarmakar-pixel/probaho-browser",
+  "author": "Susankar Karmakar <susankar@example.com>"
 }
