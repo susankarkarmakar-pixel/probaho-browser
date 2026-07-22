@@ -38,6 +38,8 @@ body {
   overflow-y: hidden;
   height: 36px;
   -webkit-app-region: no-drag;
+  /* Scroll smoothly */
+  scroll-behavior: smooth;
 }
 
 .tabs::-webkit-scrollbar {
@@ -55,10 +57,11 @@ body {
   margin-top: 4px;
   margin-right: 2px;
   padding: 0 10px;
-  min-width: 120px;
-  max-width: 200px;
+  min-width: 140px; /* Fixed min width to prevent shrinking infinitely */
+  max-width: 220px;
   height: 32px;
   cursor: pointer;
+  flex-shrink: 0; /* Important: prevents shrinking below min-width */
 }
 
 .tab.active {
@@ -584,4 +587,23 @@ body.theme-light .about-desc {
   font-weight: bold;
   padding: 1px 4px;
   border-radius: 8px;
+}
+
+/* Private Tab Styles */
+.tab.private {
+  background-color: #1a0f2e; /* Very dark purple */
+}
+
+.tab.private.active {
+  background-color: #3b1c6b; /* Dark purple */
+}
+
+body.theme-light .tab.private {
+  background-color: #e0d0f0;
+  color: #333;
+}
+
+body.theme-light .tab.private.active {
+  background-color: #d1b3ff;
+  color: #111;
 }
