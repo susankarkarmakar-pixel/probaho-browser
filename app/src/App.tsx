@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import {
   ArrowLeft, ArrowRight, RotateCw, Home, Plus,
-  Lock, X, Minus, Square, Search, Star, Bookmark, Menu, History, ZoomIn, FileCode, Printer, LogOut, Info, Download, Folder, Settings, ChevronUp, ChevronDown
+  Lock, X, Minus, Square, Search, Star, Bookmark, Menu, History, ZoomIn, FileCode, Printer, LogOut, Info, Download, Folder, Settings, ChevronUp, ChevronDown, Shield
 } from 'lucide-react';
 
 interface DownloadItem {
@@ -22,6 +22,8 @@ interface Tab {
   canGoForward: boolean;
   isSecure: boolean;
   zoomLevel: number;
+  webContentsId?: number;
+  blockedCount: number;
 }
 
 const DEFAULT_URL = 'https://www.google.com';
@@ -41,6 +43,8 @@ declare global {
       showContextMenu: (params: { x: number, y: number, linkURL: string }) => void;
       onContextMenuAction: (callback: (action: string, x?: number, y?: number) => void) => void;
       onFind: (callback: () => void) => void;
+      setAdBlocker: (enabled: boolean) => void;
+      onAdBlocked: (callback: (webContentsId: number) => void) => void;
     };
   }
 }
@@ -64,7 +68,8 @@ function App() {
     const def = {
       defaultSearchEngine: 'Google',
       homepageUrl: 'https://www.google.com',
-      theme: 'dark'
+      theme: 'dark',
+      adBlockerEnabled: true
     };
     settingsRef.current = def;
     return def;
@@ -80,7 +85,8 @@ function App() {
             ...t,
             loading: false,
             canGoBack: false,
-            canGoForward: false
+            canGoForward: false,
+            blockedCount: 0
           }));
         }
       }
@@ -94,7 +100,8 @@ function App() {
       canGoBack: false,
       canGoForward: false,
       isSecure: true,
-      zoomLevel: 1
+      zoomLevel: 1,
+      blockedCount: 0
     }];
   });
 
@@ -140,6 +147,9 @@ function App() {
     settingsRef.current = settings;
     localStorage.setItem('probaho-settings', JSON.stringify(settings));
     document.body.className = settings.theme === 'light' ? 'theme-light' : '';
+    if (window.electronAPI?.setAdBlocker) {
+      window.electronAPI.setAdBlocker(settings.adBlockerEnabled !== false);
+    }
   }, [settings]);
 
   useEffect(() => {
@@ -150,6 +160,17 @@ function App() {
   }, [settings]);
 
   useEffect(() => {
+    if (window.electronAPI?.onAdBlocked) {
+      window.electronAPI.onAdBlocked((webContentsId) => {
+        setTabs(prev => prev.map(t => {
+          if (t.webContentsId === webContentsId) {
+            return { ...t, blockedCount: t.blockedCount + 1 };
+          }
+          return t;
+        }));
+      });
+    }
+
     if (window.electronAPI?.onFind) {
       window.electronAPI.onFind(() => {
         setShowFind(true);
@@ -199,7 +220,8 @@ function App() {
         canGoBack: false,
         canGoForward: false,
         isSecure: true,
-        zoomLevel: 1
+        zoomLevel: 1,
+        blockedCount: 0
       };
       setTabs(prev => [...prev, newTab]);
       // Note: We need a slight timeout to let React render the new tab to DOM, or use ref
@@ -244,7 +266,8 @@ function App() {
           canGoBack: false,
           canGoForward: false,
           isSecure: url.startsWith('https'),
-          zoomLevel: 1
+          zoomLevel: 1,
+          blockedCount: 0
         };
         setTabs(prev => [...prev, newTab]);
         setTimeout(() => setActiveTabId(newTab.id), 0);
@@ -296,7 +319,8 @@ function App() {
       canGoBack: false,
       canGoForward: false,
       isSecure: true,
-      zoomLevel: 1
+      zoomLevel: 1,
+      blockedCount: 0
     };
     setTabs(prev => [...prev, newTab]);
     setActiveTabId(newTab.id);
@@ -339,10 +363,18 @@ function App() {
         updateTab(id, { loading: false });
       });
 
+      el.addEventListener('dom-ready', () => {
+        try {
+          const wcId = el.getWebContentsId();
+          updateTab(id, { webContentsId: wcId });
+        } catch (err) {}
+      });
+
       el.addEventListener('did-navigate', (e: any) => {
         updateTab(id, {
           url: e.url,
-          isSecure: e.url.startsWith('https')
+          isSecure: e.url.startsWith('https'),
+          blockedCount: 0
         });
         if (activeTabIdRef.current === id) {
           setInputUrl(e.url);
@@ -583,6 +615,12 @@ function App() {
             <Star size={16} fill={isCurrentBookmarked ? "#f5d44f" : "none"} color={isCurrentBookmarked ? "#f5d44f" : "currentColor"} />
           </button>
         </form>
+        {settings.adBlockerEnabled !== false && (
+          <div className="shield-container" title={`Blocked ${activeTab?.blockedCount || 0} ads/trackers`}>
+            <Shield size={16} color={activeTab && activeTab.blockedCount > 0 ? '#4caf50' : '#888'} />
+            {activeTab && activeTab.blockedCount > 0 && <span className="shield-count">{activeTab.blockedCount}</span>}
+          </div>
+        )}
         <button className="nav-btn" onClick={() => { setShowMenu(false); setShowHistory(false); setShowDownloads(false); setShowBookmarks(!showBookmarks); }}>
           <Bookmark size={16} />
         </button>
@@ -753,6 +791,17 @@ function App() {
                   <option value="Bing">Bing</option>
                   <option value="DuckDuckGo">DuckDuckGo</option>
                 </select>
+              </div>
+              <div style={{marginBottom: '16px'}}>
+                <label style={{display: 'flex', alignItems: 'center', cursor: 'pointer', fontSize: '13px', fontWeight: 'bold'}}>
+                  <input
+                    type="checkbox"
+                    checked={settings.adBlockerEnabled !== false}
+                    onChange={e => setSettings({...settings, adBlockerEnabled: e.target.checked})}
+                    style={{marginRight: '8px'}}
+                  />
+                  Enable Ad & Tracker Blocking
+                </label>
               </div>
               <div style={{marginBottom: '16px'}}>
                 <label style={{display: 'block', marginBottom: '8px', fontSize: '13px', fontWeight: 'bold'}}>Theme</label>

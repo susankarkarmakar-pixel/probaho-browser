@@ -565,3 +565,23 @@ body.theme-light .about-desc {
   background-color: var(--border-color);
   margin: 0 4px;
 }
+
+.shield-container {
+  display: flex;
+  align-items: center;
+  margin: 0 8px;
+  cursor: default;
+  position: relative;
+}
+
+.shield-count {
+  position: absolute;
+  top: -6px;
+  right: -8px;
+  background-color: var(--primary-color);
+  color: white;
+  font-size: 9px;
+  font-weight: bold;
+  padding: 1px 4px;
+  border-radius: 8px;
+}
