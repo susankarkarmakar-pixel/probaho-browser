@@ -12,5 +12,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
   onContextMenuAction: (callback) => ipcRenderer.on('context-menu-action', (event, action, x, y) => callback(action, x, y)),
   onFind: (callback) => ipcRenderer.on('shortcut-find', () => callback()),
   openFile: (path) => ipcRenderer.send('open-file', path),
-  showInFolder: (path) => ipcRenderer.send('show-in-folder', path)
+  showInFolder: (path) => ipcRenderer.send('show-in-folder', path),
+  setAdBlocker: (enabled) => ipcRenderer.send('set-adblocker', enabled),
+  onAdBlocked: (callback) => ipcRenderer.on('ad-blocked', (event, webContentsId) => callback(webContentsId))
 });

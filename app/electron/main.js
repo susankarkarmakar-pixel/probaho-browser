@@ -1,5 +1,6 @@
 const { app, BrowserWindow, ipcMain, session, shell, Menu } = require('electron');
 const path = require('path');
+const blocklist = require('./blocklist');
 
 let mainWindow;
 
@@ -54,6 +55,27 @@ function createWindow() {
 
 app.whenReady().then(() => {
   createWindow();
+
+
+  let adBlockerEnabled = true;
+
+  ipcMain.on('set-adblocker', (event, enabled) => {
+    adBlockerEnabled = enabled;
+  });
+
+  session.defaultSession.webRequest.onBeforeRequest({ urls: ['*://*/*'] }, (details, callback) => {
+    if (adBlockerEnabled) {
+      const url = details.url.toLowerCase();
+      const isBlocked = blocklist.some(domain => url.includes(domain));
+      if (isBlocked) {
+        if (mainWindow) {
+          mainWindow.webContents.send('ad-blocked', details.webContentsId);
+        }
+        return callback({ cancel: true });
+      }
+    }
+    callback({ cancel: false });
+  });
 
   session.defaultSession.on('will-download', (event, item, webContents) => {
     // Generate a unique ID for the download
