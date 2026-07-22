@@ -20,7 +20,7 @@
     "appId": "com.susankarkarmakar.probaho",
     "productName": "Probaho Browser",
     "directories": {
-      "output": "dist"
+      "output": "release"
     },
     "files": [
       "dist/**/*",
