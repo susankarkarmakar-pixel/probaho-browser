@@ -455,6 +455,7 @@ function App() {
   };
 
   const handleWebviewRef = (id: string, el: any, initialUrl: string) => {
+    console.log('handleWebviewRef', id, initialUrl, !!el);
     if (el && !webviewRefs.current[id]) {
       webviewRefs.current[id] = el;
 
@@ -589,9 +590,11 @@ function App() {
   };
 
   const navigate = (url: string) => {
+    if (!url) return;
+    console.log('navigate called with', url);
     let finalUrl = url;
     if (!url.startsWith('http://') && !url.startsWith('https://') && !url.startsWith('file://')) {
-      if (url.includes('.') && !url.includes(' ')) {
+      if (url.includes('.') && !url.includes(' ') && !url.startsWith('localhost')) {
         finalUrl = `https://${url}`;
       } else {
         if (settings.defaultSearchEngine === 'Bing') {
@@ -605,8 +608,10 @@ function App() {
     }
 
     const wv = webviewRefs.current[activeTabId];
+    console.log('Navigating to', finalUrl, 'wv exists:', !!wv);
     if (wv) {
-      wv.loadURL(finalUrl);
+      try {  } catch (e) { console.error('loadURL error:', e); }
+      try { wv.loadURL(finalUrl); } catch (e) { console.error('Error in wv.loadURL:', e); }
     } else {
       updateTab(activeTabId, { url: finalUrl });
     }

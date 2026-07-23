@@ -1,3 +1,8 @@
 app/node_modules
 app/dist
 app/release
+node_modules/
+node_modules/
+test-*
+playwright-test.mjs
+output.log
