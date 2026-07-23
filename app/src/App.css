@@ -201,7 +201,7 @@ body {
 }
 
 webview {
-  display: inline-flex;
+  display: block;
   width: 100%;
   height: 100%;
 }
