@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
+import { t, Language } from './i18n';
 import {
   ArrowLeft, ArrowRight, RotateCw, Home, Plus,
   Lock, X, Minus, Square, Search, Star, Bookmark, Menu, History, ZoomIn, FileCode, Printer, LogOut, Info, Download, Folder, Settings, ChevronUp, ChevronDown, EyeOff, Shield
@@ -71,15 +72,24 @@ function App() {
       const saved = localStorage.getItem('probaho-settings');
       if (saved) {
         const parsed = JSON.parse(saved);
-        settingsRef.current = parsed;
-        return parsed;
+        const def = {
+          defaultSearchEngine: 'Google',
+          homepageUrl: 'probaho://newtab',
+          theme: 'dark',
+          adBlockerEnabled: true,
+          language: 'en' as Language
+        };
+        const merged = { ...def, ...parsed };
+        settingsRef.current = merged;
+        return merged;
       }
     } catch (e) {}
     const def = {
       defaultSearchEngine: 'Google',
       homepageUrl: 'probaho://newtab',
       theme: 'dark',
-      adBlockerEnabled: true
+      adBlockerEnabled: true,
+      language: 'en' as Language
     };
     settingsRef.current = def;
     return def;
@@ -105,7 +115,7 @@ function App() {
     return [{
       id: Date.now().toString(),
       url: initialUrl,
-      title: 'New Tab',
+      title: t('newTab', settingsRef.current?.language || 'en'),
       loading: false,
       canGoBack: false,
       canGoForward: false,
@@ -264,7 +274,7 @@ function App() {
     localStorage.setItem('savedTabs', JSON.stringify(publicTabs.length > 0 ? publicTabs : [{
       id: Date.now().toString(),
       url: settingsRef.current?.homepageUrl || 'probaho://newtab',
-      title: 'New Tab',
+      title: t('newTab', settingsRef.current?.language || 'en'),
       loading: false,
       canGoBack: false,
       canGoForward: false,
@@ -292,7 +302,7 @@ function App() {
       const newTab = {
         id: Date.now().toString(),
         url: settingsRef.current?.homepageUrl || 'probaho://newtab',
-        title: 'New Tab',
+        title: t('newTab', settingsRef.current?.language || 'en'),
         loading: false,
         canGoBack: false,
         canGoForward: false,
@@ -314,7 +324,7 @@ function App() {
         const newTab = {
           id: Date.now().toString(),
           url: settingsRef.current?.homepageUrl || 'probaho://newtab',
-          title: 'New Private Tab',
+          title: t('newPrivateTab', settingsRef.current?.language || 'en'),
           loading: false,
           canGoBack: false,
           canGoForward: false,
@@ -357,7 +367,7 @@ function App() {
         const newTab = {
           id: Date.now().toString(),
           url: url,
-          title: 'New Tab',
+          title: t('newTab', settingsRef.current?.language || 'en'),
           loading: false,
           canGoBack: false,
           canGoForward: false,
@@ -410,7 +420,7 @@ function App() {
     const newTab: Tab = {
       id: Date.now().toString(),
       url: settingsRef.current?.homepageUrl || 'https://www.google.com',
-      title: isPrivate ? 'New Private Tab' : 'New Tab',
+      title: isPrivate ? t('newPrivateTab', settings.language) : t('newTab', settings.language),
       loading: false,
       canGoBack: false,
       canGoForward: false,
@@ -570,7 +580,7 @@ function App() {
     el.addEventListener('did-fail-load', (e: any) => {
       if (e.isMainFrame && e.errorCode !== -3) { // -3 is aborted, not a real error
         console.error('Navigation failed:', e.errorCode, e.errorDescription, e.validatedURL);
-        updateTab(id, { loading: false, title: 'Error' });
+        updateTab(id, { loading: false, title: t('error', settingsRef.current?.language || 'en') });
       }
     });
 
@@ -825,7 +835,7 @@ function App() {
           </button>
         </form>
         {settings.adBlockerEnabled !== false && (
-          <div className="shield-container" title={`Blocked ${activeTab?.blockedCount || 0} ads/trackers`}>
+          <div className="shield-container" title={t('blockedAds', settings.language, { count: activeTab?.blockedCount || 0 })}>
             <Shield size={16} color={activeTab && activeTab.blockedCount > 0 ? '#4caf50' : '#888'} />
             {activeTab && activeTab.blockedCount > 0 && <span className="shield-count">{activeTab.blockedCount}</span>}
           </div>
@@ -843,31 +853,31 @@ function App() {
         <div className="menu-panel">
           <div className="menu-item" onClick={() => { createTab(); setShowMenu(false); }}>
             <div className="menu-item-icon"><Plus size={16} /></div>
-            <div className="menu-item-text">New tab</div>
+            <div className="menu-item-text">{t('newTab', settings.language)}</div>
             <div className="menu-item-shortcut">Ctrl+T</div>
           </div>
           <div className="menu-item" onClick={() => { createTab(true); setShowMenu(false); }}>
             <div className="menu-item-icon"><EyeOff size={16} /></div>
-            <div className="menu-item-text">New private tab</div>
+            <div className="menu-item-text">{t('newPrivateTab', settings.language)}</div>
             <div className="menu-item-shortcut">Ctrl+Shift+N</div>
           </div>
           <div className="menu-divider" />
           <div className="menu-item" onClick={() => { setShowMenu(false); setShowHistory(true); }}>
             <div className="menu-item-icon"><History size={16} /></div>
-            <div className="menu-item-text">History</div>
+            <div className="menu-item-text">{t('history', settings.language)}</div>
           </div>
           <div className="menu-item" onClick={() => { setShowMenu(false); setShowDownloads(true); }}>
             <div className="menu-item-icon"><Download size={16} /></div>
-            <div className="menu-item-text">Downloads</div>
+            <div className="menu-item-text">{t('downloads', settings.language)}</div>
           </div>
           <div className="menu-item" onClick={() => { setShowMenu(false); setShowBookmarks(true); }}>
             <div className="menu-item-icon"><Bookmark size={16} /></div>
-            <div className="menu-item-text">Bookmarks</div>
+            <div className="menu-item-text">{t('bookmarks', settings.language)}</div>
           </div>
           <div className="menu-divider" />
           <div className="menu-item" onClick={(e) => e.stopPropagation()}>
             <div className="menu-item-icon"><ZoomIn size={16} /></div>
-            <div className="menu-item-text">Zoom</div>
+            <div className="menu-item-text">{t('zoom', settings.language)}</div>
             <div className="zoom-controls">
               <button className="zoom-btn" onClick={() => handleZoom(-0.1)}>-</button>
               <span className="zoom-level">{Math.round((activeTab?.zoomLevel || 1) * 100)}%</span>
@@ -877,28 +887,28 @@ function App() {
           </div>
           <div className="menu-item" onClick={handlePrint}>
             <div className="menu-item-icon"><Printer size={16} /></div>
-            <div className="menu-item-text">Print...</div>
+            <div className="menu-item-text">{t('print', settings.language)}</div>
             <div className="menu-item-shortcut">Ctrl+P</div>
           </div>
           <div className="menu-divider" />
           <div className="menu-item" onClick={() => { setShowMenu(false); setShowSettings(true); }}>
             <div className="menu-item-icon"><Settings size={16} /></div>
-            <div className="menu-item-text">Settings</div>
+            <div className="menu-item-text">{t('settings', settings.language)}</div>
           </div>
           <div className="menu-item" onClick={toggleDevTools}>
             <div className="menu-item-icon"><FileCode size={16} /></div>
-            <div className="menu-item-text">Developer tools</div>
+            <div className="menu-item-text">{t('devTools', settings.language)}</div>
             <div className="menu-item-shortcut">F12</div>
           </div>
           <div className="menu-divider" />
           <div className="menu-item" onClick={() => { setShowMenu(false); setShowAbout(true); }}>
             <div className="menu-item-icon"><Info size={16} /></div>
-            <div className="menu-item-text">About Probaho</div>
+            <div className="menu-item-text">{t('about', settings.language)}</div>
           </div>
           <div className="menu-divider" />
           <div className="menu-item" onClick={() => window.electronAPI?.close()}>
             <div className="menu-item-icon"><LogOut size={16} /></div>
-            <div className="menu-item-text">Exit</div>
+            <div className="menu-item-text">{t('exit', settings.language)}</div>
           </div>
         </div>
       )}
@@ -907,15 +917,15 @@ function App() {
       {showHistory && (
         <div className="bookmarks-panel">
           <div className="bookmarks-header">
-            <h3>History</h3>
+            <h3>{t('history', settings.language)}</h3>
             <div style={{display: 'flex', gap: '8px', alignItems: 'center'}}>
-              <button className="clear-history-btn" onClick={() => setHistory([])}>Clear</button>
+              <button className="clear-history-btn" onClick={() => setHistory([])}>{t('clear', settings.language)}</button>
               <button className="nav-btn" onClick={() => setShowHistory(false)}><X size={16} /></button>
             </div>
           </div>
           <div className="bookmarks-list">
             {history.length === 0 ? (
-              <div className="no-bookmarks">No history yet</div>
+              <div className="no-bookmarks">{t('noHistory', settings.language)}</div>
             ) : (
               history.map((h, i) => (
                 <div key={i} className="bookmark-item" onClick={() => { navigate(h.url); setShowHistory(false); }}>
@@ -934,22 +944,22 @@ function App() {
       {showDownloads && (
         <div className="bookmarks-panel" style={{width: '350px'}}>
           <div className="bookmarks-header">
-            <h3>Downloads</h3>
+            <h3>{t('downloads', settings.language)}</h3>
             <div style={{display: 'flex', gap: '8px', alignItems: 'center'}}>
-              <button className="clear-history-btn" onClick={() => setDownloads([])}>Clear</button>
+              <button className="clear-history-btn" onClick={() => setDownloads([])}>{t('clear', settings.language)}</button>
               <button className="nav-btn" onClick={() => setShowDownloads(false)}><X size={16} /></button>
             </div>
           </div>
           <div className="bookmarks-list">
             {downloads.length === 0 ? (
-              <div className="no-bookmarks">No recent downloads</div>
+              <div className="no-bookmarks">{t('noDownloads', settings.language)}</div>
             ) : (
               downloads.map((d, i) => (
                 <div key={i} className="download-item">
                   <div className="download-info">
                     <div className="bookmark-title" style={{marginBottom: '4px'}}>{d.fileName}</div>
                     <div className="bookmark-url">
-                      {d.state === 'completed' ? 'Completed' :
+                      {d.state === 'completed' ? t('completed', settings.language) :
                        d.state === 'progressing' ? `${Math.round(d.receivedBytes / 1024 / 1024 * 10) / 10} MB / ${Math.round(d.totalBytes / 1024 / 1024 * 10) / 10} MB` : d.state}
                     </div>
                     {d.state === 'progressing' && (
@@ -960,10 +970,10 @@ function App() {
                   </div>
                   {d.state === 'completed' && (
                     <div className="download-actions">
-                      <button className="nav-btn" title="Open file" onClick={() => window.electronAPI?.openFile(d.savePath)}>
+                      <button className="nav-btn" title={t('openFile', settings.language)} onClick={() => window.electronAPI?.openFile(d.savePath)}>
                         <FileCode size={14} />
                       </button>
-                      <button className="nav-btn" title="Show in folder" onClick={() => window.electronAPI?.showInFolder(d.savePath)}>
+                      <button className="nav-btn" title={t('showInFolder', settings.language)} onClick={() => window.electronAPI?.showInFolder(d.savePath)}>
                         <Folder size={14} />
                       </button>
                     </div>
@@ -981,12 +991,12 @@ function App() {
         <div className="about-modal-overlay" onClick={() => setShowSettings(false)}>
           <div className="about-modal" style={{width: '500px'}} onClick={e => e.stopPropagation()}>
             <div className="about-header">
-              <h3>Settings</h3>
+              <h3>{t('settings', settings.language)}</h3>
               <button className="nav-btn" onClick={() => setShowSettings(false)}><X size={16} /></button>
             </div>
             <div className="about-content" style={{textAlign: 'left', padding: '16px 24px'}}>
               <div style={{marginBottom: '16px'}}>
-                <label style={{display: 'block', marginBottom: '8px', fontSize: '13px', fontWeight: 'bold'}}>Homepage URL</label>
+                <label style={{display: 'block', marginBottom: '8px', fontSize: '13px', fontWeight: 'bold'}}>{t('homepageUrl', settings.language)}</label>
                 <input
                   type="text"
                   value={settings.homepageUrl}
@@ -995,7 +1005,7 @@ function App() {
                 />
               </div>
               <div style={{marginBottom: '16px'}}>
-                <label style={{display: 'block', marginBottom: '8px', fontSize: '13px', fontWeight: 'bold'}}>Default Search Engine</label>
+                <label style={{display: 'block', marginBottom: '8px', fontSize: '13px', fontWeight: 'bold'}}>{t('defaultSearchEngine', settings.language)}</label>
                 <select
                   value={settings.defaultSearchEngine}
                   onChange={e => setSettings({...settings, defaultSearchEngine: e.target.value})}
@@ -1017,15 +1027,27 @@ function App() {
                   Enable Ad & Tracker Blocking
                 </label>
               </div>
+
               <div style={{marginBottom: '16px'}}>
-                <label style={{display: 'block', marginBottom: '8px', fontSize: '13px', fontWeight: 'bold'}}>Theme</label>
+                <label style={{display: 'block', marginBottom: '8px', fontSize: '13px', fontWeight: 'bold'}}>{t('language', settings.language)}</label>
+                <select
+                  value={settings.language}
+                  onChange={e => setSettings({...settings, language: e.target.value as Language})}
+                  style={{width: '100%', padding: '8px', borderRadius: '4px', border: '1px solid var(--border-color)', background: 'var(--bg-color)', color: 'var(--text-color)'}}
+                >
+                  <option value="en">{t('english', settings.language)}</option>
+                  <option value="bn">{t('bengali', settings.language)}</option>
+                </select>
+              </div>
+              <div style={{marginBottom: '16px'}}>
+                <label style={{display: 'block', marginBottom: '8px', fontSize: '13px', fontWeight: 'bold'}}>{t('theme', settings.language)}</label>
                 <select
                   value={settings.theme}
                   onChange={e => setSettings({...settings, theme: e.target.value})}
                   style={{width: '100%', padding: '8px', borderRadius: '4px', border: '1px solid var(--border-color)', background: 'var(--bg-color)', color: 'var(--text-color)'}}
                 >
-                  <option value="dark">Dark</option>
-                  <option value="light">Light</option>
+                  <option value="dark">{t('dark', settings.language)}</option>
+                  <option value="light">{t('light', settings.language)}</option>
                 </select>
               </div>
             </div>
@@ -1041,7 +1063,7 @@ function App() {
         <div className="about-modal-overlay" onClick={() => setShowAbout(false)}>
           <div className="about-modal" onClick={e => e.stopPropagation()}>
             <div className="about-header">
-              <h3>About Probaho Browser</h3>
+              <h3>{t('aboutTitle', settings.language)}</h3>
               <button className="nav-btn" onClick={() => setShowAbout(false)}><X size={16} /></button>
             </div>
             <div className="about-content">
@@ -1051,16 +1073,16 @@ function App() {
               </div>
               <table className="about-table">
                 <tbody>
-                  <tr><td><strong>Version:</strong></td><td>1.0.0</td></tr>
-                  <tr><td><strong>License:</strong></td><td>MIT</td></tr>
-                  <tr><td><strong>Creator:</strong></td><td>Susankar Karmakar</td></tr>
+                  <tr><td><strong>{t('version', settings.language)}:</strong></td><td>1.0.0</td></tr>
+                  <tr><td><strong>{t('license', settings.language)}:</strong></td><td>MIT</td></tr>
+                  <tr><td><strong>{t('creator', settings.language)}:</strong></td><td>Susankar Karmakar</td></tr>
                 </tbody>
               </table>
               <p className="about-desc">
                 Probaho Browser is a lightweight, fast, and privacy-focused web browser built with modern web technologies.
               </p>
               <div className="about-footer">
-                © 2026 Susankar Karmakar. All rights reserved.
+                © 2026 Susankar Karmakar. {t('rights', settings.language)}
               </div>
             </div>
           </div>
@@ -1071,12 +1093,12 @@ function App() {
       {showBookmarks && (
         <div className="bookmarks-panel">
           <div className="bookmarks-header">
-            <h3>Bookmarks</h3>
+            <h3>{t('bookmarks', settings.language)}</h3>
             <button className="nav-btn" onClick={() => setShowBookmarks(false)}><X size={16} /></button>
           </div>
           <div className="bookmarks-list">
             {bookmarks.length === 0 ? (
-              <div className="no-bookmarks">No bookmarks yet</div>
+              <div className="no-bookmarks">{t('noBookmarks', settings.language)}</div>
             ) : (
               bookmarks.map((b, i) => (
                 <div key={i} className="bookmark-item" onClick={() => { navigate(b.url); setShowBookmarks(false); }}>
@@ -1097,7 +1119,7 @@ function App() {
             <input
               ref={findInputRef}
               type="text"
-              placeholder="Find in page..."
+              placeholder={t('findInPage', settings.language)}
               value={findText}
               onChange={e => handleFind(e.target.value)}
               onKeyDown={handleFindKeyDown}
@@ -1128,7 +1150,7 @@ function App() {
             ref={(el: any) => handleWebviewRef(tab.id, el, tab.url)}
             webpreferences="contextIsolation=yes, nodeIntegration=no"
             partition={tab.isPrivate ? `private-${tab.id}` : undefined}
-            allowpopups="true"
+            allowpopups={true}
           />
         ))}
 
@@ -1144,7 +1166,7 @@ function App() {
                 <input
                   type="text"
                   className="ntp-search-input"
-                  placeholder={`Search with ${settings.defaultSearchEngine} or enter address`}
+                  placeholder={t('searchPlaceholder', settings.language, { engine: settings.defaultSearchEngine })}
                   onKeyDown={(e) => {
                     if (e.key === 'Enter') {
                       navigate(e.currentTarget.value);
@@ -1173,7 +1195,7 @@ function App() {
                     .slice(0, 8);
 
                   if (topSites.length === 0) {
-                     return <div style={{color: '#666'}}>No history yet</div>;
+                     return <div style={{color: '#666'}}>{t('noHistory', settings.language)}</div>;
                   }
 
                   return topSites.map((site, i) => (
@@ -1193,8 +1215,8 @@ function App() {
         {tabs.map(tab => tab.id === activeTabId && tab.crashed && (
           <div key={`crash-${tab.id}`} className="crash-overlay">
             <div className="crash-content">
-              <h2>Aw, Snap!</h2>
-              <p>This tab crashed or stopped responding.</p>
+              <h2>{t('awSnap', settings.language)}</h2>
+              <p>{t('crashedDesc', settings.language)}</p>
               <button
                 className="clear-history-btn"
                 style={{padding: '8px 16px', fontSize: '14px', marginTop: '16px', background: 'var(--primary-color)', border: 'none'}}
