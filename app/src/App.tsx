@@ -607,6 +607,8 @@ function App() {
     const wv = webviewRefs.current[activeTabId];
     if (wv) {
       wv.loadURL(finalUrl);
+    } else {
+      updateTab(activeTabId, { url: finalUrl });
     }
     setInputUrl(finalUrl);
   };
