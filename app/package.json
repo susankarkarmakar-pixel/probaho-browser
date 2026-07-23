@@ -9,9 +9,9 @@
     "preview": "vite preview",
     "electron": "electron .",
     "dist": "electron-builder",
-    "dist:win": "electron-builder --win",
+    "dist:win": "electron-builder --win --publish never",
     "dist:mac": "electron-builder --mac",
-    "dist:linux": "electron-builder --linux",
+    "dist:linux": "electron-builder --linux --publish never",
     "build:win": "electron-builder --win --x64",
     "build:linux": "electron-builder --linux --x64",
     "build:all": "electron-builder --win --linux --x64"
