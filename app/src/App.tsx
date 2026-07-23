@@ -454,9 +454,15 @@ function App() {
     setTabs(prev => prev.map(tab => tab.id === id ? { ...tab, ...updates } : tab));
   };
 
-  const handleWebviewRef = (id: string, el: any) => {
+  const handleWebviewRef = (id: string, el: any, initialUrl: string) => {
     if (el && !webviewRefs.current[id]) {
       webviewRefs.current[id] = el;
+
+      // Initially load the URL (skip if it's the internal New Tab Page)
+      if (initialUrl && initialUrl !== 'probaho://newtab') {
+        // Run asynchronously to allow the webview to fully attach to the DOM
+        setTimeout(() => el.loadURL(initialUrl), 0);
+      }
 
       // Setup event listeners for the webview
       el.addEventListener('did-start-loading', () => {
@@ -1059,8 +1065,7 @@ function App() {
           <webview // @ts-ignore
             key={tab.id}
             className={tab.id === activeTabId ? 'active' : ''}
-            src={tab.id === activeTabId && !webviewRefs.current[tab.id] ? tab.url : undefined}
-            ref={(el: any) => handleWebviewRef(tab.id, el)}
+            ref={(el: any) => handleWebviewRef(tab.id, el, tab.url)}
             webpreferences="contextIsolation=yes, nodeIntegration=no, sandbox=yes"
             partition={tab.isPrivate ? `private-${tab.id}` : undefined}
           />
