@@ -164,13 +164,6 @@ function App() {
   }, [settings]);
 
   useEffect(() => {
-    settingsRef.current = settings;
-    localStorage.setItem('probaho-settings', JSON.stringify(settings));
-    // Apply theme
-    document.body.className = settings.theme === 'light' ? 'theme-light' : '';
-  }, [settings]);
-
-  useEffect(() => {
     if (window.electronAPI?.onAdBlocked) {
       window.electronAPI.onAdBlocked((webContentsId) => {
         setTabs(prev => prev.map(t => {
@@ -455,108 +448,165 @@ function App() {
   };
 
   const handleWebviewRef = (id: string, el: any, initialUrl: string) => {
-    console.log('handleWebviewRef', id, initialUrl, !!el);
-    if (el && !webviewRefs.current[id]) {
-      webviewRefs.current[id] = el;
-
-      // Initially load the URL (skip if it's the internal New Tab Page)
-      if (initialUrl && initialUrl !== 'probaho://newtab') {
-        // Run asynchronously to allow the webview to fully attach to the DOM
-        setTimeout(() => el.loadURL(initialUrl), 0);
-      }
-
-      // Setup event listeners for the webview
-      el.addEventListener('did-start-loading', () => {
-        updateTab(id, { loading: true });
-      });
-
-      el.addEventListener('did-stop-loading', () => {
-        updateTab(id, { loading: false });
-      });
-
-      el.addEventListener('dom-ready', () => {
-        try {
-          const wcId = el.getWebContentsId();
-          updateTab(id, { webContentsId: wcId });
-        } catch (err) {}
-      });
-
-      el.addEventListener('did-navigate', (e: any) => {
-        updateTab(id, {
-          url: e.url,
-          isSecure: e.url.startsWith('https'),
-          blockedCount: 0
-        });
-        if (activeTabIdRef.current === id) {
-          setInputUrl(e.url);
-        }
-        setTabs(prev => {
-          const tab = prev.find(t => t.id === id);
-          if (tab && !tab.isPrivate) {
-            setHistory(hPrev => [{ title: e.url, url: e.url, time: new Date().toLocaleString() }, ...hPrev]);
-          }
-          return prev;
-        });
-      });
-
-      el.addEventListener('did-navigate-in-page', (e: any) => {
-        updateTab(id, {
-          url: e.url,
-          isSecure: e.url.startsWith('https')
-        });
-        if (activeTabIdRef.current === id) {
-          setInputUrl(e.url);
-        }
-      });
-
-      el.addEventListener('page-title-updated', (e: any) => {
-        updateTab(id, { title: e.title });
-        setTabs(tPrev => {
-          const tab = tPrev.find(t => t.id === id);
-          if (tab && !tab.isPrivate) {
-            setHistory(prev => {
-              if (prev.length > 0 && prev[0].url === el.getURL()) {
-                const updated = [...prev];
-                updated[0] = { ...updated[0], title: e.title };
-                return updated;
-              }
-              return prev;
-            });
-          }
-          return tPrev;
-        });
-      });
-
-      el.addEventListener('update-target-url', () => {
-        updateTab(id, {
-          canGoBack: el.canGoBack(),
-          canGoForward: el.canGoForward()
-        });
-      });
-
-      // Need a bit of delay or load check for canGoBack/Forward to be accurate after nav
-      el.addEventListener('did-finish-load', () => {
-         updateTab(id, {
-          canGoBack: el.canGoBack(),
-          canGoForward: el.canGoForward()
-        });
-      });
-
-      el.addEventListener('context-menu', (e: any) => {
-        window.electronAPI?.showContextMenu({
-          x: e.params.x,
-          y: e.params.y,
-          linkURL: e.params.linkURL
-        });
-      });
-
-      el.addEventListener('found-in-page', (e: any) => {
-        setFindResult({
-          activeMatchOrdinal: e.result.activeMatchOrdinal,
-          matches: e.result.matches
-        });
-      });
+    // Handle React unmount / StrictMode double-mount: clean up old ref
+    if (!el) {
+      delete webviewRefs.current[id];
+      return;
     }
+
+    // Always update ref to latest element (handles StrictMode re-mount)
+    webviewRefs.current[id] = el;
+
+    // Wait for the webview to fully attach to the Electron process
+    const loadWhenReady = (url: string) => {
+      const tryLoad = () => {
+        try {
+          if (el.getURL() === 'about:blank' || !el.getURL()) {
+            el.loadURL(url);
+          }
+        } catch (err) {
+          console.error('loadURL error:', err);
+        }
+      };
+
+      // If already attached, load immediately; otherwise wait for did-attach
+      try {
+        el.getWebContentsId(); // throws if not attached yet
+        tryLoad();
+      } catch {
+        el.addEventListener('did-attach', () => tryLoad(), { once: true });
+      }
+    };
+
+    // Initial load (skip internal New Tab Page)
+    if (initialUrl && initialUrl !== 'probaho://newtab') {
+      loadWhenReady(initialUrl);
+    }
+
+    // Event: loading started
+    el.addEventListener('did-start-loading', () => {
+      updateTab(id, { loading: true, crashed: false });
+    });
+
+    // Event: loading stopped
+    el.addEventListener('did-stop-loading', () => {
+      updateTab(id, { loading: false });
+    });
+
+    // Event: DOM ready
+    el.addEventListener('dom-ready', () => {
+      try {
+        const wcId = el.getWebContentsId();
+        updateTab(id, { webContentsId: wcId });
+      } catch (err) {}
+    });
+
+    // Event: main frame navigation
+    el.addEventListener('did-navigate', (e: any) => {
+      updateTab(id, {
+        url: e.url,
+        isSecure: e.url.startsWith('https'),
+        blockedCount: 0
+      });
+      if (activeTabIdRef.current === id) {
+        setInputUrl(e.url);
+      }
+      setTabs(prev => {
+        const tab = prev.find(t => t.id === id);
+        if (tab && !tab.isPrivate) {
+          setHistory(hPrev => [{ title: e.url, url: e.url, time: new Date().toLocaleString() }, ...hPrev]);
+        }
+        return prev;
+      });
+    });
+
+    // Event: in-page navigation (hash changes, history.pushState)
+    el.addEventListener('did-navigate-in-page', (e: any) => {
+      updateTab(id, {
+        url: e.url,
+        isSecure: e.url.startsWith('https')
+      });
+      if (activeTabIdRef.current === id) {
+        setInputUrl(e.url);
+      }
+    });
+
+    // Event: page title updated
+    el.addEventListener('page-title-updated', (e: any) => {
+      updateTab(id, { title: e.title });
+      setTabs(tPrev => {
+        const tab = tPrev.find(t => t.id === id);
+        if (tab && !tab.isPrivate) {
+          setHistory(prev => {
+            if (prev.length > 0 && prev[0].url === el.getURL()) {
+              const updated = [...prev];
+              updated[0] = { ...updated[0], title: e.title };
+              return updated;
+            }
+            return prev;
+          });
+        }
+        return tPrev;
+      });
+    });
+
+    // Event: navigation capability update
+    el.addEventListener('update-target-url', () => {
+      updateTab(id, {
+        canGoBack: el.canGoBack(),
+        canGoForward: el.canGoForward()
+      });
+    });
+
+    // Event: page fully loaded
+    el.addEventListener('did-finish-load', () => {
+      updateTab(id, {
+        canGoBack: el.canGoBack(),
+        canGoForward: el.canGoForward()
+      });
+    });
+
+    // Event: navigation FAILED (NEW - Bug 5 fix)
+    el.addEventListener('did-fail-load', (e: any) => {
+      if (e.isMainFrame && e.errorCode !== -3) { // -3 is aborted, not a real error
+        console.error('Navigation failed:', e.errorCode, e.errorDescription, e.validatedURL);
+        updateTab(id, { loading: false, title: 'Error' });
+      }
+    });
+
+    // Event: context menu
+    el.addEventListener('context-menu', (e: any) => {
+      window.electronAPI?.showContextMenu({
+        x: e.params.x,
+        y: e.params.y,
+        linkURL: e.params.linkURL
+      });
+    });
+
+    // Event: find in page
+    el.addEventListener('found-in-page', (e: any) => {
+      setFindResult({
+        activeMatchOrdinal: e.result.activeMatchOrdinal,
+        matches: e.result.matches
+      });
+    });
+
+    // Event: new window requested (NEW - Bug 7 fix)
+    el.addEventListener('new-window', (e: any) => {
+      const newTab: Tab = { // @ts-ignore
+        id: Date.now().toString(),
+        url: e.url,
+        title: 'New Tab',
+        loading: false,
+        canGoBack: false,
+        canGoForward: false,
+        isSecure: e.url.startsWith('https'),
+        zoomLevel: 1,
+        blockedCount: 0
+      };
+      setTabs(prev => [...prev, newTab]);
+      setTimeout(() => setActiveTabId(newTab.id), 0);
+    });
   };
 
   const handleFind = (text: string, forward: boolean = true, findNext: boolean = false) => {
@@ -607,13 +657,15 @@ function App() {
       }
     }
 
+    updateTab(activeTabId, { url: finalUrl });
+
     const wv = webviewRefs.current[activeTabId];
-    console.log('Navigating to', finalUrl, 'wv exists:', !!wv);
     if (wv) {
-      try {  } catch (e) { console.error('loadURL error:', e); }
-      try { wv.loadURL(finalUrl); } catch (e) { console.error('Error in wv.loadURL:', e); }
-    } else {
-      updateTab(activeTabId, { url: finalUrl });
+      try {
+        wv.loadURL(finalUrl);
+      } catch (e) {
+        console.error('Error in wv.loadURL:', e);
+      }
     }
     setInputUrl(finalUrl);
   };
@@ -1071,10 +1123,12 @@ function App() {
         {tabs.map(tab => tab.url !== 'probaho://newtab' && (
           <webview // @ts-ignore
             key={tab.id}
+            src="about:blank"
             className={tab.id === activeTabId ? 'active' : ''}
             ref={(el: any) => handleWebviewRef(tab.id, el, tab.url)}
-            webpreferences="contextIsolation=yes, nodeIntegration=no, sandbox=yes"
+            webpreferences="contextIsolation=yes, nodeIntegration=no"
             partition={tab.isPrivate ? `private-${tab.id}` : undefined}
+            allowpopups="true"
           />
         ))}
 
