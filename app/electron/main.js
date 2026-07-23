@@ -2,6 +2,7 @@ const { app, BrowserWindow, ipcMain, session, shell, Menu, dialog } = require('e
 const { autoUpdater } = require('electron-updater');
 const path = require('path');
 const blocklist = require('./blocklist');
+const permissionsStore = require('./permissions-store');
 
 let mainWindow;
 
@@ -103,6 +104,44 @@ app.whenReady().then(() => {
 
   ipcMain.on('set-adblocker', (event, enabled) => {
     adBlockerEnabled = enabled;
+  });
+
+
+  session.defaultSession.setPermissionRequestHandler((webContents, permission, callback, details) => {
+    const origin = new URL(details.requestingUrl).origin;
+
+    // Ignore internal scheme
+    if (origin.startsWith('probaho://')) {
+      return callback(true);
+    }
+
+    const savedPermission = permissionsStore.getPermission(origin, permission);
+    if (savedPermission !== null) {
+      return callback(savedPermission);
+    }
+
+    // Only prompt for common sensitive permissions
+    const promptPermissions = ['media', 'geolocation', 'notifications'];
+    if (!promptPermissions.includes(permission)) {
+       // Auto-allow or rely on default behavior for other things, or prompt. Let's auto-allow non-sensitive ones for simplicity unless otherwise requested.
+       return callback(true);
+    }
+
+    dialog.showMessageBox({
+      type: 'question',
+      title: 'Permission Request',
+      message: `${origin} wants to access your ${permission}.`,
+      buttons: ['Allow', 'Block'],
+      defaultId: 0,
+      cancelId: 1
+    }).then(result => {
+      const allowed = result.response === 0;
+      permissionsStore.setPermission(origin, permission, allowed);
+      callback(allowed);
+    }).catch(err => {
+      console.error(err);
+      callback(false);
+    });
   });
 
   session.defaultSession.webRequest.onBeforeRequest({ urls: ['*://*/*'] }, (details, callback) => {

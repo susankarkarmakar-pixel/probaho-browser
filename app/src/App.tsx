@@ -473,6 +473,8 @@ function App() {
         try {
           if (el.getURL() === 'about:blank' || !el.getURL()) {
             el.loadURL(url);
+            const savedZoom = getSavedZoom(url);
+            try { el.setZoomFactor(savedZoom); } catch {}
           }
         } catch (err) {
           console.error('loadURL error:', err);
@@ -513,10 +515,16 @@ function App() {
 
     // Event: main frame navigation
     el.addEventListener('did-navigate', (e: any) => {
+      const savedZoom = getSavedZoom(e.url);
+      try {
+        el.setZoomFactor(savedZoom);
+      } catch (err) {}
+
       updateTab(id, {
         url: e.url,
         isSecure: e.url.startsWith('https'),
-        blockedCount: 0
+        blockedCount: 0,
+        zoomLevel: savedZoom
       });
       if (activeTabIdRef.current === id) {
         setInputUrl(e.url);
@@ -717,11 +725,45 @@ function App() {
 
   const isCurrentBookmarked = activeTab ? bookmarks.some(b => b.url === activeTab.url) : false;
 
+  const getDomainFromUrl = (url: string) => {
+    try {
+      if (url.startsWith('probaho://')) return url;
+      return new URL(url).hostname;
+    } catch {
+      return url;
+    }
+  };
+
+  const getSavedZoom = (url: string) => {
+    try {
+      const domain = getDomainFromUrl(url);
+      const saved = localStorage.getItem('zoom_levels');
+      if (saved) {
+        const parsed = JSON.parse(saved);
+        if (parsed[domain]) return parsed[domain];
+      }
+    } catch {}
+    return 1;
+  };
+
+  const saveZoom = (url: string, zoomLevel: number) => {
+    try {
+      const domain = getDomainFromUrl(url);
+      const saved = localStorage.getItem('zoom_levels');
+      let parsed = saved ? JSON.parse(saved) : {};
+      parsed[domain] = zoomLevel;
+      localStorage.setItem('zoom_levels', JSON.stringify(parsed));
+    } catch {}
+  };
+
   const handleZoom = (delta: number) => {
     const currentZoom = activeTab?.zoomLevel || 1;
     const newZoom = Math.max(0.25, Math.min(5, delta === (1 - currentZoom) ? 1 : currentZoom + delta));
 
     updateTab(activeTabId, { zoomLevel: newZoom });
+    if (activeTab) {
+      saveZoom(activeTab.url, newZoom);
+    }
     const wv = webviewRefs.current[activeTabId];
     if (wv) wv.setZoomFactor(newZoom);
   };
