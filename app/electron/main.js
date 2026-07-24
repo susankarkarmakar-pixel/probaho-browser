@@ -2,6 +2,8 @@ const { app, BrowserWindow, ipcMain, session, shell, Menu, dialog } = require('e
 const { autoUpdater } = require('electron-updater');
 const path = require('path');
 const blocklist = require('./blocklist');
+const permissionsStore = require('./permissions-store');
+const fs = require('fs');
 
 let mainWindow;
 
@@ -105,6 +107,44 @@ app.whenReady().then(() => {
     adBlockerEnabled = enabled;
   });
 
+
+  session.defaultSession.setPermissionRequestHandler((webContents, permission, callback, details) => {
+    const origin = new URL(details.requestingUrl).origin;
+
+    // Ignore internal scheme
+    if (origin.startsWith('probaho://')) {
+      return callback(true);
+    }
+
+    const savedPermission = permissionsStore.getPermission(origin, permission);
+    if (savedPermission !== null) {
+      return callback(savedPermission);
+    }
+
+    // Only prompt for common sensitive permissions
+    const promptPermissions = ['media', 'geolocation', 'notifications'];
+    if (!promptPermissions.includes(permission)) {
+       // Auto-allow or rely on default behavior for other things, or prompt. Let's auto-allow non-sensitive ones for simplicity unless otherwise requested.
+       return callback(true);
+    }
+
+    dialog.showMessageBox({
+      type: 'question',
+      title: 'Permission Request',
+      message: `${origin} wants to access your ${permission}.`,
+      buttons: ['Allow', 'Block'],
+      defaultId: 0,
+      cancelId: 1
+    }).then(result => {
+      const allowed = result.response === 0;
+      permissionsStore.setPermission(origin, permission, allowed);
+      callback(allowed);
+    }).catch(err => {
+      console.error(err);
+      callback(false);
+    });
+  });
+
   session.defaultSession.webRequest.onBeforeRequest({ urls: ['*://*/*'] }, (details, callback) => {
     if (adBlockerEnabled) {
       const url = details.url.toLowerCase();
@@ -119,7 +159,22 @@ app.whenReady().then(() => {
     callback({ cancel: false });
   });
 
+
   session.defaultSession.on('will-download', (event, item, webContents) => {
+    const url = item.getURL();
+    const mimeType = item.getMimeType();
+
+    // Check if it's a PDF
+    if (url.toLowerCase().endsWith('.pdf') || mimeType === 'application/pdf') {
+      event.preventDefault();
+
+      // Let the renderer know to open this as a PDF instead of downloading
+      if (mainWindow) {
+        mainWindow.webContents.send('open-pdf-viewer', url);
+      }
+      return;
+    }
+
     // Generate a unique ID for the download
     const downloadId = Date.now().toString();
     const fileName = item.getFilename();
@@ -165,6 +220,20 @@ app.whenReady().then(() => {
     });
   });
 
+
+
+  app.on('web-contents-created', (event, contents) => {
+    if (contents.getType() === 'webview') {
+      contents.on('will-navigate', (event, url) => {
+        if (url.toLowerCase().endsWith('.pdf')) {
+          event.preventDefault();
+          if (mainWindow) {
+            mainWindow.webContents.send('open-pdf-viewer', url);
+          }
+        }
+      });
+    }
+  });
 
 app.on('render-process-gone', (event, webContents, details) => {
   if (mainWindow) {
@@ -256,4 +325,43 @@ ipcMain.on('show-context-menu', (event, params) => {
 
   const menu = Menu.buildFromTemplate(template);
   menu.popup();
+});
+
+
+ipcMain.handle('fetch-pdf', async (event, url) => {
+  try {
+    if (url.startsWith('file://')) {
+       // local file
+       const filePath = require('url').fileURLToPath(url);
+       return fs.readFileSync(filePath);
+    }
+
+    // Electron's net module handles session authentication and cookies correctly
+    // avoiding the limitations of Node's global fetch()
+    const { net } = require('electron');
+    return new Promise((resolve, reject) => {
+      const request = net.request(url);
+      request.on('response', (response) => {
+        if (response.statusCode !== 200) {
+           reject(new Error(`HTTP error! status: ${response.statusCode}`));
+           return;
+        }
+
+        const chunks = [];
+        response.on('data', (chunk) => {
+          chunks.push(chunk);
+        });
+        response.on('end', () => {
+          resolve(Buffer.concat(chunks));
+        });
+      });
+      request.on('error', (error) => {
+        reject(error);
+      });
+      request.end();
+    });
+  } catch (error) {
+    console.error('Error fetching PDF:', error);
+    throw error;
+  }
 });

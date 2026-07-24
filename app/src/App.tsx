@@ -1,4 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
+import { t, Language } from './i18n';
+import PdfViewer from './PdfViewer';
 import {
   ArrowLeft, ArrowRight, RotateCw, Home, Plus,
   Lock, X, Minus, Square, Search, Star, Bookmark, Menu, History, ZoomIn, FileCode, Printer, LogOut, Info, Download, Folder, Settings, ChevronUp, ChevronDown, EyeOff, Shield
@@ -26,6 +28,7 @@ interface Tab {
   blockedCount: number;
   isPrivate?: boolean;
   crashed?: boolean;
+  isPdf?: boolean;
 }
 
 const DEFAULT_URL = 'https://www.google.com';
@@ -53,6 +56,7 @@ declare global {
       setAdBlocker: (enabled: boolean) => void;
       onAdBlocked: (callback: (webContentsId: number) => void) => void;
       onTabCrashed: (callback: (webContentsId: number, reason: string) => void) => void;
+      onOpenPdfViewer: (callback: (url: string) => void) => void;
     };
   }
 }
@@ -71,15 +75,24 @@ function App() {
       const saved = localStorage.getItem('probaho-settings');
       if (saved) {
         const parsed = JSON.parse(saved);
-        settingsRef.current = parsed;
-        return parsed;
+        const def = {
+          defaultSearchEngine: 'Google',
+          homepageUrl: 'probaho://newtab',
+          theme: 'dark',
+          adBlockerEnabled: true,
+          language: 'en' as Language
+        };
+        const merged = { ...def, ...parsed };
+        settingsRef.current = merged;
+        return merged;
       }
     } catch (e) {}
     const def = {
       defaultSearchEngine: 'Google',
       homepageUrl: 'probaho://newtab',
       theme: 'dark',
-      adBlockerEnabled: true
+      adBlockerEnabled: true,
+      language: 'en' as Language
     };
     settingsRef.current = def;
     return def;
@@ -105,7 +118,7 @@ function App() {
     return [{
       id: Date.now().toString(),
       url: initialUrl,
-      title: 'New Tab',
+      title: t('newTab', settingsRef.current?.language || 'en'),
       loading: false,
       canGoBack: false,
       canGoForward: false,
@@ -153,6 +166,23 @@ function App() {
   useEffect(() => {
     localStorage.setItem('history', JSON.stringify(history));
   }, [history]);
+
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') {
+        setShowMenu(false);
+        setShowHistory(false);
+        setShowDownloads(false);
+        setShowBookmarks(false);
+        setShowSettings(false);
+        setShowAbout(false);
+        if (showFind) closeFind();
+      }
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [showFind]);
+
 
   useEffect(() => {
     settingsRef.current = settings;
@@ -264,7 +294,7 @@ function App() {
     localStorage.setItem('savedTabs', JSON.stringify(publicTabs.length > 0 ? publicTabs : [{
       id: Date.now().toString(),
       url: settingsRef.current?.homepageUrl || 'probaho://newtab',
-      title: 'New Tab',
+      title: t('newTab', settingsRef.current?.language || 'en'),
       loading: false,
       canGoBack: false,
       canGoForward: false,
@@ -292,7 +322,7 @@ function App() {
       const newTab = {
         id: Date.now().toString(),
         url: settingsRef.current?.homepageUrl || 'probaho://newtab',
-        title: 'New Tab',
+        title: t('newTab', settingsRef.current?.language || 'en'),
         loading: false,
         canGoBack: false,
         canGoForward: false,
@@ -314,7 +344,7 @@ function App() {
         const newTab = {
           id: Date.now().toString(),
           url: settingsRef.current?.homepageUrl || 'probaho://newtab',
-          title: 'New Private Tab',
+          title: t('newPrivateTab', settingsRef.current?.language || 'en'),
           loading: false,
           canGoBack: false,
           canGoForward: false,
@@ -357,7 +387,7 @@ function App() {
         const newTab = {
           id: Date.now().toString(),
           url: url,
-          title: 'New Tab',
+          title: t('newTab', settingsRef.current?.language || 'en'),
           loading: false,
           canGoBack: false,
           canGoForward: false,
@@ -383,6 +413,19 @@ function App() {
       });
       delete webviewRefs.current[idToClose];
     };
+
+
+    if (window.electronAPI?.onOpenPdfViewer) {
+      window.electronAPI.onOpenPdfViewer((url: string) => {
+        setTabs(prev => prev.map(t => {
+          if (t.id === activeTabIdRef.current) {
+             return { ...t, url, isPdf: true, title: url.split('/').pop() || 'PDF Document' };
+          }
+          return t;
+        }));
+        setInputUrl(url);
+      });
+    }
 
     if (window.electronAPI?.onCloseTab) {
       window.electronAPI.onCloseTab(handleCloseTab);
@@ -410,7 +453,7 @@ function App() {
     const newTab: Tab = {
       id: Date.now().toString(),
       url: settingsRef.current?.homepageUrl || 'https://www.google.com',
-      title: isPrivate ? 'New Private Tab' : 'New Tab',
+      title: isPrivate ? t('newPrivateTab', settings.language) : t('newTab', settings.language),
       loading: false,
       canGoBack: false,
       canGoForward: false,
@@ -463,6 +506,8 @@ function App() {
         try {
           if (el.getURL() === 'about:blank' || !el.getURL()) {
             el.loadURL(url);
+            const savedZoom = getSavedZoom(url);
+            try { el.setZoomFactor(savedZoom); } catch {}
           }
         } catch (err) {
           console.error('loadURL error:', err);
@@ -503,10 +548,16 @@ function App() {
 
     // Event: main frame navigation
     el.addEventListener('did-navigate', (e: any) => {
+      const savedZoom = getSavedZoom(e.url);
+      try {
+        el.setZoomFactor(savedZoom);
+      } catch (err) {}
+
       updateTab(id, {
         url: e.url,
         isSecure: e.url.startsWith('https'),
-        blockedCount: 0
+        blockedCount: 0,
+        zoomLevel: savedZoom
       });
       if (activeTabIdRef.current === id) {
         setInputUrl(e.url);
@@ -570,7 +621,7 @@ function App() {
     el.addEventListener('did-fail-load', (e: any) => {
       if (e.isMainFrame && e.errorCode !== -3) { // -3 is aborted, not a real error
         console.error('Navigation failed:', e.errorCode, e.errorDescription, e.validatedURL);
-        updateTab(id, { loading: false, title: 'Error' });
+        updateTab(id, { loading: false, title: t('error', settingsRef.current?.language || 'en') });
       }
     });
 
@@ -657,7 +708,13 @@ function App() {
       }
     }
 
-    updateTab(activeTabId, { url: finalUrl });
+    updateTab(activeTabId, { url: finalUrl, isPdf: false });
+
+    if (finalUrl.toLowerCase().endsWith('.pdf')) {
+      updateTab(activeTabId, { url: finalUrl, isPdf: true, title: finalUrl.split('/').pop() || 'PDF Document' });
+      setInputUrl(finalUrl);
+      return;
+    }
 
     const wv = webviewRefs.current[activeTabId];
     if (wv) {
@@ -707,11 +764,45 @@ function App() {
 
   const isCurrentBookmarked = activeTab ? bookmarks.some(b => b.url === activeTab.url) : false;
 
+  const getDomainFromUrl = (url: string) => {
+    try {
+      if (url.startsWith('probaho://')) return url;
+      return new URL(url).hostname;
+    } catch {
+      return url;
+    }
+  };
+
+  const getSavedZoom = (url: string) => {
+    try {
+      const domain = getDomainFromUrl(url);
+      const saved = localStorage.getItem('zoom_levels');
+      if (saved) {
+        const parsed = JSON.parse(saved);
+        if (parsed[domain]) return parsed[domain];
+      }
+    } catch {}
+    return 1;
+  };
+
+  const saveZoom = (url: string, zoomLevel: number) => {
+    try {
+      const domain = getDomainFromUrl(url);
+      const saved = localStorage.getItem('zoom_levels');
+      let parsed = saved ? JSON.parse(saved) : {};
+      parsed[domain] = zoomLevel;
+      localStorage.setItem('zoom_levels', JSON.stringify(parsed));
+    } catch {}
+  };
+
   const handleZoom = (delta: number) => {
     const currentZoom = activeTab?.zoomLevel || 1;
     const newZoom = Math.max(0.25, Math.min(5, delta === (1 - currentZoom) ? 1 : currentZoom + delta));
 
     updateTab(activeTabId, { zoomLevel: newZoom });
+    if (activeTab) {
+      saveZoom(activeTab.url, newZoom);
+    }
     const wv = webviewRefs.current[activeTabId];
     if (wv) wv.setZoomFactor(newZoom);
   };
@@ -732,12 +823,35 @@ function App() {
     <div className="browser-container">
       {/* Titlebar with tabs */}
       <div className="titlebar">
-        <div className="tabs">
+        <div className="tabs" role="tablist" onKeyDown={(e) => {
+          if (e.key === 'ArrowRight' || e.key === 'ArrowLeft') {
+            e.preventDefault();
+            const tabElements = Array.from(e.currentTarget.querySelectorAll('.tab'));
+            const currentIndex = tabElements.findIndex(el => el === document.activeElement);
+            if (currentIndex !== -1) {
+              const nextIndex = e.key === 'ArrowRight'
+                ? (currentIndex + 1) % tabElements.length
+                : (currentIndex - 1 + tabElements.length) % tabElements.length;
+              (tabElements[nextIndex] as HTMLElement).focus();
+            } else if (tabElements.length > 0) {
+              (tabElements[0] as HTMLElement).focus();
+            }
+          }
+        }}>
           {tabs.map(tab => (
             <div
               key={tab.id}
+              role="tab"
+              tabIndex={0}
+              aria-selected={tab.id === activeTabId}
               className={`tab ${tab.id === activeTabId ? 'active' : ''} ${tab.isPrivate ? 'private' : ''}`}
               onClick={() => setActiveTabId(tab.id)}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter' || e.key === ' ') {
+                  e.preventDefault();
+                  setActiveTabId(tab.id);
+                }
+              }}
               draggable
               onDragStart={(e) => {
                 setDraggedTabId(tab.id);
@@ -767,25 +881,25 @@ function App() {
             >
               {tab.isPrivate && <EyeOff size={10} style={{marginRight: '4px', opacity: 0.8}} />}
               <span className="tab-title">{tab.title}</span>
-              <div className="tab-close" onClick={(e) => closeTab(e, tab.id)}>
+              <div className="tab-close" role="button" aria-label="Close Tab" tabIndex={0} onClick={(e) => closeTab(e, tab.id)} onKeyDown={(e) => { if(e.key === "Enter" || e.key === " ") closeTab(null as any, tab.id); }}>
                 <X size={12} />
               </div>
             </div>
           ))}
         </div>
-        <button className="new-tab-btn" onClick={() => createTab(false)}>
+        <button className="new-tab-btn" aria-label={t("newTab", settings.language)} onClick={() => createTab(false)}>
           <Plus size={16} />
         </button>
 
         {/* Window controls */}
         <div className="window-controls">
-          <button className="control-btn" onClick={() => window.electronAPI?.minimize()}>
+          <button className="control-btn" aria-label="Minimize" onClick={() => window.electronAPI?.minimize()}>
             <Minus size={16} />
           </button>
-          <button className="control-btn" onClick={() => window.electronAPI?.maximize()}>
+          <button className="control-btn" aria-label="Maximize" onClick={() => window.electronAPI?.maximize()}>
             <Square size={12} />
           </button>
-          <button className="control-btn close" onClick={() => window.electronAPI?.close()}>
+          <button className="control-btn close" aria-label="Close Window" onClick={() => window.electronAPI?.close()}>
             <X size={16} />
           </button>
         </div>
@@ -794,16 +908,16 @@ function App() {
       {/* Toolbar */}
       <div className="toolbar">
         <div className="nav-buttons">
-          <button className="nav-btn" onClick={goBack} disabled={!activeTab?.canGoBack}>
+          <button className="nav-btn" aria-label="Go Back" onClick={goBack} disabled={!activeTab?.canGoBack}>
             <ArrowLeft size={16} />
           </button>
-          <button className="nav-btn" onClick={goForward} disabled={!activeTab?.canGoForward}>
+          <button className="nav-btn" aria-label="Go Forward" onClick={goForward} disabled={!activeTab?.canGoForward}>
             <ArrowRight size={16} />
           </button>
-          <button className="nav-btn" onClick={reload}>
+          <button className="nav-btn" aria-label="Reload" onClick={reload}>
             <RotateCw size={16} className={activeTab?.loading ? "animate-spin" : ""} />
           </button>
-          <button className="nav-btn" onClick={goHome}>
+          <button className="nav-btn" aria-label="Home" onClick={goHome}>
             <Home size={16} />
           </button>
         </div>
@@ -820,85 +934,85 @@ function App() {
             onChange={(e) => setInputUrl(e.target.value)}
             onFocus={(e) => e.target.select()}
           />
-          <button className="bookmark-toggle-btn" type="button" onClick={toggleBookmark}>
+          <button className="bookmark-toggle-btn" aria-label="Bookmark this tab" type="button" onClick={toggleBookmark}>
             <Star size={16} fill={isCurrentBookmarked ? "#f5d44f" : "none"} color={isCurrentBookmarked ? "#f5d44f" : "currentColor"} />
           </button>
         </form>
         {settings.adBlockerEnabled !== false && (
-          <div className="shield-container" title={`Blocked ${activeTab?.blockedCount || 0} ads/trackers`}>
+          <div className="shield-container" title={t('blockedAds', settings.language, { count: activeTab?.blockedCount || 0 })}>
             <Shield size={16} color={activeTab && activeTab.blockedCount > 0 ? '#4caf50' : '#888'} />
             {activeTab && activeTab.blockedCount > 0 && <span className="shield-count">{activeTab.blockedCount}</span>}
           </div>
         )}
-        <button className="nav-btn" onClick={() => { setShowMenu(false); setShowHistory(false); setShowDownloads(false); setShowBookmarks(!showBookmarks); }}>
+        <button className="nav-btn" aria-label={t("bookmarks", settings.language)} onClick={() => { setShowMenu(false); setShowHistory(false); setShowDownloads(false); setShowBookmarks(!showBookmarks); }}>
           <Bookmark size={16} />
         </button>
-        <button className="nav-btn" onClick={() => { setShowBookmarks(false); setShowHistory(false); setShowDownloads(false); setShowMenu(!showMenu); }}>
+        <button className="nav-btn" aria-label="Menu" onClick={() => { setShowBookmarks(false); setShowHistory(false); setShowDownloads(false); setShowMenu(!showMenu); }}>
           <Menu size={16} />
         </button>
       </div>
 
       {/* Menu Panel */}
       {showMenu && (
-        <div className="menu-panel">
-          <div className="menu-item" onClick={() => { createTab(); setShowMenu(false); }}>
+        <div className="menu-panel" role="menu">
+          <div className="menu-item" role="menuitem" tabIndex={0} onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") e.currentTarget.click(); }} onClick={() => { createTab(); setShowMenu(false); }}>
             <div className="menu-item-icon"><Plus size={16} /></div>
-            <div className="menu-item-text">New tab</div>
+            <div className="menu-item-text">{t('newTab', settings.language)}</div>
             <div className="menu-item-shortcut">Ctrl+T</div>
           </div>
-          <div className="menu-item" onClick={() => { createTab(true); setShowMenu(false); }}>
+          <div className="menu-item" role="menuitem" tabIndex={0} onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") e.currentTarget.click(); }} onClick={() => { createTab(true); setShowMenu(false); }}>
             <div className="menu-item-icon"><EyeOff size={16} /></div>
-            <div className="menu-item-text">New private tab</div>
+            <div className="menu-item-text">{t('newPrivateTab', settings.language)}</div>
             <div className="menu-item-shortcut">Ctrl+Shift+N</div>
           </div>
           <div className="menu-divider" />
-          <div className="menu-item" onClick={() => { setShowMenu(false); setShowHistory(true); }}>
+          <div className="menu-item" role="menuitem" tabIndex={0} onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") e.currentTarget.click(); }} onClick={() => { setShowMenu(false); setShowHistory(true); }}>
             <div className="menu-item-icon"><History size={16} /></div>
-            <div className="menu-item-text">History</div>
+            <div className="menu-item-text">{t('history', settings.language)}</div>
           </div>
-          <div className="menu-item" onClick={() => { setShowMenu(false); setShowDownloads(true); }}>
+          <div className="menu-item" role="menuitem" tabIndex={0} onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") e.currentTarget.click(); }} onClick={() => { setShowMenu(false); setShowDownloads(true); }}>
             <div className="menu-item-icon"><Download size={16} /></div>
-            <div className="menu-item-text">Downloads</div>
+            <div className="menu-item-text">{t('downloads', settings.language)}</div>
           </div>
-          <div className="menu-item" onClick={() => { setShowMenu(false); setShowBookmarks(true); }}>
+          <div className="menu-item" role="menuitem" tabIndex={0} onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") e.currentTarget.click(); }} onClick={() => { setShowMenu(false); setShowBookmarks(true); }}>
             <div className="menu-item-icon"><Bookmark size={16} /></div>
-            <div className="menu-item-text">Bookmarks</div>
+            <div className="menu-item-text">{t('bookmarks', settings.language)}</div>
           </div>
           <div className="menu-divider" />
-          <div className="menu-item" onClick={(e) => e.stopPropagation()}>
+          <div className="menu-item" role="menuitem" tabIndex={0} onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") e.currentTarget.click(); }} onClick={(e) => e.stopPropagation()}>
             <div className="menu-item-icon"><ZoomIn size={16} /></div>
-            <div className="menu-item-text">Zoom</div>
+            <div className="menu-item-text">{t('zoom', settings.language)}</div>
             <div className="zoom-controls">
-              <button className="zoom-btn" onClick={() => handleZoom(-0.1)}>-</button>
+              <button className="zoom-btn" aria-label="Zoom Out" onClick={() => handleZoom(-0.1)}>-</button>
               <span className="zoom-level">{Math.round((activeTab?.zoomLevel || 1) * 100)}%</span>
-              <button className="zoom-btn" onClick={() => handleZoom(0.1)}>+</button>
-              <button className="zoom-btn" onClick={() => handleZoom(1 - (activeTab?.zoomLevel || 1))}><Square size={10} /></button>
+              <button className="zoom-btn" aria-label="Zoom In" onClick={() => handleZoom(0.1)}>+</button>
+              <button className="zoom-btn" aria-label="Reset Zoom" onClick={() => handleZoom(1 - (activeTab?.zoomLevel || 1))}><Square size={10} /></button>
             </div>
           </div>
-          <div className="menu-item" onClick={handlePrint}>
+          <div className="menu-item" role="menuitem" tabIndex={0} onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") e.currentTarget.click(); }} onClick={handlePrint}>
             <div className="menu-item-icon"><Printer size={16} /></div>
-            <div className="menu-item-text">Print...</div>
+            <div className="menu-item-text">{t('print', settings.language)}</div>
             <div className="menu-item-shortcut">Ctrl+P</div>
           </div>
           <div className="menu-divider" />
-          <div className="menu-item" onClick={() => { setShowMenu(false); setShowSettings(true); }}>
+          <div className="menu-item" role="menuitem" tabIndex={0} onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") e.currentTarget.click(); }} onClick={() => { setShowMenu(false); setShowSettings(true); }}>
             <div className="menu-item-icon"><Settings size={16} /></div>
-            <div className="menu-item-text">Settings</div>
+            <div className="menu-item-text">{t('settings', settings.language)}</div>
           </div>
-          <div className="menu-item" onClick={toggleDevTools}>
+          <div className="menu-item" role="menuitem" tabIndex={0} onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") e.currentTarget.click(); }} onClick={toggleDevTools}>
             <div className="menu-item-icon"><FileCode size={16} /></div>
-            <div className="menu-item-text">Developer tools</div>
+            <div className="menu-item-text">{t('devTools', settings.language)}</div>
             <div className="menu-item-shortcut">F12</div>
           </div>
           <div className="menu-divider" />
-          <div className="menu-item" onClick={() => { setShowMenu(false); setShowAbout(true); }}>
+          <div className="menu-item" role="menuitem" tabIndex={0} onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") e.currentTarget.click(); }} onClick={() => { setShowMenu(false); setShowAbout(true); }}>
             <div className="menu-item-icon"><Info size={16} /></div>
-            <div className="menu-item-text">About Probaho</div>
+            <div className="menu-item-text">{t('about', settings.language)}</div>
           </div>
           <div className="menu-divider" />
-          <div className="menu-item" onClick={() => window.electronAPI?.close()}>
+          <div className="menu-item" role="menuitem" tabIndex={0} onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") e.currentTarget.click(); }} onClick={() => window.electronAPI?.close()}>
             <div className="menu-item-icon"><LogOut size={16} /></div>
-            <div className="menu-item-text">Exit</div>
+            <div className="menu-item-text">{t('exit', settings.language)}</div>
           </div>
         </div>
       )}
@@ -907,18 +1021,18 @@ function App() {
       {showHistory && (
         <div className="bookmarks-panel">
           <div className="bookmarks-header">
-            <h3>History</h3>
+            <h3>{t('history', settings.language)}</h3>
             <div style={{display: 'flex', gap: '8px', alignItems: 'center'}}>
-              <button className="clear-history-btn" onClick={() => setHistory([])}>Clear</button>
-              <button className="nav-btn" onClick={() => setShowHistory(false)}><X size={16} /></button>
+              <button className="clear-history-btn" onClick={() => setHistory([])}>{t('clear', settings.language)}</button>
+              <button className="nav-btn" aria-label="Close History" onClick={() => setShowHistory(false)}><X size={16} /></button>
             </div>
           </div>
           <div className="bookmarks-list">
             {history.length === 0 ? (
-              <div className="no-bookmarks">No history yet</div>
+              <div className="no-bookmarks">{t('noHistory', settings.language)}</div>
             ) : (
               history.map((h, i) => (
-                <div key={i} className="bookmark-item" onClick={() => { navigate(h.url); setShowHistory(false); }}>
+                <div key={i} className="bookmark-item" role="button" tabIndex={0} onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") e.currentTarget.click(); }} onClick={() => { navigate(h.url); setShowHistory(false); }}>
                   <div className="bookmark-title">{h.title}</div>
                   <div className="bookmark-url">{h.url} • {h.time}</div>
                 </div>
@@ -934,22 +1048,22 @@ function App() {
       {showDownloads && (
         <div className="bookmarks-panel" style={{width: '350px'}}>
           <div className="bookmarks-header">
-            <h3>Downloads</h3>
+            <h3>{t('downloads', settings.language)}</h3>
             <div style={{display: 'flex', gap: '8px', alignItems: 'center'}}>
-              <button className="clear-history-btn" onClick={() => setDownloads([])}>Clear</button>
-              <button className="nav-btn" onClick={() => setShowDownloads(false)}><X size={16} /></button>
+              <button className="clear-history-btn" onClick={() => setDownloads([])}>{t('clear', settings.language)}</button>
+              <button className="nav-btn" aria-label="Close Downloads" onClick={() => setShowDownloads(false)}><X size={16} /></button>
             </div>
           </div>
           <div className="bookmarks-list">
             {downloads.length === 0 ? (
-              <div className="no-bookmarks">No recent downloads</div>
+              <div className="no-bookmarks">{t('noDownloads', settings.language)}</div>
             ) : (
               downloads.map((d, i) => (
                 <div key={i} className="download-item">
                   <div className="download-info">
                     <div className="bookmark-title" style={{marginBottom: '4px'}}>{d.fileName}</div>
                     <div className="bookmark-url">
-                      {d.state === 'completed' ? 'Completed' :
+                      {d.state === 'completed' ? t('completed', settings.language) :
                        d.state === 'progressing' ? `${Math.round(d.receivedBytes / 1024 / 1024 * 10) / 10} MB / ${Math.round(d.totalBytes / 1024 / 1024 * 10) / 10} MB` : d.state}
                     </div>
                     {d.state === 'progressing' && (
@@ -960,10 +1074,10 @@ function App() {
                   </div>
                   {d.state === 'completed' && (
                     <div className="download-actions">
-                      <button className="nav-btn" title="Open file" onClick={() => window.electronAPI?.openFile(d.savePath)}>
+                      <button className="nav-btn" title={t('openFile', settings.language)} onClick={() => window.electronAPI?.openFile(d.savePath)}>
                         <FileCode size={14} />
                       </button>
-                      <button className="nav-btn" title="Show in folder" onClick={() => window.electronAPI?.showInFolder(d.savePath)}>
+                      <button className="nav-btn" title={t('showInFolder', settings.language)} onClick={() => window.electronAPI?.showInFolder(d.savePath)}>
                         <Folder size={14} />
                       </button>
                     </div>
@@ -981,12 +1095,12 @@ function App() {
         <div className="about-modal-overlay" onClick={() => setShowSettings(false)}>
           <div className="about-modal" style={{width: '500px'}} onClick={e => e.stopPropagation()}>
             <div className="about-header">
-              <h3>Settings</h3>
-              <button className="nav-btn" onClick={() => setShowSettings(false)}><X size={16} /></button>
+              <h3>{t('settings', settings.language)}</h3>
+              <button className="nav-btn" aria-label="Close Settings" onClick={() => setShowSettings(false)}><X size={16} /></button>
             </div>
             <div className="about-content" style={{textAlign: 'left', padding: '16px 24px'}}>
               <div style={{marginBottom: '16px'}}>
-                <label style={{display: 'block', marginBottom: '8px', fontSize: '13px', fontWeight: 'bold'}}>Homepage URL</label>
+                <label style={{display: 'block', marginBottom: '8px', fontSize: '13px', fontWeight: 'bold'}}>{t('homepageUrl', settings.language)}</label>
                 <input
                   type="text"
                   value={settings.homepageUrl}
@@ -995,7 +1109,7 @@ function App() {
                 />
               </div>
               <div style={{marginBottom: '16px'}}>
-                <label style={{display: 'block', marginBottom: '8px', fontSize: '13px', fontWeight: 'bold'}}>Default Search Engine</label>
+                <label style={{display: 'block', marginBottom: '8px', fontSize: '13px', fontWeight: 'bold'}}>{t('defaultSearchEngine', settings.language)}</label>
                 <select
                   value={settings.defaultSearchEngine}
                   onChange={e => setSettings({...settings, defaultSearchEngine: e.target.value})}
@@ -1017,15 +1131,27 @@ function App() {
                   Enable Ad & Tracker Blocking
                 </label>
               </div>
+
               <div style={{marginBottom: '16px'}}>
-                <label style={{display: 'block', marginBottom: '8px', fontSize: '13px', fontWeight: 'bold'}}>Theme</label>
+                <label style={{display: 'block', marginBottom: '8px', fontSize: '13px', fontWeight: 'bold'}}>{t('language', settings.language)}</label>
+                <select
+                  value={settings.language}
+                  onChange={e => setSettings({...settings, language: e.target.value as Language})}
+                  style={{width: '100%', padding: '8px', borderRadius: '4px', border: '1px solid var(--border-color)', background: 'var(--bg-color)', color: 'var(--text-color)'}}
+                >
+                  <option value="en">{t('english', settings.language)}</option>
+                  <option value="bn">{t('bengali', settings.language)}</option>
+                </select>
+              </div>
+              <div style={{marginBottom: '16px'}}>
+                <label style={{display: 'block', marginBottom: '8px', fontSize: '13px', fontWeight: 'bold'}}>{t('theme', settings.language)}</label>
                 <select
                   value={settings.theme}
                   onChange={e => setSettings({...settings, theme: e.target.value})}
                   style={{width: '100%', padding: '8px', borderRadius: '4px', border: '1px solid var(--border-color)', background: 'var(--bg-color)', color: 'var(--text-color)'}}
                 >
-                  <option value="dark">Dark</option>
-                  <option value="light">Light</option>
+                  <option value="dark">{t('dark', settings.language)}</option>
+                  <option value="light">{t('light', settings.language)}</option>
                 </select>
               </div>
             </div>
@@ -1041,8 +1167,8 @@ function App() {
         <div className="about-modal-overlay" onClick={() => setShowAbout(false)}>
           <div className="about-modal" onClick={e => e.stopPropagation()}>
             <div className="about-header">
-              <h3>About Probaho Browser</h3>
-              <button className="nav-btn" onClick={() => setShowAbout(false)}><X size={16} /></button>
+              <h3>{t('aboutTitle', settings.language)}</h3>
+              <button className="nav-btn" aria-label="Close About" onClick={() => setShowAbout(false)}><X size={16} /></button>
             </div>
             <div className="about-content">
               <div className="about-logo">
@@ -1051,16 +1177,16 @@ function App() {
               </div>
               <table className="about-table">
                 <tbody>
-                  <tr><td><strong>Version:</strong></td><td>1.0.0</td></tr>
-                  <tr><td><strong>License:</strong></td><td>MIT</td></tr>
-                  <tr><td><strong>Creator:</strong></td><td>Susankar Karmakar</td></tr>
+                  <tr><td><strong>{t('version', settings.language)}:</strong></td><td>1.0.0</td></tr>
+                  <tr><td><strong>{t('license', settings.language)}:</strong></td><td>MIT</td></tr>
+                  <tr><td><strong>{t('creator', settings.language)}:</strong></td><td>Susankar Karmakar</td></tr>
                 </tbody>
               </table>
               <p className="about-desc">
                 Probaho Browser is a lightweight, fast, and privacy-focused web browser built with modern web technologies.
               </p>
               <div className="about-footer">
-                © 2026 Susankar Karmakar. All rights reserved.
+                © 2026 Susankar Karmakar. {t('rights', settings.language)}
               </div>
             </div>
           </div>
@@ -1071,15 +1197,15 @@ function App() {
       {showBookmarks && (
         <div className="bookmarks-panel">
           <div className="bookmarks-header">
-            <h3>Bookmarks</h3>
-            <button className="nav-btn" onClick={() => setShowBookmarks(false)}><X size={16} /></button>
+            <h3>{t('bookmarks', settings.language)}</h3>
+            <button className="nav-btn" aria-label="Close Bookmarks" onClick={() => setShowBookmarks(false)}><X size={16} /></button>
           </div>
           <div className="bookmarks-list">
             {bookmarks.length === 0 ? (
-              <div className="no-bookmarks">No bookmarks yet</div>
+              <div className="no-bookmarks">{t('noBookmarks', settings.language)}</div>
             ) : (
               bookmarks.map((b, i) => (
-                <div key={i} className="bookmark-item" onClick={() => { navigate(b.url); setShowBookmarks(false); }}>
+                <div key={i} className="bookmark-item" role="button" tabIndex={0} onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") e.currentTarget.click(); }} onClick={() => { navigate(b.url); setShowBookmarks(false); }}>
                   <div className="bookmark-title">{b.title}</div>
                   <div className="bookmark-url">{b.url}</div>
                 </div>
@@ -1097,7 +1223,7 @@ function App() {
             <input
               ref={findInputRef}
               type="text"
-              placeholder="Find in page..."
+              placeholder={t('findInPage', settings.language)}
               value={findText}
               onChange={e => handleFind(e.target.value)}
               onKeyDown={handleFindKeyDown}
@@ -1107,20 +1233,20 @@ function App() {
               {findResult.matches > 0 ? `${findResult.activeMatchOrdinal} / ${findResult.matches}` : '0 / 0'}
             </span>
             <div className="find-actions">
-              <button className="nav-btn" onClick={() => handleFind(findText, false, true)} disabled={!findText}>
+              <button className="nav-btn" aria-label="Find Previous" onClick={() => handleFind(findText, false, true)} disabled={!findText}>
                 <ChevronUp size={16} />
               </button>
-              <button className="nav-btn" onClick={() => handleFind(findText, true, true)} disabled={!findText}>
+              <button className="nav-btn" aria-label="Find Next" onClick={() => handleFind(findText, true, true)} disabled={!findText}>
                 <ChevronDown size={16} />
               </button>
               <div className="find-divider" />
-              <button className="nav-btn" onClick={closeFind}>
+              <button className="nav-btn" aria-label="Close Find" onClick={closeFind}>
                 <X size={16} />
               </button>
             </div>
           </div>
         )}
-        {tabs.map(tab => tab.url !== 'probaho://newtab' && (
+        {tabs.map(tab => tab.url !== 'probaho://newtab' && !tab.isPdf && (
           <webview // @ts-ignore
             key={tab.id}
             src="about:blank"
@@ -1128,8 +1254,15 @@ function App() {
             ref={(el: any) => handleWebviewRef(tab.id, el, tab.url)}
             webpreferences="contextIsolation=yes, nodeIntegration=no"
             partition={tab.isPrivate ? `private-${tab.id}` : undefined}
-            allowpopups="true"
+            allowpopups={true}
           />
+        ))}
+
+
+        {tabs.map(tab => tab.isPdf && (
+           <div key={`pdf-${tab.id}`} style={{height: '100%', width: '100%', display: tab.id === activeTabId ? 'block' : 'none'}}>
+              <PdfViewer url={tab.url} />
+           </div>
         ))}
 
         {tabs.map(tab => tab.id === activeTabId && tab.url === 'probaho://newtab' && (
@@ -1144,7 +1277,7 @@ function App() {
                 <input
                   type="text"
                   className="ntp-search-input"
-                  placeholder={`Search with ${settings.defaultSearchEngine} or enter address`}
+                  placeholder={t('searchPlaceholder', settings.language, { engine: settings.defaultSearchEngine })}
                   onKeyDown={(e) => {
                     if (e.key === 'Enter') {
                       navigate(e.currentTarget.value);
@@ -1173,7 +1306,7 @@ function App() {
                     .slice(0, 8);
 
                   if (topSites.length === 0) {
-                     return <div style={{color: '#666'}}>No history yet</div>;
+                     return <div style={{color: '#666'}}>{t('noHistory', settings.language)}</div>;
                   }
 
                   return topSites.map((site, i) => (
@@ -1193,8 +1326,8 @@ function App() {
         {tabs.map(tab => tab.id === activeTabId && tab.crashed && (
           <div key={`crash-${tab.id}`} className="crash-overlay">
             <div className="crash-content">
-              <h2>Aw, Snap!</h2>
-              <p>This tab crashed or stopped responding.</p>
+              <h2>{t('awSnap', settings.language)}</h2>
+              <p>{t('crashedDesc', settings.language)}</p>
               <button
                 className="clear-history-btn"
                 style={{padding: '8px 16px', fontSize: '14px', marginTop: '16px', background: 'var(--primary-color)', border: 'none'}}
