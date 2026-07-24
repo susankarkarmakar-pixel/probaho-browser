@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { t, Language } from './i18n';
+import PdfViewer from './PdfViewer';
 import {
   ArrowLeft, ArrowRight, RotateCw, Home, Plus,
   Lock, X, Minus, Square, Search, Star, Bookmark, Menu, History, ZoomIn, FileCode, Printer, LogOut, Info, Download, Folder, Settings, ChevronUp, ChevronDown, EyeOff, Shield
@@ -27,6 +28,7 @@ interface Tab {
   blockedCount: number;
   isPrivate?: boolean;
   crashed?: boolean;
+  isPdf?: boolean;
 }
 
 const DEFAULT_URL = 'https://www.google.com';
@@ -54,6 +56,7 @@ declare global {
       setAdBlocker: (enabled: boolean) => void;
       onAdBlocked: (callback: (webContentsId: number) => void) => void;
       onTabCrashed: (callback: (webContentsId: number, reason: string) => void) => void;
+      onOpenPdfViewer: (callback: (url: string) => void) => void;
     };
   }
 }
@@ -394,6 +397,19 @@ function App() {
       delete webviewRefs.current[idToClose];
     };
 
+
+    if (window.electronAPI?.onOpenPdfViewer) {
+      window.electronAPI.onOpenPdfViewer((url: string) => {
+        setTabs(prev => prev.map(t => {
+          if (t.id === activeTabIdRef.current) {
+             return { ...t, url, isPdf: true, title: url.split('/').pop() || 'PDF Document' };
+          }
+          return t;
+        }));
+        setInputUrl(url);
+      });
+    }
+
     if (window.electronAPI?.onCloseTab) {
       window.electronAPI.onCloseTab(handleCloseTab);
     }
@@ -675,7 +691,13 @@ function App() {
       }
     }
 
-    updateTab(activeTabId, { url: finalUrl });
+    updateTab(activeTabId, { url: finalUrl, isPdf: false });
+
+    if (finalUrl.toLowerCase().endsWith('.pdf')) {
+      updateTab(activeTabId, { url: finalUrl, isPdf: true, title: finalUrl.split('/').pop() || 'PDF Document' });
+      setInputUrl(finalUrl);
+      return;
+    }
 
     const wv = webviewRefs.current[activeTabId];
     if (wv) {
@@ -1184,7 +1206,7 @@ function App() {
             </div>
           </div>
         )}
-        {tabs.map(tab => tab.url !== 'probaho://newtab' && (
+        {tabs.map(tab => tab.url !== 'probaho://newtab' && !tab.isPdf && (
           <webview // @ts-ignore
             key={tab.id}
             src="about:blank"
@@ -1194,6 +1216,13 @@ function App() {
             partition={tab.isPrivate ? `private-${tab.id}` : undefined}
             allowpopups={true}
           />
+        ))}
+
+
+        {tabs.map(tab => tab.id === activeTabId && tab.isPdf && (
+           <div key={`pdf-${tab.id}`} style={{height: '100%', width: '100%'}}>
+              <PdfViewer url={tab.url} />
+           </div>
         ))}
 
         {tabs.map(tab => tab.id === activeTabId && tab.url === 'probaho://newtab' && (

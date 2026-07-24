@@ -158,7 +158,22 @@ app.whenReady().then(() => {
     callback({ cancel: false });
   });
 
+
   session.defaultSession.on('will-download', (event, item, webContents) => {
+    const url = item.getURL();
+    const mimeType = item.getMimeType();
+
+    // Check if it's a PDF
+    if (url.toLowerCase().endsWith('.pdf') || mimeType === 'application/pdf') {
+      event.preventDefault();
+
+      // Let the renderer know to open this as a PDF instead of downloading
+      if (mainWindow) {
+        mainWindow.webContents.send('open-pdf-viewer', url);
+      }
+      return;
+    }
+
     // Generate a unique ID for the download
     const downloadId = Date.now().toString();
     const fileName = item.getFilename();
@@ -204,6 +219,20 @@ app.whenReady().then(() => {
     });
   });
 
+
+
+  app.on('web-contents-created', (event, contents) => {
+    if (contents.getType() === 'webview') {
+      contents.on('will-navigate', (event, url) => {
+        if (url.toLowerCase().endsWith('.pdf')) {
+          event.preventDefault();
+          if (mainWindow) {
+            mainWindow.webContents.send('open-pdf-viewer', url);
+          }
+        }
+      });
+    }
+  });
 
 app.on('render-process-gone', (event, webContents, details) => {
   if (mainWindow) {
@@ -295,4 +324,17 @@ ipcMain.on('show-context-menu', (event, params) => {
 
   const menu = Menu.buildFromTemplate(template);
   menu.popup();
+});
+
+
+ipcMain.handle('fetch-pdf', async (event, url) => {
+  try {
+    const response = await fetch(url);
+    if (!response.ok) throw new Error(`HTTP error! status: ${response.status}`);
+    const arrayBuffer = await response.arrayBuffer();
+    return Buffer.from(arrayBuffer); // Convert ArrayBuffer to Node.js Buffer for IPC
+  } catch (error) {
+    console.error('Error fetching PDF:', error);
+    throw error;
+  }
 });
