@@ -108,6 +108,13 @@ app.whenReady().then(() => {
   });
 
 
+
+  // Set a standard Chromium User Agent
+  session.defaultSession.webRequest.onBeforeSendHeaders((details, callback) => {
+    details.requestHeaders['User-Agent'] = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.0.0 Safari/537.36';
+    callback({ cancel: false, requestHeaders: details.requestHeaders });
+  });
+
   session.defaultSession.setPermissionRequestHandler((webContents, permission, callback, details) => {
     const origin = new URL(details.requestingUrl).origin;
 
@@ -222,7 +229,9 @@ app.whenReady().then(() => {
 
 
 
+
   app.on('web-contents-created', (event, contents) => {
+    contents.userAgent = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.0.0 Safari/537.36';
     if (contents.getType() === 'webview') {
       contents.on('will-navigate', (event, url) => {
         if (url.toLowerCase().endsWith('.pdf')) {
@@ -330,36 +339,10 @@ ipcMain.on('show-context-menu', (event, params) => {
 
 ipcMain.handle('fetch-pdf', async (event, url) => {
   try {
-    if (url.startsWith('file://')) {
-       // local file
-       const filePath = require('url').fileURLToPath(url);
-       return fs.readFileSync(filePath);
-    }
-
-    // Electron's net module handles session authentication and cookies correctly
-    // avoiding the limitations of Node's global fetch()
-    const { net } = require('electron');
-    return new Promise((resolve, reject) => {
-      const request = net.request(url);
-      request.on('response', (response) => {
-        if (response.statusCode !== 200) {
-           reject(new Error(`HTTP error! status: ${response.statusCode}`));
-           return;
-        }
-
-        const chunks = [];
-        response.on('data', (chunk) => {
-          chunks.push(chunk);
-        });
-        response.on('end', () => {
-          resolve(Buffer.concat(chunks));
-        });
-      });
-      request.on('error', (error) => {
-        reject(error);
-      });
-      request.end();
-    });
+    const response = await fetch(url);
+    if (!response.ok) throw new Error(`HTTP error! status: ${response.status}`);
+    const arrayBuffer = await response.arrayBuffer();
+    return Buffer.from(arrayBuffer); // Convert ArrayBuffer to Node.js Buffer for IPC
   } catch (error) {
     console.error('Error fetching PDF:', error);
     throw error;

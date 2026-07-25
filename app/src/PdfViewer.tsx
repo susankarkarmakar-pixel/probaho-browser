@@ -1,7 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
 import * as pdfjsLib from 'pdfjs-dist';
 // The workerSrc is needed for pdf.js to run in the background
-// Import the worker using a standard Vite URL import to bundle it correctly
 // @ts-ignore
 import workerUrl from 'pdfjs-dist/build/pdf.worker.mjs?url';
 pdfjsLib.GlobalWorkerOptions.workerSrc = workerUrl;
@@ -133,25 +132,25 @@ const PdfViewer: React.FC<PdfViewerProps> = ({ url }) => {
         backgroundColor: 'var(--toolbar-bg)',
         borderBottom: '1px solid var(--border-color)'
       }}>
-        <button className="nav-btn" aria-label="Previous Page" onClick={handlePrevPage} disabled={pageNum <= 1}>
+        <button className="nav-btn" onClick={handlePrevPage} disabled={pageNum <= 1}>
           Prev
         </button>
         <span style={{ fontSize: '13px', color: 'var(--text-color)' }}>
           Page {pageNum} of {numPages}
         </span>
-        <button className="nav-btn" aria-label="Next Page" onClick={handleNextPage} disabled={pageNum >= numPages}>
+        <button className="nav-btn" onClick={handleNextPage} disabled={pageNum >= numPages}>
           Next
         </button>
 
         <div style={{ width: '20px' }}></div>
 
-        <button className="nav-btn" aria-label="Zoom Out PDF" onClick={handleZoomOut} disabled={zoom <= 0.5}>
+        <button className="nav-btn" onClick={handleZoomOut} disabled={zoom <= 0.5}>
           -
         </button>
         <span style={{ fontSize: '13px', color: 'var(--text-color)', minWidth: '40px', textAlign: 'center' }}>
           {Math.round(zoom * 100)}%
         </span>
-        <button className="nav-btn" aria-label="Zoom In PDF" onClick={handleZoomIn} disabled={zoom >= 3.0}>
+        <button className="nav-btn" onClick={handleZoomIn} disabled={zoom >= 3.0}>
           +
         </button>
       </div>
