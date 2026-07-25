@@ -675,7 +675,13 @@ function App() {
 
   const navigate = (url: string) => {
     if (!url) return;
-    console.log('navigate called with', url);
+
+    if (url === 'probaho://newtab') {
+      updateTab(activeTabId, { url: 'probaho://newtab', isPdf: false });
+      setInputUrl('');
+      return;
+    }
+
     let finalUrl = url;
     if (!url.startsWith('http://') && !url.startsWith('https://') && !url.startsWith('file://')) {
       if (url.includes('.') && !url.includes(' ') && !url.startsWith('localhost')) {
