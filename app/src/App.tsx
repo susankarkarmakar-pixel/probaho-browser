@@ -168,23 +168,6 @@ function App() {
   }, [history]);
 
   useEffect(() => {
-    const handleKeyDown = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') {
-        setShowMenu(false);
-        setShowHistory(false);
-        setShowDownloads(false);
-        setShowBookmarks(false);
-        setShowSettings(false);
-        setShowAbout(false);
-        if (showFind) closeFind();
-      }
-    };
-    window.addEventListener('keydown', handleKeyDown);
-    return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [showFind]);
-
-
-  useEffect(() => {
     settingsRef.current = settings;
     localStorage.setItem('probaho-settings', JSON.stringify(settings));
     document.body.className = settings.theme === 'light' ? 'theme-light' : '';
@@ -823,35 +806,12 @@ function App() {
     <div className="browser-container">
       {/* Titlebar with tabs */}
       <div className="titlebar">
-        <div className="tabs" role="tablist" onKeyDown={(e) => {
-          if (e.key === 'ArrowRight' || e.key === 'ArrowLeft') {
-            e.preventDefault();
-            const tabElements = Array.from(e.currentTarget.querySelectorAll('.tab'));
-            const currentIndex = tabElements.findIndex(el => el === document.activeElement);
-            if (currentIndex !== -1) {
-              const nextIndex = e.key === 'ArrowRight'
-                ? (currentIndex + 1) % tabElements.length
-                : (currentIndex - 1 + tabElements.length) % tabElements.length;
-              (tabElements[nextIndex] as HTMLElement).focus();
-            } else if (tabElements.length > 0) {
-              (tabElements[0] as HTMLElement).focus();
-            }
-          }
-        }}>
+        <div className="tabs">
           {tabs.map(tab => (
             <div
               key={tab.id}
-              role="tab"
-              tabIndex={0}
-              aria-selected={tab.id === activeTabId}
               className={`tab ${tab.id === activeTabId ? 'active' : ''} ${tab.isPrivate ? 'private' : ''}`}
               onClick={() => setActiveTabId(tab.id)}
-              onKeyDown={(e) => {
-                if (e.key === 'Enter' || e.key === ' ') {
-                  e.preventDefault();
-                  setActiveTabId(tab.id);
-                }
-              }}
               draggable
               onDragStart={(e) => {
                 setDraggedTabId(tab.id);
@@ -881,25 +841,25 @@ function App() {
             >
               {tab.isPrivate && <EyeOff size={10} style={{marginRight: '4px', opacity: 0.8}} />}
               <span className="tab-title">{tab.title}</span>
-              <div className="tab-close" role="button" aria-label="Close Tab" tabIndex={0} onClick={(e) => closeTab(e, tab.id)} onKeyDown={(e) => { if(e.key === "Enter" || e.key === " ") closeTab(null as any, tab.id); }}>
+              <div className="tab-close" onClick={(e) => closeTab(e, tab.id)}>
                 <X size={12} />
               </div>
             </div>
           ))}
         </div>
-        <button className="new-tab-btn" aria-label={t("newTab", settings.language)} onClick={() => createTab(false)}>
+        <button className="new-tab-btn" onClick={() => createTab(false)}>
           <Plus size={16} />
         </button>
 
         {/* Window controls */}
         <div className="window-controls">
-          <button className="control-btn" aria-label="Minimize" onClick={() => window.electronAPI?.minimize()}>
+          <button className="control-btn" onClick={() => window.electronAPI?.minimize()}>
             <Minus size={16} />
           </button>
-          <button className="control-btn" aria-label="Maximize" onClick={() => window.electronAPI?.maximize()}>
+          <button className="control-btn" onClick={() => window.electronAPI?.maximize()}>
             <Square size={12} />
           </button>
-          <button className="control-btn close" aria-label="Close Window" onClick={() => window.electronAPI?.close()}>
+          <button className="control-btn close" onClick={() => window.electronAPI?.close()}>
             <X size={16} />
           </button>
         </div>
@@ -908,16 +868,16 @@ function App() {
       {/* Toolbar */}
       <div className="toolbar">
         <div className="nav-buttons">
-          <button className="nav-btn" aria-label="Go Back" onClick={goBack} disabled={!activeTab?.canGoBack}>
+          <button className="nav-btn" onClick={goBack} disabled={!activeTab?.canGoBack}>
             <ArrowLeft size={16} />
           </button>
-          <button className="nav-btn" aria-label="Go Forward" onClick={goForward} disabled={!activeTab?.canGoForward}>
+          <button className="nav-btn" onClick={goForward} disabled={!activeTab?.canGoForward}>
             <ArrowRight size={16} />
           </button>
-          <button className="nav-btn" aria-label="Reload" onClick={reload}>
+          <button className="nav-btn" onClick={reload}>
             <RotateCw size={16} className={activeTab?.loading ? "animate-spin" : ""} />
           </button>
-          <button className="nav-btn" aria-label="Home" onClick={goHome}>
+          <button className="nav-btn" onClick={goHome}>
             <Home size={16} />
           </button>
         </div>
@@ -934,7 +894,7 @@ function App() {
             onChange={(e) => setInputUrl(e.target.value)}
             onFocus={(e) => e.target.select()}
           />
-          <button className="bookmark-toggle-btn" aria-label="Bookmark this tab" type="button" onClick={toggleBookmark}>
+          <button className="bookmark-toggle-btn" type="button" onClick={toggleBookmark}>
             <Star size={16} fill={isCurrentBookmarked ? "#f5d44f" : "none"} color={isCurrentBookmarked ? "#f5d44f" : "currentColor"} />
           </button>
         </form>
@@ -944,73 +904,73 @@ function App() {
             {activeTab && activeTab.blockedCount > 0 && <span className="shield-count">{activeTab.blockedCount}</span>}
           </div>
         )}
-        <button className="nav-btn" aria-label={t("bookmarks", settings.language)} onClick={() => { setShowMenu(false); setShowHistory(false); setShowDownloads(false); setShowBookmarks(!showBookmarks); }}>
+        <button className="nav-btn" onClick={() => { setShowMenu(false); setShowHistory(false); setShowDownloads(false); setShowBookmarks(!showBookmarks); }}>
           <Bookmark size={16} />
         </button>
-        <button className="nav-btn" aria-label="Menu" onClick={() => { setShowBookmarks(false); setShowHistory(false); setShowDownloads(false); setShowMenu(!showMenu); }}>
+        <button className="nav-btn" onClick={() => { setShowBookmarks(false); setShowHistory(false); setShowDownloads(false); setShowMenu(!showMenu); }}>
           <Menu size={16} />
         </button>
       </div>
 
       {/* Menu Panel */}
       {showMenu && (
-        <div className="menu-panel" role="menu">
-          <div className="menu-item" role="menuitem" tabIndex={0} onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") e.currentTarget.click(); }} onClick={() => { createTab(); setShowMenu(false); }}>
+        <div className="menu-panel">
+          <div className="menu-item" onClick={() => { createTab(); setShowMenu(false); }}>
             <div className="menu-item-icon"><Plus size={16} /></div>
             <div className="menu-item-text">{t('newTab', settings.language)}</div>
             <div className="menu-item-shortcut">Ctrl+T</div>
           </div>
-          <div className="menu-item" role="menuitem" tabIndex={0} onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") e.currentTarget.click(); }} onClick={() => { createTab(true); setShowMenu(false); }}>
+          <div className="menu-item" onClick={() => { createTab(true); setShowMenu(false); }}>
             <div className="menu-item-icon"><EyeOff size={16} /></div>
             <div className="menu-item-text">{t('newPrivateTab', settings.language)}</div>
             <div className="menu-item-shortcut">Ctrl+Shift+N</div>
           </div>
           <div className="menu-divider" />
-          <div className="menu-item" role="menuitem" tabIndex={0} onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") e.currentTarget.click(); }} onClick={() => { setShowMenu(false); setShowHistory(true); }}>
+          <div className="menu-item" onClick={() => { setShowMenu(false); setShowHistory(true); }}>
             <div className="menu-item-icon"><History size={16} /></div>
             <div className="menu-item-text">{t('history', settings.language)}</div>
           </div>
-          <div className="menu-item" role="menuitem" tabIndex={0} onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") e.currentTarget.click(); }} onClick={() => { setShowMenu(false); setShowDownloads(true); }}>
+          <div className="menu-item" onClick={() => { setShowMenu(false); setShowDownloads(true); }}>
             <div className="menu-item-icon"><Download size={16} /></div>
             <div className="menu-item-text">{t('downloads', settings.language)}</div>
           </div>
-          <div className="menu-item" role="menuitem" tabIndex={0} onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") e.currentTarget.click(); }} onClick={() => { setShowMenu(false); setShowBookmarks(true); }}>
+          <div className="menu-item" onClick={() => { setShowMenu(false); setShowBookmarks(true); }}>
             <div className="menu-item-icon"><Bookmark size={16} /></div>
             <div className="menu-item-text">{t('bookmarks', settings.language)}</div>
           </div>
           <div className="menu-divider" />
-          <div className="menu-item" role="menuitem" tabIndex={0} onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") e.currentTarget.click(); }} onClick={(e) => e.stopPropagation()}>
+          <div className="menu-item" onClick={(e) => e.stopPropagation()}>
             <div className="menu-item-icon"><ZoomIn size={16} /></div>
             <div className="menu-item-text">{t('zoom', settings.language)}</div>
             <div className="zoom-controls">
-              <button className="zoom-btn" aria-label="Zoom Out" onClick={() => handleZoom(-0.1)}>-</button>
+              <button className="zoom-btn" onClick={() => handleZoom(-0.1)}>-</button>
               <span className="zoom-level">{Math.round((activeTab?.zoomLevel || 1) * 100)}%</span>
-              <button className="zoom-btn" aria-label="Zoom In" onClick={() => handleZoom(0.1)}>+</button>
-              <button className="zoom-btn" aria-label="Reset Zoom" onClick={() => handleZoom(1 - (activeTab?.zoomLevel || 1))}><Square size={10} /></button>
+              <button className="zoom-btn" onClick={() => handleZoom(0.1)}>+</button>
+              <button className="zoom-btn" onClick={() => handleZoom(1 - (activeTab?.zoomLevel || 1))}><Square size={10} /></button>
             </div>
           </div>
-          <div className="menu-item" role="menuitem" tabIndex={0} onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") e.currentTarget.click(); }} onClick={handlePrint}>
+          <div className="menu-item" onClick={handlePrint}>
             <div className="menu-item-icon"><Printer size={16} /></div>
             <div className="menu-item-text">{t('print', settings.language)}</div>
             <div className="menu-item-shortcut">Ctrl+P</div>
           </div>
           <div className="menu-divider" />
-          <div className="menu-item" role="menuitem" tabIndex={0} onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") e.currentTarget.click(); }} onClick={() => { setShowMenu(false); setShowSettings(true); }}>
+          <div className="menu-item" onClick={() => { setShowMenu(false); setShowSettings(true); }}>
             <div className="menu-item-icon"><Settings size={16} /></div>
             <div className="menu-item-text">{t('settings', settings.language)}</div>
           </div>
-          <div className="menu-item" role="menuitem" tabIndex={0} onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") e.currentTarget.click(); }} onClick={toggleDevTools}>
+          <div className="menu-item" onClick={toggleDevTools}>
             <div className="menu-item-icon"><FileCode size={16} /></div>
             <div className="menu-item-text">{t('devTools', settings.language)}</div>
             <div className="menu-item-shortcut">F12</div>
           </div>
           <div className="menu-divider" />
-          <div className="menu-item" role="menuitem" tabIndex={0} onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") e.currentTarget.click(); }} onClick={() => { setShowMenu(false); setShowAbout(true); }}>
+          <div className="menu-item" onClick={() => { setShowMenu(false); setShowAbout(true); }}>
             <div className="menu-item-icon"><Info size={16} /></div>
             <div className="menu-item-text">{t('about', settings.language)}</div>
           </div>
           <div className="menu-divider" />
-          <div className="menu-item" role="menuitem" tabIndex={0} onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") e.currentTarget.click(); }} onClick={() => window.electronAPI?.close()}>
+          <div className="menu-item" onClick={() => window.electronAPI?.close()}>
             <div className="menu-item-icon"><LogOut size={16} /></div>
             <div className="menu-item-text">{t('exit', settings.language)}</div>
           </div>
@@ -1024,7 +984,7 @@ function App() {
             <h3>{t('history', settings.language)}</h3>
             <div style={{display: 'flex', gap: '8px', alignItems: 'center'}}>
               <button className="clear-history-btn" onClick={() => setHistory([])}>{t('clear', settings.language)}</button>
-              <button className="nav-btn" aria-label="Close History" onClick={() => setShowHistory(false)}><X size={16} /></button>
+              <button className="nav-btn" onClick={() => setShowHistory(false)}><X size={16} /></button>
             </div>
           </div>
           <div className="bookmarks-list">
@@ -1032,7 +992,7 @@ function App() {
               <div className="no-bookmarks">{t('noHistory', settings.language)}</div>
             ) : (
               history.map((h, i) => (
-                <div key={i} className="bookmark-item" role="button" tabIndex={0} onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") e.currentTarget.click(); }} onClick={() => { navigate(h.url); setShowHistory(false); }}>
+                <div key={i} className="bookmark-item" onClick={() => { navigate(h.url); setShowHistory(false); }}>
                   <div className="bookmark-title">{h.title}</div>
                   <div className="bookmark-url">{h.url} • {h.time}</div>
                 </div>
@@ -1051,7 +1011,7 @@ function App() {
             <h3>{t('downloads', settings.language)}</h3>
             <div style={{display: 'flex', gap: '8px', alignItems: 'center'}}>
               <button className="clear-history-btn" onClick={() => setDownloads([])}>{t('clear', settings.language)}</button>
-              <button className="nav-btn" aria-label="Close Downloads" onClick={() => setShowDownloads(false)}><X size={16} /></button>
+              <button className="nav-btn" onClick={() => setShowDownloads(false)}><X size={16} /></button>
             </div>
           </div>
           <div className="bookmarks-list">
@@ -1096,7 +1056,7 @@ function App() {
           <div className="about-modal" style={{width: '500px'}} onClick={e => e.stopPropagation()}>
             <div className="about-header">
               <h3>{t('settings', settings.language)}</h3>
-              <button className="nav-btn" aria-label="Close Settings" onClick={() => setShowSettings(false)}><X size={16} /></button>
+              <button className="nav-btn" onClick={() => setShowSettings(false)}><X size={16} /></button>
             </div>
             <div className="about-content" style={{textAlign: 'left', padding: '16px 24px'}}>
               <div style={{marginBottom: '16px'}}>
@@ -1168,7 +1128,7 @@ function App() {
           <div className="about-modal" onClick={e => e.stopPropagation()}>
             <div className="about-header">
               <h3>{t('aboutTitle', settings.language)}</h3>
-              <button className="nav-btn" aria-label="Close About" onClick={() => setShowAbout(false)}><X size={16} /></button>
+              <button className="nav-btn" onClick={() => setShowAbout(false)}><X size={16} /></button>
             </div>
             <div className="about-content">
               <div className="about-logo">
@@ -1177,7 +1137,7 @@ function App() {
               </div>
               <table className="about-table">
                 <tbody>
-                  <tr><td><strong>{t('version', settings.language)}:</strong></td><td>1.0.0</td></tr>
+                  <tr><td><strong>{t('version', settings.language)}:</strong></td><td>2.1.0</td></tr>
                   <tr><td><strong>{t('license', settings.language)}:</strong></td><td>MIT</td></tr>
                   <tr><td><strong>{t('creator', settings.language)}:</strong></td><td>Susankar Karmakar</td></tr>
                 </tbody>
@@ -1198,14 +1158,14 @@ function App() {
         <div className="bookmarks-panel">
           <div className="bookmarks-header">
             <h3>{t('bookmarks', settings.language)}</h3>
-            <button className="nav-btn" aria-label="Close Bookmarks" onClick={() => setShowBookmarks(false)}><X size={16} /></button>
+            <button className="nav-btn" onClick={() => setShowBookmarks(false)}><X size={16} /></button>
           </div>
           <div className="bookmarks-list">
             {bookmarks.length === 0 ? (
               <div className="no-bookmarks">{t('noBookmarks', settings.language)}</div>
             ) : (
               bookmarks.map((b, i) => (
-                <div key={i} className="bookmark-item" role="button" tabIndex={0} onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") e.currentTarget.click(); }} onClick={() => { navigate(b.url); setShowBookmarks(false); }}>
+                <div key={i} className="bookmark-item" onClick={() => { navigate(b.url); setShowBookmarks(false); }}>
                   <div className="bookmark-title">{b.title}</div>
                   <div className="bookmark-url">{b.url}</div>
                 </div>
@@ -1233,14 +1193,14 @@ function App() {
               {findResult.matches > 0 ? `${findResult.activeMatchOrdinal} / ${findResult.matches}` : '0 / 0'}
             </span>
             <div className="find-actions">
-              <button className="nav-btn" aria-label="Find Previous" onClick={() => handleFind(findText, false, true)} disabled={!findText}>
+              <button className="nav-btn" onClick={() => handleFind(findText, false, true)} disabled={!findText}>
                 <ChevronUp size={16} />
               </button>
-              <button className="nav-btn" aria-label="Find Next" onClick={() => handleFind(findText, true, true)} disabled={!findText}>
+              <button className="nav-btn" onClick={() => handleFind(findText, true, true)} disabled={!findText}>
                 <ChevronDown size={16} />
               </button>
               <div className="find-divider" />
-              <button className="nav-btn" aria-label="Close Find" onClick={closeFind}>
+              <button className="nav-btn" onClick={closeFind}>
                 <X size={16} />
               </button>
             </div>
@@ -1259,8 +1219,8 @@ function App() {
         ))}
 
 
-        {tabs.map(tab => tab.isPdf && (
-           <div key={`pdf-${tab.id}`} style={{height: '100%', width: '100%', display: tab.id === activeTabId ? 'block' : 'none'}}>
+        {tabs.map(tab => tab.id === activeTabId && tab.isPdf && (
+           <div key={`pdf-${tab.id}`} style={{height: '100%', width: '100%'}}>
               <PdfViewer url={tab.url} />
            </div>
         ))}
