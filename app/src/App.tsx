@@ -3,7 +3,7 @@ import { t, Language } from './i18n';
 import PdfViewer from './PdfViewer';
 import {
   ArrowLeft, ArrowRight, RotateCw, Home, Plus,
-  Lock, X, Minus, Square, Search, Star, Bookmark, Menu, History, ZoomIn, FileCode, Printer, LogOut, Info, Download, Folder, Settings, ChevronUp, ChevronDown, EyeOff, Shield
+  Lock, X, Minus, Square, Search, Star, Bookmark, Menu, History, ZoomIn, FileCode, Printer, LogOut, Info, Download, Folder, Settings, ChevronUp, ChevronDown, EyeOff, Shield, BookOpen
 } from 'lucide-react';
 
 interface DownloadItem {
@@ -57,6 +57,7 @@ declare global {
       onAdBlocked: (callback: (webContentsId: number) => void) => void;
       onTabCrashed: (callback: (webContentsId: number, reason: string) => void) => void;
       onOpenPdfViewer: (callback: (url: string) => void) => void;
+      clearCache?: () => void;
     };
   }
 }
@@ -894,6 +895,31 @@ function App() {
             onChange={(e) => setInputUrl(e.target.value)}
             onFocus={(e) => e.target.select()}
           />
+          <button className="bookmark-toggle-btn" type="button" title="Reader Mode" onClick={() => {
+            const wv = webviewRefs.current[activeTabId];
+            if (wv) {
+              const script = `
+                if (!document.body.dataset.readerMode) {
+                  document.body.dataset.readerMode = "true";
+                  document.body.dataset.origHtml = document.body.innerHTML;
+                  document.body.dataset.origStyle = document.body.getAttribute('style') || '';
+
+                  const content = document.body.innerText;
+                  const title = document.title;
+
+                  document.body.innerHTML = "<div style='max-width: 800px; margin: 0 auto; padding: 40px 20px; font-family: serif; font-size: 18px; line-height: 1.6; color: #333; background: #fff;'><h1 style='font-size: 32px; margin-bottom: 24px; border-bottom: 1px solid #eee; padding-bottom: 10px;'>" + title + "</h1><div style='white-space: pre-wrap;'>" + content + "</div></div>";
+                  document.body.setAttribute('style', 'background-color: #f9f9f9 !important; margin: 0 !important; overflow-y: auto !important;');
+                } else {
+                  document.body.innerHTML = document.body.dataset.origHtml;
+                  document.body.setAttribute('style', document.body.dataset.origStyle);
+                  delete document.body.dataset.readerMode;
+                }
+              `;
+              wv.executeJavaScript(script).catch((e: any) => console.error(e));
+            }
+          }}>
+            <BookOpen size={16} color="currentColor" />
+          </button>
           <button className="bookmark-toggle-btn" type="button" onClick={toggleBookmark}>
             <Star size={16} fill={isCurrentBookmarked ? "#f5d44f" : "none"} color={isCurrentBookmarked ? "#f5d44f" : "currentColor"} />
           </button>
@@ -1113,6 +1139,22 @@ function App() {
                   <option value="dark">{t('dark', settings.language)}</option>
                   <option value="light">{t('light', settings.language)}</option>
                 </select>
+              </div>
+              <div style={{marginBottom: '16px'}}>
+                <button
+                  className="clear-history-btn"
+                  style={{width: '100%', padding: '10px', fontSize: '13px', fontWeight: 'bold', background: 'var(--primary-color)', color: '#fff', border: 'none', borderRadius: '4px', cursor: 'pointer'}}
+                  onClick={() => {
+                    localStorage.removeItem('history');
+                    setHistory([]);
+                    if (window.electronAPI?.clearCache) {
+                      window.electronAPI.clearCache();
+                    }
+                    alert('Browsing data cleared successfully!');
+                  }}
+                >
+                  Clear Browsing Data (History & Cache)
+                </button>
               </div>
             </div>
           </div>

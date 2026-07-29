@@ -107,6 +107,15 @@ app.whenReady().then(() => {
     adBlockerEnabled = enabled;
   });
 
+  ipcMain.on('clear-cache', () => {
+    session.defaultSession.clearCache().then(() => {
+      console.log('Cache cleared');
+    });
+    session.defaultSession.clearStorageData().then(() => {
+      console.log('Storage data cleared');
+    });
+  });
+
 
 
   // Set a standard Chromium User Agent

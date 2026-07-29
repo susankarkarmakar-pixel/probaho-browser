@@ -23,6 +23,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
   onAdBlocked: (callback) => ipcRenderer.on('ad-blocked', (event, webContentsId) => callback(webContentsId)),
 
   onOpenPdfViewer: (callback) => ipcRenderer.on('open-pdf-viewer', (event, url) => callback(url)),
-  fetchPdf: (url) => ipcRenderer.invoke('fetch-pdf', url)
+  fetchPdf: (url) => ipcRenderer.invoke('fetch-pdf', url),
+  clearCache: () => ipcRenderer.send('clear-cache')
 
 });
