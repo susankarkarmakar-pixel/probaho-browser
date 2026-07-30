@@ -3,7 +3,7 @@ import { t, Language } from './i18n';
 import PdfViewer from './PdfViewer';
 import {
   ArrowLeft, ArrowRight, RotateCw, Home, Plus,
-  Lock, X, Minus, Square, Search, Star, Bookmark, Menu, History, ZoomIn, FileCode, Printer, LogOut, Info, Download, Folder, Settings, ChevronUp, ChevronDown, EyeOff, Shield, BookOpen, Volume2, VolumeX
+  Lock, X, Minus, Square, Search, Star, Bookmark, Menu, History, ZoomIn, FileCode, Printer, LogOut, Info, Download, Folder, Settings, ChevronUp, ChevronDown, EyeOff, Shield, BookOpen, Volume2, VolumeX, Globe
 } from 'lucide-react';
 
 interface DownloadItem {
@@ -32,6 +32,7 @@ interface Tab {
   isPinned?: boolean;
   isAudible?: boolean;
   isMuted?: boolean;
+  favicon?: string;
 }
 
 const DEFAULT_URL = 'https://www.google.com';
@@ -642,6 +643,13 @@ function App() {
       updateTab(id, { isAudible: false });
     });
 
+    // Event: page favicon updated
+    el.addEventListener('page-favicon-updated', (e: any) => {
+      if (e.favicons && e.favicons.length > 0) {
+        updateTab(id, { favicon: e.favicons[0] });
+      }
+    });
+
     // Event: new window requested (NEW - Bug 7 fix)
     el.addEventListener('new-window', (e: any) => {
       const newTab: Tab = { // @ts-ignore
@@ -864,13 +872,20 @@ function App() {
               onDragEnd={() => setDraggedTabId(null)}
             >
               {tab.isPrivate && <EyeOff size={10} style={{marginRight: '4px', opacity: 0.8}} />}
+
+              {/* Favicon */}
+              {!tab.isPrivate && (
+                tab.favicon
+                  ? <img src={tab.favicon} style={{width: 14, height: 14, marginRight: tab.isPinned ? 0 : 6, flexShrink: 0}} />
+                  : <Globe size={14} style={{marginRight: tab.isPinned ? 0 : 6, opacity: 0.7, flexShrink: 0}} />
+              )}
+
               {!tab.isPinned && <span className="tab-title">{tab.title}</span>}
               {!tab.isPinned && (
                 <div className="tab-close" onClick={(e) => closeTab(e, tab.id)}>
                   <X size={12} />
                 </div>
               )}
-              {tab.isPinned && <span style={{fontSize: '12px', fontWeight: 'bold'}}>{tab.title ? tab.title.charAt(0).toUpperCase() : 'U'}</span>}
               {tab.isPinned && <span className="tab-title" style={{display: 'none'}}>{tab.title}</span>}
               {(tab.isAudible || tab.isMuted) && (
                 <div
@@ -948,10 +963,26 @@ function App() {
                   document.body.dataset.origHtml = document.body.innerHTML;
                   document.body.dataset.origStyle = document.body.getAttribute('style') || '';
 
-                  const content = document.body.innerText;
-                  const title = document.title;
+                  const contentText = document.body.innerText;
+                  const titleText = document.title;
 
-                  document.body.innerHTML = "<div style='max-width: 800px; margin: 0 auto; padding: 40px 20px; font-family: serif; font-size: 18px; line-height: 1.6; color: #333; background: #fff;'><h1 style='font-size: 32px; margin-bottom: 24px; border-bottom: 1px solid #eee; padding-bottom: 10px;'>" + title + "</h1><div style='white-space: pre-wrap;'>" + content + "</div></div>";
+                  // Safely create the DOM to avoid XSS from unescaped text
+                  const container = document.createElement('div');
+                  container.style.cssText = 'max-width: 800px; margin: 0 auto; padding: 40px 20px; font-family: serif; font-size: 18px; line-height: 1.6; color: #333; background: #fff;';
+
+                  const header = document.createElement('h1');
+                  header.style.cssText = 'font-size: 32px; margin-bottom: 24px; border-bottom: 1px solid #eee; padding-bottom: 10px;';
+                  header.textContent = titleText;
+
+                  const bodyContent = document.createElement('div');
+                  bodyContent.style.whiteSpace = 'pre-wrap';
+                  bodyContent.textContent = contentText;
+
+                  container.appendChild(header);
+                  container.appendChild(bodyContent);
+
+                  document.body.innerHTML = '';
+                  document.body.appendChild(container);
                   document.body.setAttribute('style', 'background-color: #f9f9f9 !important; margin: 0 !important; overflow-y: auto !important;');
                 } else {
                   document.body.innerHTML = document.body.dataset.origHtml;
