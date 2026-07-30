@@ -74,6 +74,20 @@ body {
   color: var(--text-color);
 }
 
+.tab.pinned {
+  min-width: 44px;
+  max-width: 44px;
+  width: 44px;
+  padding: 0;
+  justify-content: center;
+  flex: 0 0 44px;
+}
+
+.tab.pinned .tab-title,
+.tab.pinned .tab-close {
+  display: none;
+}
+
 .tab-title {
   flex: 1;
   white-space: nowrap;

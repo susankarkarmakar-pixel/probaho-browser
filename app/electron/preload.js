@@ -24,6 +24,8 @@ contextBridge.exposeInMainWorld('electronAPI', {
 
   onOpenPdfViewer: (callback) => ipcRenderer.on('open-pdf-viewer', (event, url) => callback(url)),
   fetchPdf: (url) => ipcRenderer.invoke('fetch-pdf', url),
-  clearCache: () => ipcRenderer.send('clear-cache')
+  clearCache: () => ipcRenderer.send('clear-cache'),
+  getPermissions: () => ipcRenderer.invoke('get-permissions'),
+  deletePermission: (origin, permission) => ipcRenderer.send('delete-permission', origin, permission)
 
 });

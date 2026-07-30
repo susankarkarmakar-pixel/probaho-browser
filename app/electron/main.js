@@ -111,9 +111,23 @@ app.whenReady().then(() => {
     session.defaultSession.clearCache().then(() => {
       console.log('Cache cleared');
     });
-    session.defaultSession.clearStorageData().then(() => {
-      console.log('Storage data cleared');
+    session.defaultSession.clearStorageData({ storages: ['cookies', 'cachestorage'] }).then(() => {
+      console.log('Storage data cleared (excluding localstorage)');
     });
+  });
+
+  ipcMain.handle('get-permissions', () => {
+    return permissionsStore.data;
+  });
+
+  ipcMain.on('delete-permission', (event, origin, permission) => {
+    if (permissionsStore.data[origin] && permissionsStore.data[origin][permission] !== undefined) {
+      delete permissionsStore.data[origin][permission];
+      if (Object.keys(permissionsStore.data[origin]).length === 0) {
+        delete permissionsStore.data[origin];
+      }
+      permissionsStore.saveData();
+    }
   });
 
 
