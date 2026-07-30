@@ -26,6 +26,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
   fetchPdf: (url) => ipcRenderer.invoke('fetch-pdf', url),
   clearCache: () => ipcRenderer.send('clear-cache'),
   getPermissions: () => ipcRenderer.invoke('get-permissions'),
-  deletePermission: (origin, permission) => ipcRenderer.send('delete-permission', origin, permission)
+  deletePermission: (origin, permission) => ipcRenderer.send('delete-permission', origin, permission),
+  cancelDownload: (id) => ipcRenderer.send('cancel-download', id)
 
 });

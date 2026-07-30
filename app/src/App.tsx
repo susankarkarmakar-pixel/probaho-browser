@@ -64,6 +64,7 @@ declare global {
       clearCache?: () => void;
       getPermissions?: () => Promise<Record<string, Record<string, boolean>>>;
       deletePermission?: (origin: string, permission: string) => void;
+      cancelDownload?: (id: string) => void;
     };
   }
 }
@@ -305,6 +306,15 @@ function App() {
   useEffect(() => {
     activeTabIdRef.current = activeTabId;
   }, [activeTabId]);
+
+  const activeDownloads = downloads.filter(d => d.state === 'progressing');
+  const hasActiveDownloads = activeDownloads.length > 0;
+  let totalDownloadProgress = 0;
+  if (hasActiveDownloads) {
+    const totalBytes = activeDownloads.reduce((acc, curr) => acc + curr.totalBytes, 0);
+    const receivedBytes = activeDownloads.reduce((acc, curr) => acc + curr.receivedBytes, 0);
+    totalDownloadProgress = totalBytes > 0 ? (receivedBytes / totalBytes) * 100 : 0;
+  }
 
   const webviewRefs = useRef<{ [key: string]: any }>({});
 
@@ -1008,6 +1018,16 @@ function App() {
         <button className="nav-btn" onClick={() => { setShowMenu(false); setShowHistory(false); setShowDownloads(false); setShowBookmarks(!showBookmarks); }}>
           <Bookmark size={16} />
         </button>
+        <button
+          className="nav-btn"
+          style={{ position: 'relative' }}
+          onClick={() => { setShowBookmarks(false); setShowHistory(false); setShowMenu(false); setShowDownloads(!showDownloads); }}
+        >
+          <Download size={16} />
+          {hasActiveDownloads && (
+            <div style={{ position: 'absolute', bottom: 0, left: 0, height: '3px', backgroundColor: '#4caf50', width: `${totalDownloadProgress}%`, transition: 'width 0.3s' }} />
+          )}
+        </button>
         <button className="nav-btn" onClick={() => { setShowBookmarks(false); setShowHistory(false); setShowDownloads(false); setShowMenu(!showMenu); }}>
           <Menu size={16} />
         </button>
@@ -1139,16 +1159,26 @@ function App() {
                       </div>
                     )}
                   </div>
-                  {d.state === 'completed' && (
-                    <div className="download-actions">
-                      <button className="nav-btn" title={t('openFile', settings.language)} onClick={() => window.electronAPI?.openFile(d.savePath)}>
-                        <FileCode size={14} />
-                      </button>
-                      <button className="nav-btn" title={t('showInFolder', settings.language)} onClick={() => window.electronAPI?.showInFolder(d.savePath)}>
-                        <Folder size={14} />
-                      </button>
-                    </div>
-                  )}
+                  <div className="download-actions">
+                    {d.state === 'completed' && (
+                      <>
+                        <button className="nav-btn" title={t('openFile', settings.language)} onClick={() => window.electronAPI?.openFile(d.savePath)}>
+                          <FileCode size={14} />
+                        </button>
+                        <button className="nav-btn" title={t('showInFolder', settings.language)} onClick={() => window.electronAPI?.showInFolder(d.savePath)}>
+                          <Folder size={14} />
+                        </button>
+                      </>
+                    )}
+                    <button className="nav-btn" title="Remove" onClick={() => {
+                      if (d.state === 'progressing') {
+                        window.electronAPI?.cancelDownload?.(d.id);
+                      }
+                      setDownloads(prev => prev.filter(item => item.id !== d.id));
+                    }}>
+                      <X size={14} />
+                    </button>
+                  </div>
                 </div>
               ))
             )}

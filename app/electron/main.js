@@ -102,9 +102,18 @@ app.whenReady().then(() => {
   }
 
   let adBlockerEnabled = true;
+  const activeDownloadsMap = new Map();
 
   ipcMain.on('set-adblocker', (event, enabled) => {
     adBlockerEnabled = enabled;
+  });
+
+  ipcMain.on('cancel-download', (event, id) => {
+    const item = activeDownloadsMap.get(id);
+    if (item) {
+      item.cancel();
+      activeDownloadsMap.delete(id);
+    }
   });
 
   ipcMain.on('clear-cache', () => {
@@ -211,6 +220,8 @@ app.whenReady().then(() => {
     const savePath = path.join(app.getPath('downloads'), fileName);
     item.setSavePath(savePath);
 
+    activeDownloadsMap.set(downloadId, item);
+
     // Send initial download state
     if (mainWindow) {
       mainWindow.webContents.send('download-update', {
@@ -237,6 +248,7 @@ app.whenReady().then(() => {
     });
 
     item.once('done', (event, state) => {
+      activeDownloadsMap.delete(downloadId);
       if (mainWindow) {
         mainWindow.webContents.send('download-update', {
           id: downloadId,
