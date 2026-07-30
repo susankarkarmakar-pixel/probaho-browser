@@ -3,7 +3,7 @@ import { t, Language } from './i18n';
 import PdfViewer from './PdfViewer';
 import {
   ArrowLeft, ArrowRight, RotateCw, Home, Plus,
-  Lock, X, Minus, Square, Search, Star, Bookmark, Menu, History, ZoomIn, FileCode, Printer, LogOut, Info, Download, Folder, Settings, ChevronUp, ChevronDown, EyeOff, Shield, BookOpen
+  Lock, X, Minus, Square, Search, Star, Bookmark, Menu, History, ZoomIn, FileCode, Printer, LogOut, Info, Download, Folder, Settings, ChevronUp, ChevronDown, EyeOff, Shield, BookOpen, Volume2, VolumeX
 } from 'lucide-react';
 
 interface DownloadItem {
@@ -29,6 +29,9 @@ interface Tab {
   isPrivate?: boolean;
   crashed?: boolean;
   isPdf?: boolean;
+  isPinned?: boolean;
+  isAudible?: boolean;
+  isMuted?: boolean;
 }
 
 const DEFAULT_URL = 'https://www.google.com';
@@ -58,6 +61,8 @@ declare global {
       onTabCrashed: (callback: (webContentsId: number, reason: string) => void) => void;
       onOpenPdfViewer: (callback: (url: string) => void) => void;
       clearCache?: () => void;
+      getPermissions?: () => Promise<Record<string, Record<string, boolean>>>;
+      deletePermission?: (origin: string, permission: string) => void;
     };
   }
 }
@@ -157,6 +162,7 @@ function App() {
   const [showHistory, setShowHistory] = useState(false);
   const [showDownloads, setShowDownloads] = useState(false);
   const [downloads, setDownloads] = useState<DownloadItem[]>([]);
+  const [permissions, setPermissions] = useState<Record<string, Record<string, boolean>>>({});
   const [showMenu, setShowMenu] = useState(false);
   const [showAbout, setShowAbout] = useState(false);
 
@@ -626,6 +632,16 @@ function App() {
       });
     });
 
+    // Event: media playback started
+    el.addEventListener('media-started-playing', () => {
+      updateTab(id, { isAudible: true });
+    });
+
+    // Event: media playback paused
+    el.addEventListener('media-paused', () => {
+      updateTab(id, { isAudible: false });
+    });
+
     // Event: new window requested (NEW - Bug 7 fix)
     el.addEventListener('new-window', (e: any) => {
       const newTab: Tab = { // @ts-ignore
@@ -808,11 +824,18 @@ function App() {
       {/* Titlebar with tabs */}
       <div className="titlebar">
         <div className="tabs">
-          {tabs.map(tab => (
+          {[...tabs].sort((a, b) => {
+            if (a.isPinned === b.isPinned) return 0;
+            return a.isPinned ? -1 : 1;
+          }).map(tab => (
             <div
               key={tab.id}
-              className={`tab ${tab.id === activeTabId ? 'active' : ''} ${tab.isPrivate ? 'private' : ''}`}
+              className={`tab ${tab.id === activeTabId ? 'active' : ''} ${tab.isPrivate ? 'private' : ''} ${tab.isPinned ? 'pinned' : ''}`}
               onClick={() => setActiveTabId(tab.id)}
+              onContextMenu={(e) => {
+                e.preventDefault();
+                updateTab(tab.id, { isPinned: !tab.isPinned });
+              }}
               draggable
               onDragStart={(e) => {
                 setDraggedTabId(tab.id);
@@ -841,10 +864,31 @@ function App() {
               onDragEnd={() => setDraggedTabId(null)}
             >
               {tab.isPrivate && <EyeOff size={10} style={{marginRight: '4px', opacity: 0.8}} />}
-              <span className="tab-title">{tab.title}</span>
-              <div className="tab-close" onClick={(e) => closeTab(e, tab.id)}>
-                <X size={12} />
-              </div>
+              {!tab.isPinned && <span className="tab-title">{tab.title}</span>}
+              {!tab.isPinned && (
+                <div className="tab-close" onClick={(e) => closeTab(e, tab.id)}>
+                  <X size={12} />
+                </div>
+              )}
+              {tab.isPinned && <span style={{fontSize: '12px', fontWeight: 'bold'}}>{tab.title ? tab.title.charAt(0).toUpperCase() : 'U'}</span>}
+              {tab.isPinned && <span className="tab-title" style={{display: 'none'}}>{tab.title}</span>}
+              {(tab.isAudible || tab.isMuted) && (
+                <div
+                  className="tab-audio-indicator"
+                  style={{marginLeft: '4px', display: 'flex', alignItems: 'center', opacity: 0.8}}
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    const wv = webviewRefs.current[tab.id];
+                    if (wv) {
+                      const newMutedState = !tab.isMuted;
+                      wv.setAudioMuted(newMutedState);
+                      updateTab(tab.id, { isMuted: newMutedState });
+                    }
+                  }}
+                >
+                  {tab.isMuted ? <VolumeX size={12} /> : <Volume2 size={12} />}
+                </div>
+              )}
             </div>
           ))}
         </div>
@@ -981,7 +1025,13 @@ function App() {
             <div className="menu-item-shortcut">Ctrl+P</div>
           </div>
           <div className="menu-divider" />
-          <div className="menu-item" onClick={() => { setShowMenu(false); setShowSettings(true); }}>
+          <div className="menu-item" onClick={() => {
+            setShowMenu(false);
+            setShowSettings(true);
+            if (window.electronAPI?.getPermissions) {
+              window.electronAPI.getPermissions().then(setPermissions);
+            }
+          }}>
             <div className="menu-item-icon"><Settings size={16} /></div>
             <div className="menu-item-text">{t('settings', settings.language)}</div>
           </div>
@@ -1156,6 +1206,45 @@ function App() {
                   Clear Browsing Data (History & Cache)
                 </button>
               </div>
+
+              {/* Site Permissions Section */}
+              <div style={{marginTop: '24px', borderTop: '1px solid var(--border-color)', paddingTop: '16px'}}>
+                <h4 style={{marginBottom: '12px', fontSize: '14px'}}>Site Permissions</h4>
+                {Object.keys(permissions).length === 0 ? (
+                  <div style={{fontSize: '13px', color: '#888'}}>No permissions saved.</div>
+                ) : (
+                  <div style={{maxHeight: '150px', overflowY: 'auto'}}>
+                    {Object.entries(permissions).map(([origin, perms]) => (
+                      <div key={origin} style={{marginBottom: '12px'}}>
+                        <div style={{fontWeight: 'bold', fontSize: '13px', marginBottom: '4px'}}>{origin}</div>
+                        {Object.entries(perms).map(([perm, allowed]) => (
+                          <div key={perm} style={{display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontSize: '12px', paddingLeft: '8px', marginBottom: '4px'}}>
+                            <span>{perm}: {allowed ? <span style={{color: '#4caf50'}}>Allowed</span> : <span style={{color: '#f44336'}}>Blocked</span>}</span>
+                            <button
+                              className="clear-history-btn"
+                              style={{padding: '4px 8px', fontSize: '11px'}}
+                              onClick={() => {
+                                if (window.electronAPI?.deletePermission) {
+                                  window.electronAPI.deletePermission(origin, perm);
+                                  const newPerms = { ...permissions };
+                                  delete newPerms[origin][perm];
+                                  if (Object.keys(newPerms[origin]).length === 0) {
+                                    delete newPerms[origin];
+                                  }
+                                  setPermissions(newPerms);
+                                }
+                              }}
+                            >
+                              Revoke
+                            </button>
+                          </div>
+                        ))}
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+
             </div>
           </div>
         </div>
