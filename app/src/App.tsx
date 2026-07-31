@@ -88,7 +88,8 @@ function App() {
           homepageUrl: 'probaho://newtab',
           theme: 'dark',
           adBlockerEnabled: true,
-          language: 'en' as Language
+          language: 'en' as Language,
+          newTabBackgroundUrl: ''
         };
         const merged = { ...def, ...parsed };
         settingsRef.current = merged;
@@ -100,7 +101,8 @@ function App() {
       homepageUrl: 'probaho://newtab',
       theme: 'dark',
       adBlockerEnabled: true,
-      language: 'en' as Language
+      language: 'en' as Language,
+      newTabBackgroundUrl: ''
     };
     settingsRef.current = def;
     return def;
@@ -1218,6 +1220,16 @@ function App() {
                 </select>
               </div>
               <div style={{marginBottom: '16px'}}>
+                <label style={{display: 'block', marginBottom: '8px', fontSize: '13px', fontWeight: 'bold'}}>New Tab Background Image URL</label>
+                <input
+                  type="text"
+                  value={settings.newTabBackgroundUrl || ''}
+                  onChange={e => setSettings({...settings, newTabBackgroundUrl: e.target.value})}
+                  placeholder="https://example.com/image.jpg"
+                  style={{width: '100%', padding: '8px', borderRadius: '4px', border: '1px solid var(--border-color)', background: 'var(--bg-color)', color: 'var(--text-color)'}}
+                />
+              </div>
+              <div style={{marginBottom: '16px'}}>
                 <label style={{display: 'flex', alignItems: 'center', cursor: 'pointer', fontSize: '13px', fontWeight: 'bold'}}>
                   <input
                     type="checkbox"
@@ -1418,12 +1430,28 @@ function App() {
         ))}
 
         {tabs.map(tab => tab.id === activeTabId && tab.url === 'probaho://newtab' && (
-          <div key={`ntp-${tab.id}`} className="new-tab-page">
-            <div className="ntp-content">
-              <div className="ntp-logo">
-                <span style={{fontSize: '48px'}}>🌐</span>
-                <h1 style={{marginTop: '10px'}}>PROBAHO</h1>
-              </div>
+          <div
+            key={`ntp-${tab.id}`}
+            className="new-tab-page"
+            style={settings.newTabBackgroundUrl ? {
+              backgroundImage: `url('${settings.newTabBackgroundUrl}')`,
+              backgroundSize: 'cover',
+              backgroundPosition: 'center'
+            } : {}}
+          >
+            <div style={{
+              width: '100%',
+              height: '100%',
+              backgroundColor: settings.newTabBackgroundUrl ? 'rgba(0,0,0,0.6)' : 'transparent',
+              display: 'flex',
+              flexDirection: 'column',
+              alignItems: 'center'
+            }}>
+              <div className="ntp-content" style={{ marginTop: '100px' }}>
+                <div className="ntp-logo" style={settings.newTabBackgroundUrl ? { color: '#fff' } : {}}>
+                  <span style={{fontSize: '48px'}}>🌐</span>
+                  <h1 style={{marginTop: '10px'}}>PROBAHO</h1>
+                </div>
               <div className="ntp-search">
                 <Search size={18} color="#888" style={{marginLeft: '16px', position: 'absolute'}} />
                 <input
@@ -1462,15 +1490,16 @@ function App() {
                   }
 
                   return topSites.map((site, i) => (
-                    <div key={i} className="ntp-tile" onClick={() => navigate(site.url)}>
+                    <div key={i} className="ntp-tile" onClick={() => navigate(site.url)} style={settings.newTabBackgroundUrl ? { backgroundColor: 'rgba(255,255,255,0.1)', backdropFilter: 'blur(10px)', border: '1px solid rgba(255,255,255,0.2)' } : {}}>
                       <div className="ntp-tile-icon">
                         {site.title.charAt(0).toUpperCase()}
                       </div>
-                      <div className="ntp-tile-title">{site.title || site.url}</div>
+                      <div className="ntp-tile-title" style={settings.newTabBackgroundUrl ? { color: '#fff' } : {}}>{site.title || site.url}</div>
                     </div>
                   ));
                 })()}
               </div>
+            </div>
             </div>
           </div>
         ))}
