@@ -7,7 +7,7 @@ const fs = require('fs');
 
 let mainWindow;
 
-function createWindow() {
+function createWindow(isPrivate = false) {
   mainWindow = new BrowserWindow({
     width: 1200,
     height: 800,
@@ -22,13 +22,14 @@ function createWindow() {
 
   // Load the index.html from a url in development or local file in production.
   const isDev = process.env.NODE_ENV === 'development' || !app.isPackaged;
+  const loadOptions = isPrivate ? { query: { private: 'true' } } : undefined;
   if (isDev) {
     // We'd normally use the Vite dev server URL here, but let's assume local build for simplicity, or we can use dist.
     // To make it simple for the user's build scripts, we'll always load from dist when packaged.
     // If we're not packaged, we can load from a dev server or dist. The instructions say `npm run build` then `npm run electron`.
-    mainWindow.loadFile(path.join(__dirname, '../dist/index.html'));
+    mainWindow.loadFile(path.join(__dirname, '../dist/index.html'), loadOptions);
   } else {
-    mainWindow.loadFile(path.join(__dirname, '../dist/index.html'));
+    mainWindow.loadFile(path.join(__dirname, '../dist/index.html'), loadOptions);
   }
 
   // Handle local shortcuts
@@ -116,6 +117,10 @@ app.whenReady().then(() => {
     }
   });
 
+  ipcMain.on('open-private-window', () => {
+    createWindow(true);
+  });
+
   ipcMain.on('clear-cache', () => {
     session.defaultSession.clearCache().then(() => {
       console.log('Cache cleared');
@@ -189,8 +194,13 @@ app.whenReady().then(() => {
       const url = details.url.toLowerCase();
       const isBlocked = blocklist.some(domain => url.includes(domain));
       if (isBlocked) {
-        if (mainWindow) {
-          mainWindow.webContents.send('ad-blocked', details.webContentsId);
+        const wc = details.webContentsId ? require('electron').webContents.fromId(details.webContentsId) : null;
+        const win = wc && wc.hostWebContents ? BrowserWindow.fromWebContents(wc.hostWebContents) : (wc ? BrowserWindow.fromWebContents(wc) : null);
+        if (win) {
+          win.webContents.send('ad-blocked', details.webContentsId);
+        } else {
+          // Fallback if window not found directly
+          BrowserWindow.getAllWindows().forEach(w => w.webContents.send('ad-blocked', details.webContentsId));
         }
         return callback({ cancel: true });
       }
@@ -208,8 +218,13 @@ app.whenReady().then(() => {
       event.preventDefault();
 
       // Let the renderer know to open this as a PDF instead of downloading
-      if (mainWindow) {
-        mainWindow.webContents.send('open-pdf-viewer', url);
+      const win = webContents && webContents.hostWebContents ? BrowserWindow.fromWebContents(webContents.hostWebContents) : (webContents ? BrowserWindow.fromWebContents(webContents) : null);
+      if (win) {
+        win.webContents.send('open-pdf-viewer', url);
+      } else {
+        BrowserWindow.getAllWindows().forEach(w => {
+          w.webContents.send('open-pdf-viewer', url);
+        });
       }
       return;
     }
@@ -222,9 +237,11 @@ app.whenReady().then(() => {
 
     activeDownloadsMap.set(downloadId, item);
 
+    const win = webContents && webContents.hostWebContents ? BrowserWindow.fromWebContents(webContents.hostWebContents) : (webContents ? BrowserWindow.fromWebContents(webContents) : null);
+
     // Send initial download state
-    if (mainWindow) {
-      mainWindow.webContents.send('download-update', {
+    if (win) {
+      win.webContents.send('download-update', {
         id: downloadId,
         fileName: fileName,
         state: 'progressing',
@@ -232,11 +249,20 @@ app.whenReady().then(() => {
         totalBytes: item.getTotalBytes(),
         savePath: savePath
       });
+    } else {
+      BrowserWindow.getAllWindows().forEach(w => w.webContents.send('download-update', {
+        id: downloadId,
+        fileName: fileName,
+        state: 'progressing',
+        receivedBytes: 0,
+        totalBytes: item.getTotalBytes(),
+        savePath: savePath
+      }));
     }
 
     item.on('updated', (event, state) => {
-      if (mainWindow) {
-        mainWindow.webContents.send('download-update', {
+      if (win && !win.isDestroyed()) {
+        win.webContents.send('download-update', {
           id: downloadId,
           fileName: fileName,
           state: state,
@@ -244,13 +270,22 @@ app.whenReady().then(() => {
           totalBytes: item.getTotalBytes(),
           savePath: savePath
         });
+      } else {
+        BrowserWindow.getAllWindows().forEach(w => w.webContents.send('download-update', {
+          id: downloadId,
+          fileName: fileName,
+          state: state,
+          receivedBytes: item.getReceivedBytes(),
+          totalBytes: item.getTotalBytes(),
+          savePath: savePath
+        }));
       }
     });
 
     item.once('done', (event, state) => {
       activeDownloadsMap.delete(downloadId);
-      if (mainWindow) {
-        mainWindow.webContents.send('download-update', {
+      if (win && !win.isDestroyed()) {
+        win.webContents.send('download-update', {
           id: downloadId,
           fileName: fileName,
           state: state, // 'completed', 'cancelled', 'interrupted'
@@ -258,6 +293,15 @@ app.whenReady().then(() => {
           totalBytes: item.getTotalBytes(),
           savePath: savePath
         });
+      } else {
+        BrowserWindow.getAllWindows().forEach(w => w.webContents.send('download-update', {
+          id: downloadId,
+          fileName: fileName,
+          state: state, // 'completed', 'cancelled', 'interrupted'
+          receivedBytes: item.getReceivedBytes(),
+          totalBytes: item.getTotalBytes(),
+          savePath: savePath
+        }));
       }
     });
   });
@@ -271,8 +315,13 @@ app.whenReady().then(() => {
       contents.on('will-navigate', (event, url) => {
         if (url.toLowerCase().endsWith('.pdf')) {
           event.preventDefault();
-          if (mainWindow) {
-            mainWindow.webContents.send('open-pdf-viewer', url);
+          const win = contents.hostWebContents ? BrowserWindow.fromWebContents(contents.hostWebContents) : null;
+          if (win) {
+            win.webContents.send('open-pdf-viewer', url);
+          } else {
+            BrowserWindow.getAllWindows().forEach(w => {
+              w.webContents.send('open-pdf-viewer', url);
+            });
           }
         }
       });
@@ -280,8 +329,13 @@ app.whenReady().then(() => {
   });
 
 app.on('render-process-gone', (event, webContents, details) => {
-  if (mainWindow) {
-    mainWindow.webContents.send('tab-crashed', webContents.id, details.reason);
+  const win = webContents && webContents.hostWebContents ? BrowserWindow.fromWebContents(webContents.hostWebContents) : (webContents ? BrowserWindow.fromWebContents(webContents) : null);
+  if (win) {
+    win.webContents.send('tab-crashed', webContents.id, details.reason);
+  } else {
+    BrowserWindow.getAllWindows().forEach(w => {
+      w.webContents.send('tab-crashed', webContents.id, details.reason);
+    });
   }
 });
 
@@ -303,21 +357,24 @@ app.on('window-all-closed', function () {
 
 // IPC handlers for window controls
 ipcMain.on('window-minimize', () => {
-  if (mainWindow) mainWindow.minimize();
+  const win = BrowserWindow.getFocusedWindow();
+  if (win) win.minimize();
 });
 
 ipcMain.on('window-maximize', () => {
-  if (mainWindow) {
-    if (mainWindow.isMaximized()) {
-      mainWindow.restore();
+  const win = BrowserWindow.getFocusedWindow();
+  if (win) {
+    if (win.isMaximized()) {
+      win.restore();
     } else {
-      mainWindow.maximize();
+      win.maximize();
     }
   }
 });
 
 ipcMain.on('window-close', () => {
-  if (mainWindow) mainWindow.close();
+  const win = BrowserWindow.getFocusedWindow();
+  if (win) win.close();
 });
 
 
@@ -330,18 +387,19 @@ ipcMain.on('show-in-folder', (event, filePath) => {
 });
 
 ipcMain.on('show-context-menu', (event, params) => {
+  const win = BrowserWindow.fromWebContents(event.sender);
   const template = [
     {
       label: 'Back',
-      click: () => { if (mainWindow) mainWindow.webContents.send('context-menu-action', 'back'); }
+      click: () => { if (win) win.webContents.send('context-menu-action', 'back'); }
     },
     {
       label: 'Forward',
-      click: () => { if (mainWindow) mainWindow.webContents.send('context-menu-action', 'forward'); }
+      click: () => { if (win) win.webContents.send('context-menu-action', 'forward'); }
     },
     {
       label: 'Reload',
-      click: () => { if (mainWindow) mainWindow.webContents.send('context-menu-action', 'reload'); }
+      click: () => { if (win) win.webContents.send('context-menu-action', 'reload'); }
     },
     { type: 'separator' },
     { role: 'copy' }
@@ -352,8 +410,8 @@ ipcMain.on('show-context-menu', (event, params) => {
     template.push({
       label: 'Open Link in New Tab',
       click: () => {
-        if (mainWindow) {
-          mainWindow.webContents.send('open-link-new-tab', params.linkURL);
+        if (win) {
+          win.webContents.send('open-link-new-tab', params.linkURL);
         }
       }
     });
@@ -363,7 +421,7 @@ ipcMain.on('show-context-menu', (event, params) => {
   template.push({
     label: 'Inspect Element',
     click: () => {
-      if (mainWindow) mainWindow.webContents.send('context-menu-action', 'inspect', params.x, params.y);
+      if (win) win.webContents.send('context-menu-action', 'inspect', params.x, params.y);
     }
   });
 

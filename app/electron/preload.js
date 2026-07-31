@@ -27,6 +27,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
   clearCache: () => ipcRenderer.send('clear-cache'),
   getPermissions: () => ipcRenderer.invoke('get-permissions'),
   deletePermission: (origin, permission) => ipcRenderer.send('delete-permission', origin, permission),
-  cancelDownload: (id) => ipcRenderer.send('cancel-download', id)
+  cancelDownload: (id) => ipcRenderer.send('cancel-download', id),
+  openPrivateWindow: () => ipcRenderer.send('open-private-window')
 
 });

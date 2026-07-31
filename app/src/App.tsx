@@ -65,6 +65,7 @@ declare global {
       getPermissions?: () => Promise<Record<string, Record<string, boolean>>>;
       deletePermission?: (origin: string, permission: string) => void;
       cancelDownload?: (id: string) => void;
+      openPrivateWindow?: () => void;
     };
   }
 }
@@ -108,7 +109,24 @@ function App() {
     return def;
   });
 
+  const isPrivateWindow = window.location.search.includes('private=true');
+
   const [tabs, setTabs] = useState<Tab[]>(() => {
+    if (isPrivateWindow) {
+      return [{
+        id: Date.now().toString(),
+        url: settingsRef.current?.homepageUrl || 'probaho://newtab',
+        title: t('newPrivateTab', settingsRef.current?.language || 'en'),
+        loading: false,
+        canGoBack: false,
+        canGoForward: false,
+        isSecure: true,
+        zoomLevel: 1,
+        blockedCount: 0,
+        isPrivate: true
+      }];
+    }
+
     try {
       const saved = localStorage.getItem('savedTabs');
       if (saved) {
@@ -140,6 +158,9 @@ function App() {
   });
 
   const [activeTabId, setActiveTabId] = useState<string>(() => {
+    if (isPrivateWindow) {
+      return tabs[0].id;
+    }
     try {
       const savedId = localStorage.getItem('activeTabId');
       if (savedId) return savedId;
@@ -284,6 +305,8 @@ function App() {
   }, []);
 
   useEffect(() => {
+    if (isPrivateWindow) return; // Do not save state in private windows
+
     const publicTabs = tabs.filter(t => !t.isPrivate);
     localStorage.setItem('savedTabs', JSON.stringify(publicTabs.length > 0 ? publicTabs : [{
       id: Date.now().toString(),
@@ -301,7 +324,7 @@ function App() {
     // If active tab is private, fallback the saved active tab to a public one
     const activeIsPrivate = tabs.find(t => t.id === activeTabId)?.isPrivate;
     localStorage.setItem('activeTabId', activeIsPrivate ? (publicTabs[0]?.id || '') : activeTabId);
-  }, [tabs, activeTabId]);
+  }, [tabs, activeTabId, isPrivateWindow]);
 
   // Keep a ref of the active tab id to avoid stale closures in event listeners
   const activeTabIdRef = useRef<string>(activeTabId);
@@ -344,20 +367,7 @@ function App() {
     }
     if (window.electronAPI?.onNewPrivateTab) {
       window.electronAPI.onNewPrivateTab(() => {
-        const newTab = {
-          id: Date.now().toString(),
-          url: settingsRef.current?.homepageUrl || 'probaho://newtab',
-          title: t('newPrivateTab', settingsRef.current?.language || 'en'),
-          loading: false,
-          canGoBack: false,
-          canGoForward: false,
-          isSecure: true,
-          zoomLevel: 1,
-          blockedCount: 0,
-          isPrivate: true
-        };
-        setTabs(prev => [...prev, newTab]);
-        setTimeout(() => setActiveTabId(newTab.id), 0);
+        window.electronAPI?.openPrivateWindow?.();
       });
     }
 
@@ -396,7 +406,8 @@ function App() {
           canGoForward: false,
           isSecure: url.startsWith('https'),
           zoomLevel: 1,
-          blockedCount: 0
+          blockedCount: 0,
+          isPrivate: isPrivateWindow
         };
         setTabs(prev => [...prev, newTab]);
         setTimeout(() => setActiveTabId(newTab.id), 0);
@@ -452,7 +463,7 @@ function App() {
     }
   }, [activeTabId]);
 
-  const createTab = (isPrivate = false) => {
+  const createTab = (isPrivate = isPrivateWindow) => {
     const newTab: Tab = {
       id: Date.now().toString(),
       url: settingsRef.current?.homepageUrl || 'https://www.google.com',
@@ -673,7 +684,8 @@ function App() {
         canGoForward: false,
         isSecure: e.url.startsWith('https'),
         zoomLevel: 1,
-        blockedCount: 0
+          blockedCount: 0,
+          isPrivate: isPrivateWindow
       };
       setTabs(prev => [...prev, newTab]);
       setTimeout(() => setActiveTabId(newTab.id), 0);
@@ -1043,7 +1055,7 @@ function App() {
             <div className="menu-item-text">{t('newTab', settings.language)}</div>
             <div className="menu-item-shortcut">Ctrl+T</div>
           </div>
-          <div className="menu-item" onClick={() => { createTab(true); setShowMenu(false); }}>
+          <div className="menu-item" onClick={() => { setShowMenu(false); window.electronAPI?.openPrivateWindow?.(); }}>
             <div className="menu-item-icon"><EyeOff size={16} /></div>
             <div className="menu-item-text">{t('newPrivateTab', settings.language)}</div>
             <div className="menu-item-shortcut">Ctrl+Shift+N</div>
