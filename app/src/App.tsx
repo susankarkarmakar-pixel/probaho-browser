@@ -3,7 +3,7 @@ import { t, Language } from './i18n';
 import PdfViewer from './PdfViewer';
 import {
   ArrowLeft, ArrowRight, RotateCw, Home, Plus,
-  Lock, X, Minus, Square, Search, Star, Bookmark, Menu, History, ZoomIn, FileCode, Printer, LogOut, Info, Download, Folder, Settings, ChevronUp, ChevronDown, EyeOff, Shield, BookOpen, Volume2, VolumeX, Globe
+  Lock, X, Square, Search, Star, Bookmark, Menu, History, ZoomIn, FileCode, Printer, LogOut, Info, Download, Folder, Settings, ChevronUp, ChevronDown, EyeOff, Shield, BookOpen, Volume2, VolumeX, Globe
 } from 'lucide-react';
 
 interface DownloadItem {
@@ -937,15 +937,9 @@ function App() {
 
         {/* Window controls */}
         <div className="window-controls">
-          <button className="control-btn" onClick={() => window.electronAPI?.minimize()}>
-            <Minus size={16} />
-          </button>
-          <button className="control-btn" onClick={() => window.electronAPI?.maximize()}>
-            <Square size={12} />
-          </button>
-          <button className="control-btn close" onClick={() => window.electronAPI?.close()}>
-            <X size={16} />
-          </button>
+          <button className="control-btn" onClick={() => window.electronAPI?.minimize()} />
+          <button className="control-btn" onClick={() => window.electronAPI?.maximize()} />
+          <button className="control-btn close" onClick={() => window.electronAPI?.close()} />
         </div>
       </div>
 
