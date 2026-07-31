@@ -3,7 +3,7 @@ import { t, Language } from './i18n';
 import PdfViewer from './PdfViewer';
 import {
   ArrowLeft, ArrowRight, RotateCw, Home, Plus,
-  Lock, X, Minus, Square, Search, Star, Bookmark, Menu, History, ZoomIn, FileCode, Printer, LogOut, Info, Download, Folder, Settings, ChevronUp, ChevronDown, EyeOff, Shield, BookOpen, Volume2, VolumeX
+  Lock, X, Minus, Square, Search, Star, Bookmark, Menu, History, ZoomIn, FileCode, Printer, LogOut, Info, Download, Folder, Settings, ChevronUp, ChevronDown, EyeOff, Shield, BookOpen, Volume2, VolumeX, Globe
 } from 'lucide-react';
 
 interface DownloadItem {
@@ -32,6 +32,7 @@ interface Tab {
   isPinned?: boolean;
   isAudible?: boolean;
   isMuted?: boolean;
+  favicon?: string;
 }
 
 const DEFAULT_URL = 'https://www.google.com';
@@ -63,6 +64,7 @@ declare global {
       clearCache?: () => void;
       getPermissions?: () => Promise<Record<string, Record<string, boolean>>>;
       deletePermission?: (origin: string, permission: string) => void;
+      cancelDownload?: (id: string) => void;
     };
   }
 }
@@ -86,7 +88,8 @@ function App() {
           homepageUrl: 'probaho://newtab',
           theme: 'dark',
           adBlockerEnabled: true,
-          language: 'en' as Language
+          language: 'en' as Language,
+          newTabBackgroundUrl: ''
         };
         const merged = { ...def, ...parsed };
         settingsRef.current = merged;
@@ -98,7 +101,8 @@ function App() {
       homepageUrl: 'probaho://newtab',
       theme: 'dark',
       adBlockerEnabled: true,
-      language: 'en' as Language
+      language: 'en' as Language,
+      newTabBackgroundUrl: ''
     };
     settingsRef.current = def;
     return def;
@@ -304,6 +308,15 @@ function App() {
   useEffect(() => {
     activeTabIdRef.current = activeTabId;
   }, [activeTabId]);
+
+  const activeDownloads = downloads.filter(d => d.state === 'progressing');
+  const hasActiveDownloads = activeDownloads.length > 0;
+  let totalDownloadProgress = 0;
+  if (hasActiveDownloads) {
+    const totalBytes = activeDownloads.reduce((acc, curr) => acc + curr.totalBytes, 0);
+    const receivedBytes = activeDownloads.reduce((acc, curr) => acc + curr.receivedBytes, 0);
+    totalDownloadProgress = totalBytes > 0 ? (receivedBytes / totalBytes) * 100 : 0;
+  }
 
   const webviewRefs = useRef<{ [key: string]: any }>({});
 
@@ -642,6 +655,13 @@ function App() {
       updateTab(id, { isAudible: false });
     });
 
+    // Event: page favicon updated
+    el.addEventListener('page-favicon-updated', (e: any) => {
+      if (e.favicons && e.favicons.length > 0) {
+        updateTab(id, { favicon: e.favicons[0] });
+      }
+    });
+
     // Event: new window requested (NEW - Bug 7 fix)
     el.addEventListener('new-window', (e: any) => {
       const newTab: Tab = { // @ts-ignore
@@ -864,13 +884,20 @@ function App() {
               onDragEnd={() => setDraggedTabId(null)}
             >
               {tab.isPrivate && <EyeOff size={10} style={{marginRight: '4px', opacity: 0.8}} />}
+
+              {/* Favicon */}
+              {!tab.isPrivate && (
+                tab.favicon
+                  ? <img src={tab.favicon} style={{width: 14, height: 14, marginRight: tab.isPinned ? 0 : 6, flexShrink: 0}} />
+                  : <Globe size={14} style={{marginRight: tab.isPinned ? 0 : 6, opacity: 0.7, flexShrink: 0}} />
+              )}
+
               {!tab.isPinned && <span className="tab-title">{tab.title}</span>}
               {!tab.isPinned && (
                 <div className="tab-close" onClick={(e) => closeTab(e, tab.id)}>
                   <X size={12} />
                 </div>
               )}
-              {tab.isPinned && <span style={{fontSize: '12px', fontWeight: 'bold'}}>{tab.title ? tab.title.charAt(0).toUpperCase() : 'U'}</span>}
               {tab.isPinned && <span className="tab-title" style={{display: 'none'}}>{tab.title}</span>}
               {(tab.isAudible || tab.isMuted) && (
                 <div
@@ -948,10 +975,26 @@ function App() {
                   document.body.dataset.origHtml = document.body.innerHTML;
                   document.body.dataset.origStyle = document.body.getAttribute('style') || '';
 
-                  const content = document.body.innerText;
-                  const title = document.title;
+                  const contentText = document.body.innerText;
+                  const titleText = document.title;
 
-                  document.body.innerHTML = "<div style='max-width: 800px; margin: 0 auto; padding: 40px 20px; font-family: serif; font-size: 18px; line-height: 1.6; color: #333; background: #fff;'><h1 style='font-size: 32px; margin-bottom: 24px; border-bottom: 1px solid #eee; padding-bottom: 10px;'>" + title + "</h1><div style='white-space: pre-wrap;'>" + content + "</div></div>";
+                  // Safely create the DOM to avoid XSS from unescaped text
+                  const container = document.createElement('div');
+                  container.style.cssText = 'max-width: 800px; margin: 0 auto; padding: 40px 20px; font-family: serif; font-size: 18px; line-height: 1.6; color: #333; background: #fff;';
+
+                  const header = document.createElement('h1');
+                  header.style.cssText = 'font-size: 32px; margin-bottom: 24px; border-bottom: 1px solid #eee; padding-bottom: 10px;';
+                  header.textContent = titleText;
+
+                  const bodyContent = document.createElement('div');
+                  bodyContent.style.whiteSpace = 'pre-wrap';
+                  bodyContent.textContent = contentText;
+
+                  container.appendChild(header);
+                  container.appendChild(bodyContent);
+
+                  document.body.innerHTML = '';
+                  document.body.appendChild(container);
                   document.body.setAttribute('style', 'background-color: #f9f9f9 !important; margin: 0 !important; overflow-y: auto !important;');
                 } else {
                   document.body.innerHTML = document.body.dataset.origHtml;
@@ -976,6 +1019,16 @@ function App() {
         )}
         <button className="nav-btn" onClick={() => { setShowMenu(false); setShowHistory(false); setShowDownloads(false); setShowBookmarks(!showBookmarks); }}>
           <Bookmark size={16} />
+        </button>
+        <button
+          className="nav-btn"
+          style={{ position: 'relative' }}
+          onClick={() => { setShowBookmarks(false); setShowHistory(false); setShowMenu(false); setShowDownloads(!showDownloads); }}
+        >
+          <Download size={16} />
+          {hasActiveDownloads && (
+            <div style={{ position: 'absolute', bottom: 0, left: 0, height: '3px', backgroundColor: '#4caf50', width: `${totalDownloadProgress}%`, transition: 'width 0.3s' }} />
+          )}
         </button>
         <button className="nav-btn" onClick={() => { setShowBookmarks(false); setShowHistory(false); setShowDownloads(false); setShowMenu(!showMenu); }}>
           <Menu size={16} />
@@ -1108,16 +1161,26 @@ function App() {
                       </div>
                     )}
                   </div>
-                  {d.state === 'completed' && (
-                    <div className="download-actions">
-                      <button className="nav-btn" title={t('openFile', settings.language)} onClick={() => window.electronAPI?.openFile(d.savePath)}>
-                        <FileCode size={14} />
-                      </button>
-                      <button className="nav-btn" title={t('showInFolder', settings.language)} onClick={() => window.electronAPI?.showInFolder(d.savePath)}>
-                        <Folder size={14} />
-                      </button>
-                    </div>
-                  )}
+                  <div className="download-actions">
+                    {d.state === 'completed' && (
+                      <>
+                        <button className="nav-btn" title={t('openFile', settings.language)} onClick={() => window.electronAPI?.openFile(d.savePath)}>
+                          <FileCode size={14} />
+                        </button>
+                        <button className="nav-btn" title={t('showInFolder', settings.language)} onClick={() => window.electronAPI?.showInFolder(d.savePath)}>
+                          <Folder size={14} />
+                        </button>
+                      </>
+                    )}
+                    <button className="nav-btn" title="Remove" onClick={() => {
+                      if (d.state === 'progressing') {
+                        window.electronAPI?.cancelDownload?.(d.id);
+                      }
+                      setDownloads(prev => prev.filter(item => item.id !== d.id));
+                    }}>
+                      <X size={14} />
+                    </button>
+                  </div>
                 </div>
               ))
             )}
@@ -1155,6 +1218,16 @@ function App() {
                   <option value="Bing">Bing</option>
                   <option value="DuckDuckGo">DuckDuckGo</option>
                 </select>
+              </div>
+              <div style={{marginBottom: '16px'}}>
+                <label style={{display: 'block', marginBottom: '8px', fontSize: '13px', fontWeight: 'bold'}}>New Tab Background Image URL</label>
+                <input
+                  type="text"
+                  value={settings.newTabBackgroundUrl || ''}
+                  onChange={e => setSettings({...settings, newTabBackgroundUrl: e.target.value})}
+                  placeholder="https://example.com/image.jpg"
+                  style={{width: '100%', padding: '8px', borderRadius: '4px', border: '1px solid var(--border-color)', background: 'var(--bg-color)', color: 'var(--text-color)'}}
+                />
               </div>
               <div style={{marginBottom: '16px'}}>
                 <label style={{display: 'flex', alignItems: 'center', cursor: 'pointer', fontSize: '13px', fontWeight: 'bold'}}>
@@ -1357,12 +1430,28 @@ function App() {
         ))}
 
         {tabs.map(tab => tab.id === activeTabId && tab.url === 'probaho://newtab' && (
-          <div key={`ntp-${tab.id}`} className="new-tab-page">
-            <div className="ntp-content">
-              <div className="ntp-logo">
-                <span style={{fontSize: '48px'}}>🌐</span>
-                <h1 style={{marginTop: '10px'}}>PROBAHO</h1>
-              </div>
+          <div
+            key={`ntp-${tab.id}`}
+            className="new-tab-page"
+            style={settings.newTabBackgroundUrl ? {
+              backgroundImage: `url('${settings.newTabBackgroundUrl}')`,
+              backgroundSize: 'cover',
+              backgroundPosition: 'center'
+            } : {}}
+          >
+            <div style={{
+              width: '100%',
+              height: '100%',
+              backgroundColor: settings.newTabBackgroundUrl ? 'rgba(0,0,0,0.6)' : 'transparent',
+              display: 'flex',
+              flexDirection: 'column',
+              alignItems: 'center'
+            }}>
+              <div className="ntp-content" style={{ marginTop: '100px' }}>
+                <div className="ntp-logo" style={settings.newTabBackgroundUrl ? { color: '#fff' } : {}}>
+                  <span style={{fontSize: '48px'}}>🌐</span>
+                  <h1 style={{marginTop: '10px'}}>PROBAHO</h1>
+                </div>
               <div className="ntp-search">
                 <Search size={18} color="#888" style={{marginLeft: '16px', position: 'absolute'}} />
                 <input
@@ -1401,15 +1490,16 @@ function App() {
                   }
 
                   return topSites.map((site, i) => (
-                    <div key={i} className="ntp-tile" onClick={() => navigate(site.url)}>
+                    <div key={i} className="ntp-tile" onClick={() => navigate(site.url)} style={settings.newTabBackgroundUrl ? { backgroundColor: 'rgba(255,255,255,0.1)', backdropFilter: 'blur(10px)', border: '1px solid rgba(255,255,255,0.2)' } : {}}>
                       <div className="ntp-tile-icon">
                         {site.title.charAt(0).toUpperCase()}
                       </div>
-                      <div className="ntp-tile-title">{site.title || site.url}</div>
+                      <div className="ntp-tile-title" style={settings.newTabBackgroundUrl ? { color: '#fff' } : {}}>{site.title || site.url}</div>
                     </div>
                   ));
                 })()}
               </div>
+            </div>
             </div>
           </div>
         ))}
