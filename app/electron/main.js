@@ -229,10 +229,10 @@ app.whenReady().then(() => {
       // Let the renderer know to open this as a PDF instead of downloading
       const win = webContents && webContents.hostWebContents ? BrowserWindow.fromWebContents(webContents.hostWebContents) : (webContents ? BrowserWindow.fromWebContents(webContents) : null);
       if (win) {
-        win.webContents.send('open-pdf-viewer', url);
+        win.webContents.send('open-pdf-viewer', url, webContents.id);
       } else {
         BrowserWindow.getAllWindows().forEach(w => {
-          w.webContents.send('open-pdf-viewer', url);
+          w.webContents.send('open-pdf-viewer', url, webContents.id);
         });
       }
       return;
@@ -326,10 +326,10 @@ app.whenReady().then(() => {
           event.preventDefault();
           const win = contents.hostWebContents ? BrowserWindow.fromWebContents(contents.hostWebContents) : null;
           if (win) {
-            win.webContents.send('open-pdf-viewer', url);
+            win.webContents.send('open-pdf-viewer', url, contents.id);
           } else {
             BrowserWindow.getAllWindows().forEach(w => {
-              w.webContents.send('open-pdf-viewer', url);
+              w.webContents.send('open-pdf-viewer', url, contents.id);
             });
           }
         }
@@ -461,7 +461,7 @@ ipcMain.on('show-context-menu', (event, params) => {
   });
 
   const menu = Menu.buildFromTemplate(template);
-  menu.popup();
+  menu.popup({ window: win });
 });
 
 
