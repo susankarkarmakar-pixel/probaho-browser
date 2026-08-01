@@ -29,6 +29,8 @@ contextBridge.exposeInMainWorld('electronAPI', {
   deletePermission: (origin, permission) => ipcRenderer.send('delete-permission', origin, permission),
   cancelDownload: (id) => ipcRenderer.send('cancel-download', id),
   openPrivateWindow: () => ipcRenderer.send('open-private-window'),
-  loadExtension: () => ipcRenderer.invoke('load-extension')
+  loadExtension: () => ipcRenderer.invoke('load-extension'),
+  getPassword: (origin) => ipcRenderer.invoke('get-password', origin),
+  savePassword: (origin, creds) => ipcRenderer.send('save-password', origin, creds)
 
 });

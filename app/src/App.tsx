@@ -3,7 +3,7 @@ import { t, Language } from './i18n';
 import PdfViewer from './PdfViewer';
 import {
   ArrowLeft, ArrowRight, RotateCw, Home, Plus,
-  Lock, X, Square, Search, Star, Bookmark, Menu, History, ZoomIn, FileCode, Printer, LogOut, Info, Download, Folder, Settings, ChevronUp, ChevronDown, EyeOff, Shield, BookOpen, Volume2, VolumeX, Globe
+  Lock, X, Square, Search, Star, Bookmark, Menu, History, ZoomIn, FileCode, Printer, LogOut, Info, Download, Folder, Settings, ChevronUp, ChevronDown, EyeOff, Shield, BookOpen, Volume2, VolumeX, Globe, BookPlus, PictureInPicture
 } from 'lucide-react';
 
 interface DownloadItem {
@@ -67,6 +67,8 @@ declare global {
       cancelDownload?: (id: string) => void;
       openPrivateWindow?: () => void;
       loadExtension?: () => Promise<string | null>;
+      getPassword?: (origin: string) => Promise<any>;
+      savePassword?: (origin: string, creds: any) => void;
     };
   }
 }
@@ -181,6 +183,11 @@ function App() {
     return saved ? JSON.parse(saved) : [];
   });
   const [showBookmarks, setShowBookmarks] = useState(false);
+  const [readingList, setReadingList] = useState<{title: string, url: string, content: string, savedAt: string}[]>(() => {
+    const saved = localStorage.getItem('readingList');
+    return saved ? JSON.parse(saved) : [];
+  });
+  const [showReadingList, setShowReadingList] = useState(false);
   const [history, setHistory] = useState<{title: string, url: string, time: string}[]>(() => {
     const saved = localStorage.getItem('history');
     return saved ? JSON.parse(saved) : [];
@@ -195,6 +202,10 @@ function App() {
   useEffect(() => {
     localStorage.setItem('bookmarks', JSON.stringify(bookmarks));
   }, [bookmarks]);
+
+  useEffect(() => {
+    localStorage.setItem('readingList', JSON.stringify(readingList));
+  }, [readingList]);
 
   useEffect(() => {
     localStorage.setItem('history', JSON.stringify(history));
@@ -556,16 +567,66 @@ function App() {
       updateTab(id, { loading: false });
     });
 
+    // Event: console-message
+    el.addEventListener('console-message', (e: any) => {
+      if (e.message && typeof e.message === 'string' && e.message.startsWith('SAVE_PWD:')) {
+        const parts = e.message.split('|');
+        if (parts.length >= 4) {
+          const origin = parts[1];
+          const user = parts[2];
+          const pass = parts[3];
+          if (confirm('Save password for ' + origin + '?')) {
+            window.electronAPI?.savePassword?.(origin, { username: user, password: pass });
+          }
+        }
+      }
+    });
+
     // Event: DOM ready
     el.addEventListener('dom-ready', () => {
       try {
         const wcId = el.getWebContentsId();
         updateTab(id, { webContentsId: wcId });
+
+        // Handle Autofill
+        const currentUrl = el.getURL();
+        if (currentUrl && currentUrl.startsWith('http')) {
+          const origin = new URL(currentUrl).origin;
+          window.electronAPI?.getPassword?.(origin).then(creds => {
+            if (creds && creds.password) {
+              const script = `
+                const p = document.querySelector('input[type="password"]');
+                if (p) {
+                  p.value = ${JSON.stringify(creds.password)};
+                  const text = document.querySelector('input[type="text"], input[type="email"]');
+                  if (text && ${JSON.stringify(creds.username)}) {
+                    text.value = ${JSON.stringify(creds.username)};
+                  }
+                }
+              `;
+              el.executeJavaScript(script).catch(() => {});
+            }
+          }).catch(() => {});
+        }
       } catch (err) {}
     });
 
     // Event: main frame navigation
     el.addEventListener('did-navigate', (e: any) => {
+      // Inject password capture script
+      if (e.url && e.url.startsWith('http')) {
+        const script = `
+          window.addEventListener('submit', (e) => {
+            const p = e.target.querySelector('input[type="password"]');
+            if (p) {
+              const text = e.target.querySelector('input[type="text"], input[type="email"]');
+              console.log('SAVE_PWD:' + location.origin + '|' + (text ? text.value : '') + '|' + p.value);
+            }
+          });
+        `;
+        el.executeJavaScript(script).catch(() => {});
+      }
+
       const savedZoom = getSavedZoom(e.url);
       try {
         el.setZoomFactor(savedZoom);
@@ -965,6 +1026,14 @@ function App() {
           <button className="nav-btn" onClick={goHome}>
             <Home size={16} />
           </button>
+          <button className="nav-btn" title="Picture in Picture" onClick={() => {
+            const wv = webviewRefs.current[activeTabId];
+            if(wv) {
+              wv.executeJavaScript("const v = document.querySelector('video'); if (v) { v.requestPictureInPicture(); } else { alert('No video found on this page.'); }", true);
+            }
+          }}>
+            <PictureInPicture size={16} />
+          </button>
         </div>
 
         <form className="address-bar-container" onSubmit={onSubmit}>
@@ -1030,20 +1099,31 @@ function App() {
             {activeTab && activeTab.blockedCount > 0 && <span className="shield-count">{activeTab.blockedCount}</span>}
           </div>
         )}
-        <button className="nav-btn" onClick={() => { setShowMenu(false); setShowHistory(false); setShowDownloads(false); setShowBookmarks(!showBookmarks); }}>
+        <button className="nav-btn" title="Add to Reading List" onClick={() => {
+          const wv = webviewRefs.current[activeTabId];
+          if(wv) {
+            wv.executeJavaScript("document.body.innerText").then((content: string) => {
+              setReadingList(prev => [{ title: activeTab?.title || '', url: activeTab?.url || '', content, savedAt: new Date().toLocaleString() }, ...prev]);
+              alert("Added to Reading List");
+            });
+          }
+        }}>
+          <BookPlus size={16} />
+        </button>
+        <button className="nav-btn" onClick={() => { setShowMenu(false); setShowHistory(false); setShowDownloads(false); setShowReadingList(false); setShowBookmarks(!showBookmarks); }}>
           <Bookmark size={16} />
         </button>
         <button
           className="nav-btn"
           style={{ position: 'relative' }}
-          onClick={() => { setShowBookmarks(false); setShowHistory(false); setShowMenu(false); setShowDownloads(!showDownloads); }}
+          onClick={() => { setShowBookmarks(false); setShowHistory(false); setShowMenu(false); setShowReadingList(false); setShowDownloads(!showDownloads); }}
         >
           <Download size={16} />
           {hasActiveDownloads && (
             <div style={{ position: 'absolute', bottom: 0, left: 0, height: '3px', backgroundColor: '#4caf50', width: `${totalDownloadProgress}%`, transition: 'width 0.3s' }} />
           )}
         </button>
-        <button className="nav-btn" onClick={() => { setShowBookmarks(false); setShowHistory(false); setShowDownloads(false); setShowMenu(!showMenu); }}>
+        <button className="nav-btn" onClick={() => { setShowBookmarks(false); setShowHistory(false); setShowDownloads(false); setShowReadingList(false); setShowMenu(!showMenu); }}>
           <Menu size={16} />
         </button>
       </div>
@@ -1073,6 +1153,10 @@ function App() {
           <div className="menu-item" onClick={() => { setShowMenu(false); setShowBookmarks(true); }}>
             <div className="menu-item-icon"><Bookmark size={16} /></div>
             <div className="menu-item-text">{t('bookmarks', settings.language)}</div>
+          </div>
+          <div className="menu-item" onClick={() => { setShowMenu(false); setShowReadingList(true); }}>
+            <div className="menu-item-icon"><BookPlus size={16} /></div>
+            <div className="menu-item-text">Reading List</div>
           </div>
           <div className="menu-divider" />
           <div className="menu-item" onClick={(e) => e.stopPropagation()}>
@@ -1403,6 +1487,40 @@ function App() {
                 <div key={i} className="bookmark-item" onClick={() => { navigate(b.url); setShowBookmarks(false); }}>
                   <div className="bookmark-title">{b.title}</div>
                   <div className="bookmark-url">{b.url}</div>
+                </div>
+              ))
+            )}
+          </div>
+        </div>
+      )}
+
+      {/* Reading List Panel */}
+      {showReadingList && (
+        <div className="bookmarks-panel">
+          <div className="bookmarks-header">
+            <h3>Reading List</h3>
+            <button className="nav-btn" onClick={() => setShowReadingList(false)}><X size={16} /></button>
+          </div>
+          <div className="bookmarks-list">
+            {readingList.length === 0 ? (
+              <div className="no-bookmarks">No articles saved.</div>
+            ) : (
+              readingList.map((item, i) => (
+                <div key={i} className="bookmark-item" onClick={() => {
+                  const wv = webviewRefs.current[activeTabId];
+                  if(wv) {
+                    wv.loadURL('data:text/html;charset=utf-8,' + encodeURIComponent('<html><head><title>Reading List</title></head><body style="background:#f9f9f9;margin:0;"><div id="content" style="max-width:800px;margin:0 auto;padding:40px;font-family:sans-serif;white-space:pre-wrap;font-size:18px;line-height:1.6;"></div></body></html>'));
+                    wv.addEventListener('did-finish-load', () => {
+                      wv.executeJavaScript(`document.getElementById('content').textContent = ${JSON.stringify(item.content)};`);
+                    }, { once: true });
+                    setShowReadingList(false);
+                  }
+                }}>
+                  <div className="bookmark-title">{item.title}</div>
+                  <div className="bookmark-url" style={{ display: 'flex', justifyContent: 'space-between' }}>
+                    <span>{item.url}</span>
+                    <span>{item.savedAt}</span>
+                  </div>
                 </div>
               ))
             )}
