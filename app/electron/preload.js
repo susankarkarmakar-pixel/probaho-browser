@@ -22,7 +22,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
   setAdBlocker: (enabled) => ipcRenderer.send('set-adblocker', enabled),
   onAdBlocked: (callback) => ipcRenderer.on('ad-blocked', (event, webContentsId) => callback(webContentsId)),
 
-  onOpenPdfViewer: (callback) => ipcRenderer.on('open-pdf-viewer', (event, url) => callback(url)),
+  onOpenPdfViewer: (callback) => ipcRenderer.on('open-pdf-viewer', (event, url, webContentsId) => callback(url, webContentsId)),
   fetchPdf: (url) => ipcRenderer.invoke('fetch-pdf', url),
   clearCache: () => ipcRenderer.send('clear-cache'),
   getPermissions: () => ipcRenderer.invoke('get-permissions'),

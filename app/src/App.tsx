@@ -60,7 +60,7 @@ declare global {
       setAdBlocker: (enabled: boolean) => void;
       onAdBlocked: (callback: (webContentsId: number) => void) => void;
       onTabCrashed: (callback: (webContentsId: number, reason: string) => void) => void;
-      onOpenPdfViewer: (callback: (url: string) => void) => void;
+      onOpenPdfViewer: (callback: (url: string, webContentsId?: number) => void) => void;
       clearCache?: () => void;
       getPermissions?: () => Promise<Record<string, Record<string, boolean>>>;
       deletePermission?: (origin: string, permission: string) => void;
@@ -431,14 +431,17 @@ function App() {
 
 
     if (window.electronAPI?.onOpenPdfViewer) {
-      window.electronAPI.onOpenPdfViewer((url: string) => {
+      window.electronAPI.onOpenPdfViewer((url: string, webContentsId?: number) => {
         setTabs(prev => prev.map(t => {
-          if (t.id === activeTabIdRef.current) {
+          const isTargetTab = webContentsId ? t.webContentsId === webContentsId : t.id === activeTabIdRef.current;
+          if (isTargetTab) {
+             if (t.id === activeTabIdRef.current) {
+               setInputUrl(url);
+             }
              return { ...t, url, isPdf: true, title: url.split('/').pop() || 'PDF Document' };
           }
           return t;
         }));
-        setInputUrl(url);
       });
     }
 
@@ -580,7 +583,7 @@ function App() {
       setTabs(prev => {
         const tab = prev.find(t => t.id === id);
         if (tab && !tab.isPrivate) {
-          setHistory(hPrev => [{ title: e.url, url: e.url, time: new Date().toLocaleString() }, ...hPrev]);
+          setHistory(hPrev => [{ title: e.url, url: e.url, time: new Date().toLocaleString() }, ...hPrev].slice(0, 500));
         }
         return prev;
       });
@@ -607,9 +610,9 @@ function App() {
             if (prev.length > 0 && prev[0].url === el.getURL()) {
               const updated = [...prev];
               updated[0] = { ...updated[0], title: e.title };
-              return updated;
+              return updated.slice(0, 500);
             }
-            return prev;
+            return prev.slice(0, 500);
           });
         }
         return tPrev;
@@ -634,7 +637,7 @@ function App() {
 
     // Event: navigation FAILED (NEW - Bug 5 fix)
     el.addEventListener('did-fail-load', (e: any) => {
-      if (e.isMainFrame && e.errorCode !== -3) { // -3 is aborted, not a real error
+      if (e.isMainFrame && e.errorCode !== -3 && !e.validatedURL.startsWith('probaho://') && e.validatedURL !== '' && e.validatedURL !== 'about:blank') { // -3 is aborted, not a real error
         console.error('Navigation failed:', e.errorCode, e.errorDescription, e.validatedURL);
         updateTab(id, { loading: false, title: t('error', settingsRef.current?.language || 'en') });
       }
@@ -934,10 +937,10 @@ function App() {
               )}
             </div>
           ))}
+          <button className="new-tab-btn" onClick={() => createTab(isPrivateWindow)}>
+            <Plus size={16} />
+          </button>
         </div>
-        <button className="new-tab-btn" onClick={() => createTab(false)}>
-          <Plus size={16} />
-        </button>
 
         {/* Window controls */}
         <div className="window-controls">
