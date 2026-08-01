@@ -1,4 +1,4 @@
-const { app, BrowserWindow, ipcMain, session, shell, Menu, dialog } = require('electron');
+const { app, BrowserWindow, ipcMain, session, shell, Menu, dialog, clipboard } = require('electron');
 const { autoUpdater } = require('electron-updater');
 const path = require('path');
 const blocklist = require('./blocklist');
@@ -119,6 +119,15 @@ app.whenReady().then(() => {
 
   ipcMain.on('open-private-window', () => {
     createWindow(true);
+  });
+
+  ipcMain.handle('load-extension', async (event) => {
+    const result = await dialog.showOpenDialog({ properties: ['openDirectory'] });
+    if (!result.canceled) {
+      await session.defaultSession.loadExtension(result.filePaths[0]);
+      return result.filePaths[0];
+    }
+    return null;
   });
 
   ipcMain.on('clear-cache', () => {
@@ -405,6 +414,16 @@ ipcMain.on('show-context-menu', (event, params) => {
     { role: 'copy' }
   ];
 
+  if (params.selectionText) {
+    const trimmedText = params.selectionText.length > 15 ? params.selectionText.substring(0, 15) + '...' : params.selectionText;
+    template.push({
+      label: `Search Google for "${trimmedText}"`,
+      click: () => {
+        if (win) win.webContents.send('open-link-new-tab', `https://www.google.com/search?q=${encodeURIComponent(params.selectionText)}`);
+      }
+    });
+  }
+
   if (params.linkURL) {
     template.push({ type: 'separator' });
     template.push({
@@ -413,6 +432,22 @@ ipcMain.on('show-context-menu', (event, params) => {
         if (win) {
           win.webContents.send('open-link-new-tab', params.linkURL);
         }
+      }
+    });
+    template.push({
+      label: 'Copy Link Address',
+      click: () => {
+        clipboard.writeText(params.linkURL);
+      }
+    });
+  }
+
+  if (params.hasImageContents && params.srcURL) {
+    template.push({ type: 'separator' });
+    template.push({
+      label: 'Copy Image URL',
+      click: () => {
+        clipboard.writeText(params.srcURL);
       }
     });
   }

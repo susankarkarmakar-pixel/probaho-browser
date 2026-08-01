@@ -571,17 +571,18 @@ body.theme-light .about-desc {
 
 .find-bar {
   position: absolute;
-  top: 10px;
+  top: 0;
   right: 20px;
-  background-color: var(--tab-bg);
+  background-color: var(--bg-color);
   border: 1px solid var(--border-color);
-  border-radius: 20px;
+  border-top: none;
+  border-radius: 0 0 8px 8px;
   display: flex;
   align-items: center;
-  padding: 4px 8px;
-  box-shadow: 0 4px 12px rgba(0,0,0,0.5);
+  padding: 4px 12px;
+  box-shadow: 0 4px 12px rgba(0,0,0,0.15);
   z-index: 1000;
-  height: 32px;
+  height: 36px;
 }
 
 .find-input {

@@ -50,7 +50,7 @@ declare global {
       openFile: (path: string) => void;
       showInFolder: (path: string) => void;
       onOpenLinkNewTab: (callback: (url: string) => void) => void;
-      showContextMenu: (params: { x: number, y: number, linkURL: string }) => void;
+      showContextMenu: (params: { x: number, y: number, linkURL: string, hasImageContents?: boolean, srcURL?: string, selectionText?: string }) => void;
       onContextMenuAction: (callback: (action: string, x?: number, y?: number) => void) => void;
       onFind: (callback: () => void) => void;
       onCycleTabPrev: (callback: () => void) => void;
@@ -66,6 +66,7 @@ declare global {
       deletePermission?: (origin: string, permission: string) => void;
       cancelDownload?: (id: string) => void;
       openPrivateWindow?: () => void;
+      loadExtension?: () => Promise<string | null>;
     };
   }
 }
@@ -644,7 +645,10 @@ function App() {
       window.electronAPI?.showContextMenu({
         x: e.params.x,
         y: e.params.y,
-        linkURL: e.params.linkURL
+        linkURL: e.params.linkURL,
+        hasImageContents: e.params.hasImageContents,
+        srcURL: e.params.srcURL,
+        selectionText: e.params.selectionText
       });
     });
 
@@ -1283,6 +1287,24 @@ function App() {
                   }}
                 >
                   Clear Browsing Data (History & Cache)
+                </button>
+              </div>
+
+              {/* Extensions Section */}
+              <div style={{marginTop: '24px', borderTop: '1px solid var(--border-color)', paddingTop: '16px'}}>
+                <h4 style={{marginBottom: '12px', fontSize: '14px'}}>Extensions</h4>
+                <button
+                  className="clear-history-btn"
+                  style={{width: '100%', padding: '10px', fontSize: '13px', fontWeight: 'bold', background: 'var(--tab-bg)', color: 'var(--text-color)', border: '1px solid var(--border-color)', borderRadius: '4px', cursor: 'pointer'}}
+                  onClick={() => {
+                    if (window.electronAPI?.loadExtension) {
+                      window.electronAPI.loadExtension().then((path) => {
+                        if (path) alert(`Extension loaded from: ${path}`);
+                      });
+                    }
+                  }}
+                >
+                  Load Extension (Unpacked)
                 </button>
               </div>
 
