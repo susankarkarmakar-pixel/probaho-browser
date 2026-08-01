@@ -3,6 +3,7 @@ const { autoUpdater } = require('electron-updater');
 const path = require('path');
 const blocklist = require('./blocklist');
 const permissionsStore = require('./permissions-store');
+const passwordsStore = require('./passwords-store');
 const fs = require('fs');
 
 let mainWindow;
@@ -141,6 +142,14 @@ app.whenReady().then(() => {
 
   ipcMain.handle('get-permissions', () => {
     return permissionsStore.data;
+  });
+
+  ipcMain.handle('get-password', (e, origin) => {
+    return passwordsStore.getPassword(origin);
+  });
+
+  ipcMain.on('save-password', (e, origin, creds) => {
+    passwordsStore.setPassword(origin, creds);
   });
 
   ipcMain.on('delete-permission', (event, origin, permission) => {
