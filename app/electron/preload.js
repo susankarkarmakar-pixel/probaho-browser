@@ -25,6 +25,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
   onZoomOut: (callback) => ipcRenderer.on('shortcut-zoom-out', () => callback()),
   onZoomReset: (callback) => ipcRenderer.on('shortcut-zoom-reset', () => callback()),
   onCommandPalette: (callback) => ipcRenderer.on('shortcut-command-palette', () => callback()),
+  onRestoreTab: (callback) => ipcRenderer.on('shortcut-restore-tab', () => callback()),
   onTabCrashed: (callback) => ipcRenderer.on('tab-crashed', (event, webContentsId, reason) => callback(webContentsId, reason)),
   openFile: (path) => ipcRenderer.send('open-file', path),
   showInFolder: (path) => ipcRenderer.send('show-in-folder', path),
@@ -40,6 +41,8 @@ contextBridge.exposeInMainWorld('electronAPI', {
   openPrivateWindow: () => ipcRenderer.send('open-private-window'),
   loadExtension: () => ipcRenderer.invoke('load-extension'),
   getPassword: (origin) => ipcRenderer.invoke('get-password', origin),
-  savePassword: (origin, creds) => ipcRenderer.send('save-password', origin, creds)
-
+  savePassword: (origin, creds) => ipcRenderer.send('save-password', origin, creds),
+  saveAsPdf: () => ipcRenderer.send('save-as-pdf'),
+  onTriggerSaveAsPdf: (callback) => ipcRenderer.on('trigger-save-as-pdf', () => callback()),
+  executeSavePdf: (data) => ipcRenderer.send('execute-save-pdf', data)
 });
