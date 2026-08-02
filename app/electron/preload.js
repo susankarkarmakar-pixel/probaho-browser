@@ -24,6 +24,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
   onZoomIn: (callback) => ipcRenderer.on('shortcut-zoom-in', () => callback()),
   onZoomOut: (callback) => ipcRenderer.on('shortcut-zoom-out', () => callback()),
   onZoomReset: (callback) => ipcRenderer.on('shortcut-zoom-reset', () => callback()),
+  onCommandPalette: (callback) => ipcRenderer.on('shortcut-command-palette', () => callback()),
   onTabCrashed: (callback) => ipcRenderer.on('tab-crashed', (event, webContentsId, reason) => callback(webContentsId, reason)),
   openFile: (path) => ipcRenderer.send('open-file', path),
   showInFolder: (path) => ipcRenderer.send('show-in-folder', path),

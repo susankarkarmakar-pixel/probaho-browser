@@ -65,6 +65,7 @@ declare global {
       onZoomIn?: (callback: () => void) => void;
       onZoomOut?: (callback: () => void) => void;
       onZoomReset?: (callback: () => void) => void;
+      onCommandPalette?: (callback: () => void) => void;
       setAdBlocker: (enabled: boolean) => void;
       onAdBlocked: (callback: (webContentsId: number) => void) => void;
       onTabCrashed: (callback: (webContentsId: number, reason: string) => void) => void;
@@ -210,6 +211,9 @@ function App() {
   const [showAbout, setShowAbout] = useState(false);
   const [showAutocomplete, setShowAutocomplete] = useState(false);
   const [autocompleteSuggestions, setAutocompleteSuggestions] = useState<{title: string, url: string}[]>([]);
+  const [showCommandPalette, setShowCommandPalette] = useState(false);
+  const [commandQuery, setCommandQuery] = useState('');
+  const [commandSelectionIndex, setCommandSelectionIndex] = useState(0);
 
   useEffect(() => {
     localStorage.setItem('bookmarks', JSON.stringify(bookmarks));
@@ -398,6 +402,14 @@ function App() {
            }
            return prev;
         });
+      });
+    }
+
+    if (window.electronAPI?.onCommandPalette) {
+      window.electronAPI.onCommandPalette(() => {
+        setShowCommandPalette(prev => !prev);
+        setCommandQuery('');
+        setCommandSelectionIndex(0);
       });
     }
   }, []);
@@ -1733,6 +1745,108 @@ function App() {
                 </div>
               ))
             )}
+          </div>
+        </div>
+      )}
+
+      {/* Command Palette Overlay */}
+      {showCommandPalette && (
+        <div className="command-palette-overlay" onClick={() => setShowCommandPalette(false)}>
+          <div className="command-palette" onClick={e => e.stopPropagation()}>
+            <div className="command-palette-search">
+              <Search size={18} color="#888" />
+              <input
+                type="text"
+                autoFocus
+                placeholder="Search tabs, history, bookmarks..."
+                value={commandQuery}
+                onChange={e => {
+                  setCommandQuery(e.target.value);
+                  setCommandSelectionIndex(0);
+                }}
+                onKeyDown={e => {
+                  const lowerQuery = commandQuery.toLowerCase();
+
+                  // Simple combined list
+                  const commandResults: {type: string, title: string, url: string, action: () => void}[] = [];
+
+                  tabs.forEach(t => {
+                    if (t.title.toLowerCase().includes(lowerQuery) || t.url.toLowerCase().includes(lowerQuery)) {
+                       commandResults.push({ type: 'Tab', title: t.title, url: t.url, action: () => { setActiveTabId(t.id); setShowCommandPalette(false); }});
+                    }
+                  });
+                  bookmarks.forEach(b => {
+                    if (b.title.toLowerCase().includes(lowerQuery) || b.url.toLowerCase().includes(lowerQuery)) {
+                       commandResults.push({ type: 'Bookmark', title: b.title, url: b.url, action: () => { navigate(b.url); setShowCommandPalette(false); }});
+                    }
+                  });
+                  history.forEach(h => {
+                    if (h.title.toLowerCase().includes(lowerQuery) || h.url.toLowerCase().includes(lowerQuery)) {
+                       commandResults.push({ type: 'History', title: h.title, url: h.url, action: () => { navigate(h.url); setShowCommandPalette(false); }});
+                    }
+                  });
+
+                  // Filter out exact duplicates based on URL just for display
+                  const uniqueResults = commandResults.filter((v,i,a)=>a.findIndex(v2=>(v2.url===v.url))===i).slice(0, 10);
+
+                  if (e.key === 'ArrowDown') {
+                    e.preventDefault();
+                    setCommandSelectionIndex(prev => Math.min(prev + 1, uniqueResults.length - 1));
+                  } else if (e.key === 'ArrowUp') {
+                    e.preventDefault();
+                    setCommandSelectionIndex(prev => Math.max(prev - 1, 0));
+                  } else if (e.key === 'Enter') {
+                    e.preventDefault();
+                    if (uniqueResults[commandSelectionIndex]) {
+                       uniqueResults[commandSelectionIndex].action();
+                    } else if (commandQuery.trim().length > 0) {
+                       navigate(commandQuery);
+                       setShowCommandPalette(false);
+                    }
+                  } else if (e.key === 'Escape') {
+                    setShowCommandPalette(false);
+                  }
+                }}
+              />
+            </div>
+
+            <div className="command-palette-results">
+              {(() => {
+                  const lowerQuery = commandQuery.toLowerCase();
+                  const commandResults: {type: string, title: string, url: string, action: () => void}[] = [];
+                  tabs.forEach(t => {
+                    if (t.title.toLowerCase().includes(lowerQuery) || t.url.toLowerCase().includes(lowerQuery)) {
+                       commandResults.push({ type: 'Tab', title: t.title, url: t.url, action: () => { setActiveTabId(t.id); setShowCommandPalette(false); }});
+                    }
+                  });
+                  bookmarks.forEach(b => {
+                    if (b.title.toLowerCase().includes(lowerQuery) || b.url.toLowerCase().includes(lowerQuery)) {
+                       commandResults.push({ type: 'Bookmark', title: b.title, url: b.url, action: () => { navigate(b.url); setShowCommandPalette(false); }});
+                    }
+                  });
+                  history.forEach(h => {
+                    if (h.title.toLowerCase().includes(lowerQuery) || h.url.toLowerCase().includes(lowerQuery)) {
+                       commandResults.push({ type: 'History', title: h.title, url: h.url, action: () => { navigate(h.url); setShowCommandPalette(false); }});
+                    }
+                  });
+                  const uniqueResults = commandResults.filter((v,i,a)=>a.findIndex(v2=>(v2.url===v.url))===i).slice(0, 10);
+
+                  return uniqueResults.map((res, i) => (
+                    <div
+                      key={i}
+                      className={`command-item ${commandSelectionIndex === i ? 'selected' : ''}`}
+                      onClick={() => res.action()}
+                      onMouseEnter={() => setCommandSelectionIndex(i)}
+                    >
+                       <div className="command-item-type">{res.type}</div>
+                       <div className="command-item-info">
+                         <div className="command-item-title">{res.title}</div>
+                         <div className="command-item-url">{res.url}</div>
+                       </div>
+                    </div>
+                  ));
+              })()}
+            </div>
           </div>
         </div>
       )}

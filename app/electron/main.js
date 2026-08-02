@@ -117,6 +117,10 @@ function createWindow(isPrivate = false) {
       mainWindow.webContents.send('shortcut-zoom-reset');
       event.preventDefault();
     }
+    if ((input.control || input.meta) && input.key.toLowerCase() === 'k') {
+      mainWindow.webContents.send('shortcut-command-palette');
+      event.preventDefault();
+    }
   });
 }
 
