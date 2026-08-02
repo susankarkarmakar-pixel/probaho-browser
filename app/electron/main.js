@@ -121,6 +121,10 @@ function createWindow(isPrivate = false) {
       mainWindow.webContents.send('shortcut-command-palette');
       event.preventDefault();
     }
+    if ((input.control || input.meta) && input.shift && input.key.toLowerCase() === 't') {
+      mainWindow.webContents.send('shortcut-restore-tab');
+      event.preventDefault();
+    }
   });
 }
 
@@ -203,6 +207,40 @@ app.whenReady().then(() => {
         delete permissionsStore.data[origin];
       }
       permissionsStore.saveData();
+    }
+  });
+
+  ipcMain.on('save-as-pdf', async (event) => {
+    const win = BrowserWindow.fromWebContents(event.sender);
+    if (!win) return;
+
+    try {
+      // Find the currently active webview inside the window, this is tricky via IPC.
+      // Instead, we capture the window's webContents itself, which might just capture the UI.
+      // To properly capture a page, it's better to tell the renderer to have the webview generate it, but webview.printToPDF is available.
+      // However, we will emit an event back to the renderer to trigger `printToPDF` on the specific webview element for accuracy.
+      win.webContents.send('trigger-save-as-pdf');
+    } catch (e) {
+      console.error('Failed to initiate PDF save', e);
+    }
+  });
+
+  ipcMain.on('execute-save-pdf', async (event, data) => {
+    const win = BrowserWindow.fromWebContents(event.sender);
+    if (!win) return;
+
+    const { filePath } = await dialog.showSaveDialog(win, {
+      title: 'Save as PDF',
+      filters: [{ name: 'PDF Document', extensions: ['pdf'] }]
+    });
+
+    if (filePath) {
+      try {
+        // Here data is the Buffer sent from the renderer
+        require('fs').writeFileSync(filePath, Buffer.from(data));
+      } catch (err) {
+        console.error('Failed to save PDF', err);
+      }
     }
   });
 

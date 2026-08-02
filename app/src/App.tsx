@@ -3,7 +3,7 @@ import { t, Language } from './i18n';
 import PdfViewer from './PdfViewer';
 import {
   ArrowLeft, ArrowRight, RotateCw, Home, Plus,
-  Lock, X, Square, Search, Star, Bookmark, Menu, History, ZoomIn, FileCode, Printer, LogOut, Info, Download, Folder, Settings, ChevronUp, ChevronDown, EyeOff, Shield, BookOpen, Volume2, VolumeX, Globe, BookPlus, PictureInPicture
+  Lock, X, Square, Search, Star, Bookmark, Menu, History, ZoomIn, FileCode, Printer, LogOut, Info, Download, Folder, Settings, ChevronUp, ChevronDown, EyeOff, Shield, BookOpen, Volume2, VolumeX, Globe, BookPlus, PictureInPicture, Share2
 } from 'lucide-react';
 
 interface DownloadItem {
@@ -66,6 +66,10 @@ declare global {
       onZoomOut?: (callback: () => void) => void;
       onZoomReset?: (callback: () => void) => void;
       onCommandPalette?: (callback: () => void) => void;
+      onRestoreTab?: (callback: () => void) => void;
+      saveAsPdf?: () => void;
+      onTriggerSaveAsPdf?: (callback: () => void) => void;
+      executeSavePdf?: (data: ArrayBuffer) => void;
       setAdBlocker: (enabled: boolean) => void;
       onAdBlocked: (callback: (webContentsId: number) => void) => void;
       onTabCrashed: (callback: (webContentsId: number, reason: string) => void) => void;
@@ -214,6 +218,7 @@ function App() {
   const [showCommandPalette, setShowCommandPalette] = useState(false);
   const [commandQuery, setCommandQuery] = useState('');
   const [commandSelectionIndex, setCommandSelectionIndex] = useState(0);
+  const [recentlyClosed, setRecentlyClosed] = useState<{title: string, url: string}[]>([]);
 
   useEffect(() => {
     localStorage.setItem('bookmarks', JSON.stringify(bookmarks));
@@ -412,6 +417,23 @@ function App() {
         setCommandSelectionIndex(0);
       });
     }
+
+    if (window.electronAPI?.onRestoreTab) {
+      window.electronAPI.onRestoreTab(() => {
+        restoreTab();
+      });
+    }
+
+    if (window.electronAPI?.onTriggerSaveAsPdf) {
+      window.electronAPI.onTriggerSaveAsPdf(() => {
+        const wv = webviewRefs.current[activeTabIdRef.current];
+        if (wv) {
+           wv.printToPDF({}).then((data: ArrayBuffer) => {
+             window.electronAPI?.executeSavePdf?.(data);
+           }).catch((err: any) => console.error(err));
+        }
+      });
+    }
   }, []);
 
   useEffect(() => {
@@ -595,6 +617,10 @@ function App() {
 
   const closeTabId = (id: string) => {
     setTabs(prev => {
+      const tabToClose = prev.find(t => t.id === id);
+      if (tabToClose && tabToClose.url !== 'probaho://newtab' && tabToClose.url !== 'about:blank') {
+        setRecentlyClosed(rc => [{title: tabToClose.title, url: tabToClose.url}, ...rc].slice(0, 10));
+      }
       if (prev.length === 1) {
         window.electronAPI?.close();
         return prev;
@@ -606,6 +632,30 @@ function App() {
       return newTabs;
     });
     delete webviewRefs.current[id];
+  };
+
+  const restoreTab = () => {
+    setRecentlyClosed(prev => {
+       if (prev.length > 0) {
+         const toRestore = prev[0];
+         const newTab: Tab = {
+            id: Date.now().toString(),
+            url: toRestore.url,
+            title: toRestore.title,
+            loading: false,
+            canGoBack: false,
+            canGoForward: false,
+            isSecure: toRestore.url.startsWith('https'),
+            zoomLevel: 1,
+            blockedCount: 0,
+            isPrivate: isPrivateWindow
+          };
+          setTabs(currentTabs => [...currentTabs, newTab]);
+          setTimeout(() => setActiveTabId(newTab.id), 0);
+          return prev.slice(1);
+       }
+       return prev;
+    });
   };
 
   const closeTab = (e: React.MouseEvent | null, id: string) => {
@@ -1280,6 +1330,16 @@ function App() {
         <button className="nav-btn" onClick={() => { setShowMenu(false); setShowHistory(false); setShowDownloads(false); setShowReadingList(false); setShowBookmarks(!showBookmarks); }}>
           <Bookmark size={16} />
         </button>
+        <button className="nav-btn" title="Share" onClick={() => {
+            const urlToShare = activeTab?.url || 'probaho://newtab';
+            if (urlToShare !== 'probaho://newtab' && urlToShare !== 'about:blank') {
+               navigator.clipboard.writeText(urlToShare).then(() => {
+                  alert('URL copied to clipboard!');
+               });
+            }
+        }}>
+          <Share2 size={16} />
+        </button>
         <div style={{ position: 'relative' }}>
           <button
             className="nav-btn"
@@ -1387,6 +1447,11 @@ function App() {
             <div className="menu-item-icon"><BookPlus size={16} /></div>
             <div className="menu-item-text">Reading List</div>
           </div>
+          <div className="menu-item" onClick={() => { setShowMenu(false); restoreTab(); }} style={{opacity: recentlyClosed.length === 0 ? 0.5 : 1}}>
+            <div className="menu-item-icon"><RotateCw size={16} /></div>
+            <div className="menu-item-text">Recently Closed ({recentlyClosed.length})</div>
+            <div className="menu-item-shortcut">Ctrl+Shift+T</div>
+          </div>
           <div className="menu-divider" />
           <div className="menu-item" onClick={(e) => e.stopPropagation()}>
             <div className="menu-item-icon"><ZoomIn size={16} /></div>
@@ -1402,6 +1467,13 @@ function App() {
             <div className="menu-item-icon"><Printer size={16} /></div>
             <div className="menu-item-text">{t('print', settings.language)}</div>
             <div className="menu-item-shortcut">Ctrl+P</div>
+          </div>
+          <div className="menu-item" onClick={() => {
+              setShowMenu(false);
+              window.electronAPI?.saveAsPdf?.();
+          }}>
+            <div className="menu-item-icon"><FileCode size={16} /></div>
+            <div className="menu-item-text">Save as PDF</div>
           </div>
           <div className="menu-divider" />
           <div className="menu-item" onClick={() => {
@@ -1420,6 +1492,13 @@ function App() {
             <div className="menu-item-shortcut">F12</div>
           </div>
           <div className="menu-divider" />
+          <div className="menu-item" onClick={() => {
+             setShowMenu(false);
+             navigate('https://github.com/susankarkarmakar-pixel/probaho-browser');
+          }}>
+            <div className="menu-item-icon"><Info size={16} /></div>
+            <div className="menu-item-text">Help & Feedback</div>
+          </div>
           <div className="menu-item" onClick={() => { setShowMenu(false); setShowAbout(true); }}>
             <div className="menu-item-icon"><Info size={16} /></div>
             <div className="menu-item-text">{t('about', settings.language)}</div>
