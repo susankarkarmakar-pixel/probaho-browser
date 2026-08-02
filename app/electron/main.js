@@ -77,6 +77,46 @@ function createWindow(isPrivate = false) {
       event.preventDefault();
     }
 
+    // New shortcuts
+    if (input.key === 'F5' || ((input.control || input.meta) && input.key.toLowerCase() === 'r')) {
+      mainWindow.webContents.send('shortcut-reload');
+      event.preventDefault();
+    }
+    if ((input.control || input.meta) && input.shift && input.key.toLowerCase() === 'i') {
+      mainWindow.webContents.send('shortcut-devtools');
+      event.preventDefault();
+    }
+    if (input.key === 'F11') {
+      const win = BrowserWindow.fromWebContents(event.sender);
+      if (win) {
+        win.setFullScreen(!win.isFullScreen());
+      }
+      event.preventDefault();
+    }
+    if ((input.control || input.meta) && input.key.toLowerCase() === 'h') {
+      mainWindow.webContents.send('shortcut-open-history');
+      event.preventDefault();
+    }
+    if ((input.control || input.meta) && input.key.toLowerCase() === 'j') {
+      mainWindow.webContents.send('shortcut-open-downloads');
+      event.preventDefault();
+    }
+    if ((input.control || input.meta) && input.key.toLowerCase() === 'b') {
+      mainWindow.webContents.send('shortcut-open-bookmarks');
+      event.preventDefault();
+    }
+    if ((input.control || input.meta) && (input.key === '=' || input.key === '+')) {
+      mainWindow.webContents.send('shortcut-zoom-in');
+      event.preventDefault();
+    }
+    if ((input.control || input.meta) && input.key === '-') {
+      mainWindow.webContents.send('shortcut-zoom-out');
+      event.preventDefault();
+    }
+    if ((input.control || input.meta) && input.key === '0') {
+      mainWindow.webContents.send('shortcut-zoom-reset');
+      event.preventDefault();
+    }
   });
 }
 
@@ -278,7 +318,32 @@ app.whenReady().then(() => {
       }));
     }
 
+    const updateTaskbarProgress = () => {
+      let totalReceived = 0;
+      let totalBytesAll = 0;
+      let activeCount = 0;
+      for (const [key, dlItem] of activeDownloadsMap.entries()) {
+        const state = dlItem.getState();
+        if (state === 'progressing') {
+           activeCount++;
+           totalReceived += dlItem.getReceivedBytes();
+           totalBytesAll += dlItem.getTotalBytes();
+        }
+      }
+
+      const windows = BrowserWindow.getAllWindows();
+      if (activeCount > 0 && totalBytesAll > 0) {
+         const progress = totalReceived / totalBytesAll;
+         windows.forEach(w => w.setProgressBar(progress, { mode: 'normal' }));
+      } else {
+         windows.forEach(w => w.setProgressBar(-1));
+      }
+    };
+
+    updateTaskbarProgress();
+
     item.on('updated', (event, state) => {
+      updateTaskbarProgress();
       if (win && !win.isDestroyed()) {
         win.webContents.send('download-update', {
           id: downloadId,
@@ -302,6 +367,7 @@ app.whenReady().then(() => {
 
     item.once('done', (event, state) => {
       activeDownloadsMap.delete(downloadId);
+      updateTaskbarProgress();
       if (win && !win.isDestroyed()) {
         win.webContents.send('download-update', {
           id: downloadId,

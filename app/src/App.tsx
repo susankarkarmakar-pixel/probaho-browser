@@ -57,6 +57,14 @@ declare global {
       onCycleTabNext: (callback: () => void) => void;
       onJumpTab: (callback: (index: number) => void) => void;
       onFocusAddress: (callback: () => void) => void;
+      onReload?: (callback: () => void) => void;
+      onDevTools?: (callback: () => void) => void;
+      onOpenHistory?: (callback: () => void) => void;
+      onOpenDownloads?: (callback: () => void) => void;
+      onOpenBookmarks?: (callback: () => void) => void;
+      onZoomIn?: (callback: () => void) => void;
+      onZoomOut?: (callback: () => void) => void;
+      onZoomReset?: (callback: () => void) => void;
       setAdBlocker: (enabled: boolean) => void;
       onAdBlocked: (callback: (webContentsId: number) => void) => void;
       onTabCrashed: (callback: (webContentsId: number, reason: string) => void) => void;
@@ -198,6 +206,8 @@ function App() {
   const [permissions, setPermissions] = useState<Record<string, Record<string, boolean>>>({});
   const [showMenu, setShowMenu] = useState(false);
   const [showAbout, setShowAbout] = useState(false);
+  const [showAutocomplete, setShowAutocomplete] = useState(false);
+  const [autocompleteSuggestions, setAutocompleteSuggestions] = useState<{title: string, url: string}[]>([]);
 
   useEffect(() => {
     localStorage.setItem('bookmarks', JSON.stringify(bookmarks));
@@ -311,6 +321,80 @@ function App() {
           } else {
             return [item, ...prev];
           }
+        });
+      });
+    }
+
+    if (window.electronAPI?.onReload) {
+      window.electronAPI.onReload(() => {
+        const wv = webviewRefs.current[activeTabIdRef.current];
+        if (wv) wv.reload();
+      });
+    }
+    if (window.electronAPI?.onDevTools) {
+      window.electronAPI.onDevTools(() => {
+        const wv = webviewRefs.current[activeTabIdRef.current];
+        if (wv) wv.openDevTools();
+      });
+    }
+    if (window.electronAPI?.onOpenHistory) {
+      window.electronAPI.onOpenHistory(() => {
+        setShowMenu(false); setShowDownloads(false); setShowBookmarks(false); setShowReadingList(false);
+        setShowHistory(prev => !prev);
+      });
+    }
+    if (window.electronAPI?.onOpenDownloads) {
+      window.electronAPI.onOpenDownloads(() => {
+        setShowMenu(false); setShowHistory(false); setShowBookmarks(false); setShowReadingList(false);
+        setShowDownloads(prev => !prev);
+      });
+    }
+    if (window.electronAPI?.onOpenBookmarks) {
+      window.electronAPI.onOpenBookmarks(() => {
+        setShowMenu(false); setShowHistory(false); setShowDownloads(false); setShowReadingList(false);
+        setShowBookmarks(prev => !prev);
+      });
+    }
+    if (window.electronAPI?.onZoomIn) {
+      window.electronAPI.onZoomIn(() => {
+        setTabs(prev => {
+           const idx = prev.findIndex(t => t.id === activeTabIdRef.current);
+           if (idx !== -1) {
+              const currentZoom = prev[idx].zoomLevel || 1;
+              const newZoom = Math.min(5, currentZoom + 0.1);
+              const wv = webviewRefs.current[activeTabIdRef.current];
+              if (wv) wv.setZoomFactor(newZoom);
+              return prev.map(t => t.id === activeTabIdRef.current ? { ...t, zoomLevel: newZoom } : t);
+           }
+           return prev;
+        });
+      });
+    }
+    if (window.electronAPI?.onZoomOut) {
+      window.electronAPI.onZoomOut(() => {
+        setTabs(prev => {
+           const idx = prev.findIndex(t => t.id === activeTabIdRef.current);
+           if (idx !== -1) {
+              const currentZoom = prev[idx].zoomLevel || 1;
+              const newZoom = Math.max(0.25, currentZoom - 0.1);
+              const wv = webviewRefs.current[activeTabIdRef.current];
+              if (wv) wv.setZoomFactor(newZoom);
+              return prev.map(t => t.id === activeTabIdRef.current ? { ...t, zoomLevel: newZoom } : t);
+           }
+           return prev;
+        });
+      });
+    }
+    if (window.electronAPI?.onZoomReset) {
+      window.electronAPI.onZoomReset(() => {
+        setTabs(prev => {
+           const idx = prev.findIndex(t => t.id === activeTabIdRef.current);
+           if (idx !== -1) {
+              const wv = webviewRefs.current[activeTabIdRef.current];
+              if (wv) wv.setZoomFactor(1);
+              return prev.map(t => t.id === activeTabIdRef.current ? { ...t, zoomLevel: 1 } : t);
+           }
+           return prev;
         });
       });
     }
@@ -962,6 +1046,11 @@ function App() {
                 setDraggedTabId(null);
               }}
               onDragEnd={() => setDraggedTabId(null)}
+              onMouseDown={(e) => {
+                if (e.button === 1) { // Middle click
+                  closeTab(e, tab.id);
+                }
+              }}
             >
               {tab.isPrivate && <EyeOff size={10} style={{marginRight: '4px', opacity: 0.8}} />}
 
@@ -1036,7 +1125,7 @@ function App() {
           </button>
         </div>
 
-        <form className="address-bar-container" onSubmit={onSubmit}>
+        <form className="address-bar-container" onSubmit={onSubmit} style={{position: 'relative'}}>
           <div className="security-icon">
             {activeTab?.isSecure ? <Lock size={14} color="#4caf50" /> : <Search size={14} />}
           </div>
@@ -1045,9 +1134,73 @@ function App() {
             className="address-input"
             type="text"
             value={inputUrl}
-            onChange={(e) => setInputUrl(e.target.value)}
+            onChange={(e) => {
+               const val = e.target.value;
+               setInputUrl(val);
+
+               if (val.trim().length > 0) {
+                 const lowerVal = val.toLowerCase();
+                 const matches: {title: string, url: string}[] = [];
+                 const seen = new Set();
+
+                 // Search bookmarks
+                 bookmarks.forEach(b => {
+                   if (b.title.toLowerCase().includes(lowerVal) || b.url.toLowerCase().includes(lowerVal)) {
+                     if (!seen.has(b.url)) {
+                       matches.push(b);
+                       seen.add(b.url);
+                     }
+                   }
+                 });
+                 // Search history
+                 history.forEach(h => {
+                   if (h.title.toLowerCase().includes(lowerVal) || h.url.toLowerCase().includes(lowerVal)) {
+                     if (!seen.has(h.url)) {
+                       matches.push({ title: h.title, url: h.url });
+                       seen.add(h.url);
+                     }
+                   }
+                 });
+                 setAutocompleteSuggestions(matches.slice(0, 6)); // max 6 suggestions
+                 setShowAutocomplete(matches.length > 0);
+               } else {
+                 setShowAutocomplete(false);
+               }
+            }}
             onFocus={(e) => e.target.select()}
+            onBlur={() => {
+               // timeout so clicks on suggestions register before hiding
+               setTimeout(() => setShowAutocomplete(false), 200);
+            }}
           />
+
+          {showAutocomplete && (
+             <div style={{
+                position: 'absolute', top: '100%', left: 0, right: 0,
+                background: 'var(--bg-color)', border: '1px solid var(--border-color)',
+                borderRadius: '0 0 8px 8px', zIndex: 100, boxShadow: '0 4px 12px rgba(0,0,0,0.1)',
+                maxHeight: '300px', overflowY: 'auto'
+             }}>
+                {autocompleteSuggestions.map((s, i) => (
+                   <div key={i} style={{
+                      padding: '8px 12px', cursor: 'pointer', display: 'flex', flexDirection: 'column',
+                      borderBottom: i < autocompleteSuggestions.length - 1 ? '1px solid var(--border-color)' : 'none'
+                   }}
+                   onMouseDown={(e) => {
+                      e.preventDefault(); // prevent input blur
+                      navigate(s.url);
+                      setShowAutocomplete(false);
+                   }}
+                   onMouseEnter={(e) => e.currentTarget.style.backgroundColor = 'var(--tab-bg)'}
+                   onMouseLeave={(e) => e.currentTarget.style.backgroundColor = 'transparent'}
+                   >
+                      <div style={{fontSize: '13px', fontWeight: 'bold', color: 'var(--text-color)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis'}}>{s.title}</div>
+                      <div style={{fontSize: '11px', color: '#888', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis'}}>{s.url}</div>
+                   </div>
+                ))}
+             </div>
+          )}
+
           <button className="bookmark-toggle-btn" type="button" title="Reader Mode" onClick={() => {
             const wv = webviewRefs.current[activeTabId];
             if (wv) {
