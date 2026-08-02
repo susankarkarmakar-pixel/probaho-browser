@@ -812,3 +812,12 @@ body.theme-light .ntp-tile-title {
 .tab:focus-visible {
   outline-offset: -4px;
 }
+
+/* Vertical Tabs Sidebar */
+.vertical-tabs-sidebar {
+  transition: width 0.2s ease;
+}
+
+.vertical-tab:hover {
+  background-color: var(--tab-bg) !important;
+}

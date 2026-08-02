@@ -101,7 +101,8 @@ function App() {
           theme: 'dark',
           adBlockerEnabled: true,
           language: 'en' as Language,
-          newTabBackgroundUrl: ''
+          newTabBackgroundUrl: '',
+          verticalTabs: false
         };
         const merged = { ...def, ...parsed };
         settingsRef.current = merged;
@@ -114,7 +115,8 @@ function App() {
       theme: 'dark',
       adBlockerEnabled: true,
       language: 'en' as Language,
-      newTabBackgroundUrl: ''
+      newTabBackgroundUrl: '',
+      verticalTabs: false
     };
     settingsRef.current = def;
     return def;
@@ -1006,8 +1008,8 @@ function App() {
   return (
     <div className="browser-container">
       {/* Titlebar with tabs */}
-      <div className="titlebar">
-        <div className="tabs">
+      <div className="titlebar" style={settings.verticalTabs ? { paddingLeft: '80px', height: '40px' } : {}}>
+        <div className="tabs" style={{ display: settings.verticalTabs ? 'none' : 'flex' }}>
           {[...tabs].sort((a, b) => {
             if (a.isPinned === b.isPinned) return 0;
             return a.isPinned ? -1 : 1;
@@ -1266,16 +1268,78 @@ function App() {
         <button className="nav-btn" onClick={() => { setShowMenu(false); setShowHistory(false); setShowDownloads(false); setShowReadingList(false); setShowBookmarks(!showBookmarks); }}>
           <Bookmark size={16} />
         </button>
-        <button
-          className="nav-btn"
-          style={{ position: 'relative' }}
-          onClick={() => { setShowBookmarks(false); setShowHistory(false); setShowMenu(false); setShowReadingList(false); setShowDownloads(!showDownloads); }}
-        >
-          <Download size={16} />
-          {hasActiveDownloads && (
-            <div style={{ position: 'absolute', bottom: 0, left: 0, height: '3px', backgroundColor: '#4caf50', width: `${totalDownloadProgress}%`, transition: 'width 0.3s' }} />
+        <div style={{ position: 'relative' }}>
+          <button
+            className="nav-btn"
+            style={{ position: 'relative' }}
+            onClick={() => { setShowBookmarks(false); setShowHistory(false); setShowMenu(false); setShowReadingList(false); setShowDownloads(!showDownloads); }}
+          >
+            <Download size={16} />
+            {hasActiveDownloads && (
+              <div style={{ position: 'absolute', bottom: 0, left: 0, height: '3px', backgroundColor: '#4caf50', width: `${totalDownloadProgress}%`, transition: 'width 0.3s' }} />
+            )}
+          </button>
+
+          {/* Downloads Pop-out Panel inside relative container */}
+          {showDownloads && (
+            <div className="downloads-popout" style={{
+              position: 'absolute', top: '100%', right: 0, width: '350px',
+              background: 'var(--bg-color)', border: '1px solid var(--border-color)',
+              borderRadius: '8px', zIndex: 100, boxShadow: '0 8px 24px rgba(0,0,0,0.2)',
+              marginTop: '8px'
+            }}>
+              <div className="bookmarks-header" style={{padding: '12px 16px', borderBottom: '1px solid var(--border-color)', margin: 0}}>
+                <h3 style={{margin: 0, fontSize: '14px'}}>{t('downloads', settings.language)}</h3>
+                <div style={{display: 'flex', gap: '8px', alignItems: 'center'}}>
+                  <button className="clear-history-btn" onClick={() => setDownloads([])} style={{padding: '4px 8px'}}>{t('clear', settings.language)}</button>
+                </div>
+              </div>
+              <div className="bookmarks-list" style={{maxHeight: '300px', overflowY: 'auto', padding: '8px'}}>
+                {downloads.length === 0 ? (
+                  <div className="no-bookmarks" style={{padding: '16px', textAlign: 'center'}}>{t('noDownloads', settings.language)}</div>
+                ) : (
+                  downloads.map((d, i) => (
+                    <div key={i} className="download-item" style={{marginBottom: '8px', padding: '8px', borderRadius: '6px', background: 'var(--tab-bg)', display: 'flex', justifyContent: 'space-between'}}>
+                      <div className="download-info" style={{flex: 1, overflow: 'hidden'}}>
+                        <div className="bookmark-title" style={{marginBottom: '4px', fontSize: '13px', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis'}}>{d.fileName}</div>
+                        <div className="bookmark-url" style={{fontSize: '11px'}}>
+                          {d.state === 'completed' ? t('completed', settings.language) :
+                           d.state === 'progressing' ? `${Math.round(d.receivedBytes / 1024 / 1024 * 10) / 10} MB / ${Math.round(d.totalBytes / 1024 / 1024 * 10) / 10} MB` : d.state}
+                        </div>
+                        {d.state === 'progressing' && (
+                          <div className="download-progress-bar" style={{marginTop: '4px'}}>
+                            <div className="download-progress-fill" style={{width: `${(d.receivedBytes / d.totalBytes) * 100}%`}}></div>
+                          </div>
+                        )}
+                      </div>
+                      <div className="download-actions" style={{display: 'flex', gap: '4px', alignItems: 'center', paddingLeft: '8px'}}>
+                        {d.state === 'completed' && (
+                          <>
+                            <button className="nav-btn" style={{width: '24px', height: '24px', padding: 0}} title={t('openFile', settings.language)} onClick={() => window.electronAPI?.openFile(d.savePath)}>
+                              <FileCode size={12} />
+                            </button>
+                            <button className="nav-btn" style={{width: '24px', height: '24px', padding: 0}} title={t('showInFolder', settings.language)} onClick={() => window.electronAPI?.showInFolder(d.savePath)}>
+                              <Folder size={12} />
+                            </button>
+                          </>
+                        )}
+                        <button className="nav-btn" style={{width: '24px', height: '24px', padding: 0}} title="Remove" onClick={() => {
+                          if (d.state === 'progressing') {
+                            window.electronAPI?.cancelDownload?.(d.id);
+                          }
+                          setDownloads(prev => prev.filter(item => item.id !== d.id));
+                        }}>
+                          <X size={12} />
+                        </button>
+                      </div>
+                    </div>
+                  ))
+                )}
+              </div>
+            </div>
           )}
-        </button>
+        </div>
+
         <button className="nav-btn" onClick={() => { setShowBookmarks(false); setShowHistory(false); setShowDownloads(false); setShowReadingList(false); setShowMenu(!showMenu); }}>
           <Menu size={16} />
         </button>
@@ -1383,71 +1447,52 @@ function App() {
 
 
 
-      {/* Downloads Panel */}
-      {showDownloads && (
-        <div className="bookmarks-panel" style={{width: '350px'}}>
-          <div className="bookmarks-header">
-            <h3>{t('downloads', settings.language)}</h3>
-            <div style={{display: 'flex', gap: '8px', alignItems: 'center'}}>
-              <button className="clear-history-btn" onClick={() => setDownloads([])}>{t('clear', settings.language)}</button>
-              <button className="nav-btn" onClick={() => setShowDownloads(false)}><X size={16} /></button>
-            </div>
-          </div>
-          <div className="bookmarks-list">
-            {downloads.length === 0 ? (
-              <div className="no-bookmarks">{t('noDownloads', settings.language)}</div>
-            ) : (
-              downloads.map((d, i) => (
-                <div key={i} className="download-item">
-                  <div className="download-info">
-                    <div className="bookmark-title" style={{marginBottom: '4px'}}>{d.fileName}</div>
-                    <div className="bookmark-url">
-                      {d.state === 'completed' ? t('completed', settings.language) :
-                       d.state === 'progressing' ? `${Math.round(d.receivedBytes / 1024 / 1024 * 10) / 10} MB / ${Math.round(d.totalBytes / 1024 / 1024 * 10) / 10} MB` : d.state}
-                    </div>
-                    {d.state === 'progressing' && (
-                      <div className="download-progress-bar">
-                        <div className="download-progress-fill" style={{width: `${(d.receivedBytes / d.totalBytes) * 100}%`}}></div>
-                      </div>
-                    )}
-                  </div>
-                  <div className="download-actions">
-                    {d.state === 'completed' && (
-                      <>
-                        <button className="nav-btn" title={t('openFile', settings.language)} onClick={() => window.electronAPI?.openFile(d.savePath)}>
-                          <FileCode size={14} />
-                        </button>
-                        <button className="nav-btn" title={t('showInFolder', settings.language)} onClick={() => window.electronAPI?.showInFolder(d.savePath)}>
-                          <Folder size={14} />
-                        </button>
-                      </>
-                    )}
-                    <button className="nav-btn" title="Remove" onClick={() => {
-                      if (d.state === 'progressing') {
-                        window.electronAPI?.cancelDownload?.(d.id);
-                      }
-                      setDownloads(prev => prev.filter(item => item.id !== d.id));
-                    }}>
-                      <X size={14} />
-                    </button>
-                  </div>
-                </div>
-              ))
-            )}
-          </div>
-        </div>
-      )}
 
 
       {/* Settings Modal */}
       {showSettings && (
         <div className="about-modal-overlay" onClick={() => setShowSettings(false)}>
-          <div className="about-modal" style={{width: '500px'}} onClick={e => e.stopPropagation()}>
+          <div className="about-modal" style={{width: '500px', maxHeight: '80vh', overflowY: 'auto'}} onClick={e => e.stopPropagation()}>
             <div className="about-header">
               <h3>{t('settings', settings.language)}</h3>
               <button className="nav-btn" onClick={() => setShowSettings(false)}><X size={16} /></button>
             </div>
             <div className="about-content" style={{textAlign: 'left', padding: '16px 24px'}}>
+              <div style={{marginBottom: '16px', display: 'flex', gap: '8px'}}>
+                <button className="clear-history-btn" style={{flex: 1, padding: '8px'}} onClick={() => {
+                  const data = { bookmarks, history, readingList, settings };
+                  const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
+                  const url = URL.createObjectURL(blob);
+                  const a = document.createElement('a');
+                  a.href = url;
+                  a.download = 'probaho_profile.json';
+                  a.click();
+                  URL.revokeObjectURL(url);
+                }}>Export Profile</button>
+                <label className="clear-history-btn" style={{flex: 1, padding: '8px', textAlign: 'center', cursor: 'pointer'}}>
+                  Import Profile
+                  <input type="file" accept=".json" style={{display: 'none'}} onChange={(e) => {
+                    const file = e.target.files?.[0];
+                    if (file) {
+                      const reader = new FileReader();
+                      reader.onload = (ev) => {
+                        try {
+                          const data = JSON.parse(ev.target?.result as string);
+                          if (data.bookmarks) setBookmarks(data.bookmarks);
+                          if (data.history) setHistory(data.history);
+                          if (data.readingList) setReadingList(data.readingList);
+                          if (data.settings) setSettings(data.settings);
+                          alert('Profile imported successfully!');
+                        } catch (err) {
+                          alert('Failed to import profile.');
+                        }
+                      };
+                      reader.readAsText(file);
+                    }
+                  }} />
+                </label>
+              </div>
+
               <div style={{marginBottom: '16px'}}>
                 <label style={{display: 'block', marginBottom: '8px', fontSize: '13px', fontWeight: 'bold'}}>{t('homepageUrl', settings.language)}</label>
                 <input
@@ -1488,6 +1533,17 @@ function App() {
                     style={{marginRight: '8px'}}
                   />
                   Enable Ad & Tracker Blocking
+                </label>
+              </div>
+              <div style={{marginBottom: '16px'}}>
+                <label style={{display: 'flex', alignItems: 'center', cursor: 'pointer', fontSize: '13px', fontWeight: 'bold'}}>
+                  <input
+                    type="checkbox"
+                    checked={settings.verticalTabs === true}
+                    onChange={e => setSettings({...settings, verticalTabs: e.target.checked})}
+                    style={{marginRight: '8px'}}
+                  />
+                  Enable Vertical Tabs Sidebar
                 </label>
               </div>
 
@@ -1682,7 +1738,113 @@ function App() {
       )}
 
       {/* Content Area */}
-      <div className="content-area">
+      <div className="content-area" style={{ display: 'flex', flexDirection: 'row', flex: 1, overflow: 'hidden' }}>
+
+        {settings.verticalTabs && (
+          <div className="vertical-tabs-sidebar" style={{
+            width: '240px',
+            background: 'var(--bg-color)',
+            borderRight: '1px solid var(--border-color)',
+            display: 'flex',
+            flexDirection: 'column',
+            overflowY: 'auto'
+          }}>
+            <div style={{ padding: '8px', borderBottom: '1px solid var(--border-color)', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+              <span style={{ fontSize: '13px', fontWeight: 'bold' }}>Tabs</span>
+              <button className="nav-btn" onClick={() => createTab(isPrivateWindow)}><Plus size={14} /></button>
+            </div>
+            <div style={{ padding: '8px', display: 'flex', flexDirection: 'column', gap: '4px' }}>
+              {[...tabs].sort((a, b) => {
+                if (a.isPinned === b.isPinned) return 0;
+                return a.isPinned ? -1 : 1;
+              }).map(tab => (
+                <div
+                  key={tab.id}
+                  className={`tab vertical-tab ${tab.id === activeTabId ? 'active' : ''} ${tab.isPrivate ? 'private' : ''} ${tab.isPinned ? 'pinned' : ''}`}
+                  style={{
+                     display: 'flex',
+                     alignItems: 'center',
+                     padding: '8px',
+                     borderRadius: '6px',
+                     cursor: 'default',
+                     background: tab.id === activeTabId ? 'var(--tab-active-bg)' : 'transparent',
+                     border: '1px solid transparent',
+                     userSelect: 'none'
+                  }}
+                  onClick={() => setActiveTabId(tab.id)}
+                  onContextMenu={(e) => {
+                    e.preventDefault();
+                    updateTab(tab.id, { isPinned: !tab.isPinned });
+                  }}
+                  draggable
+                  onDragStart={(e) => {
+                    setDraggedTabId(tab.id);
+                    e.dataTransfer.effectAllowed = 'move';
+                  }}
+                  onDragOver={(e) => {
+                    e.preventDefault();
+                    e.dataTransfer.dropEffect = 'move';
+                  }}
+                  onDrop={(e) => {
+                    e.preventDefault();
+                    if (!draggedTabId || draggedTabId === tab.id) return;
+                    setTabs(prev => {
+                      const draggedIndex = prev.findIndex(t => t.id === draggedTabId);
+                      const dropIndex = prev.findIndex(t => t.id === tab.id);
+                      if (draggedIndex === -1 || dropIndex === -1) return prev;
+                      const newTabs = [...prev];
+                      const [removed] = newTabs.splice(draggedIndex, 1);
+                      newTabs.splice(dropIndex, 0, removed);
+                      return newTabs;
+                    });
+                    setDraggedTabId(null);
+                  }}
+                  onDragEnd={() => setDraggedTabId(null)}
+                  onMouseDown={(e) => {
+                    if (e.button === 1) { // Middle click
+                      closeTab(e, tab.id);
+                    }
+                  }}
+                >
+                  {tab.isPrivate && <EyeOff size={10} style={{marginRight: '8px', opacity: 0.8}} />}
+                  {!tab.isPrivate && (
+                    tab.favicon
+                      ? <img src={tab.favicon} style={{width: 16, height: 16, marginRight: 8, flexShrink: 0}} />
+                      : <Globe size={16} style={{marginRight: 8, opacity: 0.7, flexShrink: 0}} />
+                  )}
+
+                  <span className="tab-title" style={{ flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', fontSize: '13px', color: tab.id === activeTabId ? 'var(--text-color)' : 'var(--text-muted)' }}>
+                    {tab.title}
+                  </span>
+
+                  {(tab.isAudible || tab.isMuted) && (
+                    <div
+                      className="tab-audio-indicator"
+                      style={{marginLeft: '4px', display: 'flex', alignItems: 'center', opacity: 0.8, cursor: 'pointer'}}
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        const wv = webviewRefs.current[tab.id];
+                        if (wv) {
+                          const newMutedState = !tab.isMuted;
+                          wv.setAudioMuted(newMutedState);
+                          updateTab(tab.id, { isMuted: newMutedState });
+                        }
+                      }}
+                    >
+                      {tab.isMuted ? <VolumeX size={12} /> : <Volume2 size={12} />}
+                    </div>
+                  )}
+
+                  <div className="tab-close" onClick={(e) => closeTab(e, tab.id)} style={{ padding: '2px', marginLeft: '4px', borderRadius: '4px', cursor: 'pointer' }}>
+                    <X size={12} />
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+
+        <div style={{ flex: 1, position: 'relative', display: 'flex', flexDirection: 'column' }}>
 
         {showFind && (
           <div className="find-bar">
@@ -1825,6 +1987,7 @@ function App() {
             </div>
           </div>
         ))}
+        </div>
       </div>
     </div>
   );
