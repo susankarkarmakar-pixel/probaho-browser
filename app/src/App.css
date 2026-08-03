@@ -324,6 +324,78 @@ webview:not(.active) {
   text-overflow: ellipsis;
 }
 
+/* Web Panels Sidebar */
+.web-panels-sidebar {
+  width: 48px;
+  background-color: var(--tab-bg);
+  border-left: 1px solid var(--border-color);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  padding-top: 8px;
+  z-index: 50;
+}
+
+.web-panel-btn {
+  width: 36px;
+  height: 36px;
+  border-radius: 8px;
+  background: transparent;
+  border: none;
+  color: var(--text-color);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  margin-bottom: 8px;
+  transition: background-color 0.2s;
+}
+
+.web-panel-btn:hover {
+  background-color: var(--tab-active-bg);
+}
+
+.web-panel-btn.active {
+  background-color: var(--primary-color);
+  color: white;
+}
+
+.web-panel-view {
+  position: absolute;
+  top: 0;
+  right: 48px; /* width of sidebar */
+  bottom: 0;
+  width: 350px;
+  background-color: var(--bg-color);
+  border-left: 1px solid var(--border-color);
+  box-shadow: -4px 0 16px rgba(0,0,0,0.2);
+  display: flex;
+  flex-direction: column;
+  z-index: 49;
+  animation: slideInRight 0.2s ease-out forwards;
+}
+
+.web-panel-header {
+  height: 36px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0 12px;
+  border-bottom: 1px solid var(--border-color);
+  background-color: var(--tab-bg);
+}
+
+@keyframes slideInRight {
+  from {
+    transform: translateX(100%);
+    opacity: 0;
+  }
+  to {
+    transform: translateX(0);
+    opacity: 1;
+  }
+}
+
 .bookmark-url {
   font-size: 11px;
   color: #888;

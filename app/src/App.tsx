@@ -3,7 +3,7 @@ import { t, Language } from './i18n';
 import PdfViewer from './PdfViewer';
 import {
   ArrowLeft, ArrowRight, RotateCw, Home, Plus,
-  Lock, X, Square, Search, Star, Bookmark, Menu, History, ZoomIn, FileCode, Printer, LogOut, Info, Download, Folder, Settings, ChevronUp, ChevronDown, EyeOff, Shield, BookOpen, Volume2, VolumeX, Globe, BookPlus, PictureInPicture, Share2
+  Lock, X, Square, Search, Star, Bookmark, Menu, History, ZoomIn, FileCode, Printer, LogOut, Info, Download, Folder, Settings, ChevronUp, ChevronDown, EyeOff, Shield, BookOpen, Volume2, VolumeX, Globe, BookPlus, PictureInPicture, Share2, MessageSquare, Music, MessageCircle, Library
 } from 'lucide-react';
 
 interface DownloadItem {
@@ -107,7 +107,8 @@ function App() {
           adBlockerEnabled: true,
           language: 'en' as Language,
           newTabBackgroundUrl: '',
-          verticalTabs: false
+          verticalTabs: false,
+          accentColor: '#7b2cbf'
         };
         const merged = { ...def, ...parsed };
         settingsRef.current = merged;
@@ -121,13 +122,21 @@ function App() {
       adBlockerEnabled: true,
       language: 'en' as Language,
       newTabBackgroundUrl: '',
-      verticalTabs: false
+      verticalTabs: false,
+      accentColor: '#7b2cbf'
     };
     settingsRef.current = def;
     return def;
   });
 
   const isPrivateWindow = window.location.search.includes('private=true');
+  const [webPanels] = useState([
+    { id: 'chatgpt', title: 'ChatGPT', url: 'https://chat.openai.com', icon: MessageSquare },
+    { id: 'spotify', title: 'Spotify', url: 'https://open.spotify.com', icon: Music },
+    { id: 'whatsapp', title: 'WhatsApp', url: 'https://web.whatsapp.com', icon: MessageCircle },
+    { id: 'wikipedia', title: 'Wikipedia', url: 'https://wikipedia.org', icon: Library }
+  ]);
+  const [activePanelId, setActivePanelId] = useState<string | null>(null);
 
   const [tabs, setTabs] = useState<Tab[]>(() => {
     if (isPrivateWindow) {
@@ -236,6 +245,14 @@ function App() {
     settingsRef.current = settings;
     localStorage.setItem('probaho-settings', JSON.stringify(settings));
     document.body.className = settings.theme === 'light' ? 'theme-light' : '';
+
+    // Apply custom accent color
+    if (settings.accentColor) {
+      document.documentElement.style.setProperty('--primary-color', settings.accentColor);
+    } else {
+      document.documentElement.style.setProperty('--primary-color', '#7b2cbf');
+    }
+
     if (window.electronAPI?.setAdBlocker) {
       window.electronAPI.setAdBlocker(settings.adBlockerEnabled !== false);
     }
@@ -616,11 +633,11 @@ function App() {
   };
 
   const closeTabId = (id: string) => {
+    const tabToClose = tabs.find(t => t.id === id);
+    if (tabToClose && tabToClose.url !== 'probaho://newtab' && tabToClose.url !== 'about:blank') {
+      setRecentlyClosed(rc => [{title: tabToClose.title, url: tabToClose.url}, ...rc].slice(0, 10));
+    }
     setTabs(prev => {
-      const tabToClose = prev.find(t => t.id === id);
-      if (tabToClose && tabToClose.url !== 'probaho://newtab' && tabToClose.url !== 'about:blank') {
-        setRecentlyClosed(rc => [{title: tabToClose.title, url: tabToClose.url}, ...rc].slice(0, 10));
-      }
       if (prev.length === 1) {
         window.electronAPI?.close();
         return prev;
@@ -1562,20 +1579,21 @@ function App() {
                 }}>Export Profile</button>
                 <label className="clear-history-btn" style={{flex: 1, padding: '8px', textAlign: 'center', cursor: 'pointer'}}>
                   Import Profile
-                  <input type="file" accept=".json" style={{display: 'none'}} onChange={(e) => {
+                  <input type="file" accept=".json" style={{display: 'none'}} onClick={(e) => { (e.target as HTMLInputElement).value = '' }} onChange={(e) => {
                     const file = e.target.files?.[0];
                     if (file) {
                       const reader = new FileReader();
                       reader.onload = (ev) => {
                         try {
                           const data = JSON.parse(ev.target?.result as string);
-                          if (data.bookmarks) setBookmarks(data.bookmarks);
-                          if (data.history) setHistory(data.history);
-                          if (data.readingList) setReadingList(data.readingList);
-                          if (data.settings) setSettings(data.settings);
+                          if (typeof data !== 'object' || data === null) throw new Error('Invalid format');
+                          if (Array.isArray(data.bookmarks)) setBookmarks(data.bookmarks);
+                          if (Array.isArray(data.history)) setHistory(data.history);
+                          if (Array.isArray(data.readingList)) setReadingList(data.readingList);
+                          if (typeof data.settings === 'object') setSettings(data.settings);
                           alert('Profile imported successfully!');
                         } catch (err) {
-                          alert('Failed to import profile.');
+                          alert('Failed to import profile. Ensure the file is a valid JSON profile.');
                         }
                       };
                       reader.readAsText(file);
@@ -1659,6 +1677,19 @@ function App() {
                   <option value="dark">{t('dark', settings.language)}</option>
                   <option value="light">{t('light', settings.language)}</option>
                 </select>
+              </div>
+              <div style={{marginBottom: '16px'}}>
+                <label style={{display: 'block', marginBottom: '8px', fontSize: '13px', fontWeight: 'bold'}}>Accent Color</label>
+                <div style={{display: 'flex', alignItems: 'center', gap: '12px'}}>
+                  <input
+                    type="color"
+                    value={settings.accentColor || '#7b2cbf'}
+                    onChange={e => setSettings({...settings, accentColor: e.target.value})}
+                    style={{width: '40px', height: '40px', padding: '0', border: 'none', borderRadius: '8px', cursor: 'pointer', background: 'transparent'}}
+                  />
+                  <span style={{fontSize: '13px', color: '#888'}}>{settings.accentColor || '#7b2cbf'}</span>
+                  <button className="clear-history-btn" onClick={() => setSettings({...settings, accentColor: '#7b2cbf'})} style={{padding: '4px 8px', fontSize: '12px'}}>Reset</button>
+                </div>
               </div>
               <div style={{marginBottom: '16px'}}>
                 <button
@@ -2181,6 +2212,37 @@ function App() {
           </div>
         ))}
         </div>
+
+        {/* Web Panels Sidebar (Right) */}
+        <div className="web-panels-sidebar" style={{ position: 'relative', zIndex: 150 }}>
+           <div className="web-panels-icons">
+             {webPanels.map(panel => (
+                <button
+                  key={panel.id}
+                  className={`web-panel-btn ${activePanelId === panel.id ? 'active' : ''}`}
+                  title={panel.title}
+                  onClick={() => setActivePanelId(activePanelId === panel.id ? null : panel.id)}
+                >
+                   <panel.icon size={20} strokeWidth={1.5} />
+                </button>
+             ))}
+           </div>
+        </div>
+
+        {/* Web Panel Slide-out View */}
+        {activePanelId && (
+          <div className="web-panel-view" style={{ position: 'absolute', right: '48px', top: 0, bottom: 0, zIndex: 149 }}>
+             <div className="web-panel-header">
+                <span style={{fontSize: '13px', fontWeight: 'bold'}}>{webPanels.find(p => p.id === activePanelId)?.title}</span>
+                <button className="nav-btn" onClick={() => setActivePanelId(null)}><X size={14}/></button>
+             </div>
+             <webview // @ts-ignore
+                src={webPanels.find(p => p.id === activePanelId)?.url || 'about:blank'}
+                style={{flex: 1, border: 'none', background: '#fff'}}
+                webpreferences="contextIsolation=yes, nodeIntegration=no"
+             />
+          </div>
+        )}
       </div>
     </div>
   );
