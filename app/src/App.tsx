@@ -3,7 +3,7 @@ import { t, Language } from './i18n';
 import PdfViewer from './PdfViewer';
 import {
   ArrowLeft, ArrowRight, RotateCw, Home, Plus,
-  Lock, X, Square, Search, Star, Bookmark, Menu, History, ZoomIn, FileCode, Printer, LogOut, Info, Download, Folder, Settings, ChevronUp, ChevronDown, EyeOff, Shield, BookOpen, Volume2, VolumeX, Globe, BookPlus, PictureInPicture, Share2, MessageSquare, Music, MessageCircle, Library
+  Lock, X, Square, Search, Star, Bookmark, Menu, History, ZoomIn, FileCode, Printer, LogOut, Info, Download, Folder, Settings, ChevronUp, ChevronDown, EyeOff, Shield, BookOpen, Volume2, VolumeX, Globe, BookPlus, PictureInPicture, Share2, MessageSquare, Music, MessageCircle, Library, Columns, PanelRight
 } from 'lucide-react';
 
 interface DownloadItem {
@@ -33,6 +33,7 @@ interface Tab {
   isAudible?: boolean;
   isMuted?: boolean;
   favicon?: string;
+  workspaceId?: string;
 }
 
 const DEFAULT_URL = 'https://www.google.com';
@@ -137,6 +138,17 @@ function App() {
     { id: 'wikipedia', title: 'Wikipedia', url: 'https://wikipedia.org', icon: Library }
   ]);
   const [activePanelId, setActivePanelId] = useState<string | null>(null);
+
+  const [workspaces, setWorkspaces] = useState<{id: string, name: string}[]>(() => {
+    const saved = localStorage.getItem('workspaces');
+    return saved ? JSON.parse(saved) : [{id: 'default', name: 'Personal'}];
+  });
+  const [activeWorkspaceId, setActiveWorkspaceId] = useState<string>(() => {
+    return localStorage.getItem('activeWorkspaceId') || 'default';
+  });
+
+  const [splitTabId, setSplitTabId] = useState<string | null>(null);
+  const [focusedPane, setFocusedPane] = useState<'main' | 'split'>('main');
 
   const [tabs, setTabs] = useState<Tab[]>(() => {
     if (isPrivateWindow) {
@@ -475,11 +487,21 @@ function App() {
     localStorage.setItem('activeTabId', activeIsPrivate ? (publicTabs[0]?.id || '') : activeTabId);
   }, [tabs, activeTabId, isPrivateWindow]);
 
+  useEffect(() => {
+    localStorage.setItem('workspaces', JSON.stringify(workspaces));
+  }, [workspaces]);
+
+  useEffect(() => {
+    localStorage.setItem('activeWorkspaceId', activeWorkspaceId);
+  }, [activeWorkspaceId]);
+
+  const targetedTabId = focusedPane === 'split' && splitTabId ? splitTabId : activeTabId;
+
   // Keep a ref of the active tab id to avoid stale closures in event listeners
   const activeTabIdRef = useRef<string>(activeTabId);
   useEffect(() => {
-    activeTabIdRef.current = activeTabId;
-  }, [activeTabId]);
+    activeTabIdRef.current = targetedTabId;
+  }, [targetedTabId]);
 
   const activeDownloads = downloads.filter(d => d.state === 'progressing');
   const hasActiveDownloads = activeDownloads.length > 0;
@@ -602,8 +624,8 @@ function App() {
   const activeTab = tabs.find(t => t.id === activeTabId);
 
   useEffect(() => {
-    if (activeTab) {
-      setInputUrl(activeTab.url === 'probaho://newtab' ? '' : activeTab.url);
+    if (targetedTab) {
+      setInputUrl(targetedTab.url === 'probaho://newtab' ? '' : targetedTab.url);
     }
     // Hide find bar when switching tabs
     if (showFind) {
@@ -613,7 +635,7 @@ function App() {
       setFindText('');
       setFindResult({ activeMatchOrdinal: 0, matches: 0 });
     }
-  }, [activeTabId]);
+  }, [targetedTabId]);
 
   const createTab = (isPrivate = isPrivateWindow) => {
     const newTab: Tab = {
@@ -626,7 +648,8 @@ function App() {
       isSecure: true,
       zoomLevel: 1,
       blockedCount: 0,
-      isPrivate: isPrivate
+      isPrivate: isPrivate,
+      workspaceId: activeWorkspaceId
     };
     setTabs(prev => [...prev, newTab]);
     setActiveTabId(newTab.id);
@@ -973,15 +996,15 @@ function App() {
       }
     }
 
-    updateTab(activeTabId, { url: finalUrl, isPdf: false });
+    updateTab(targetedTabId, { url: finalUrl, isPdf: false });
 
     if (finalUrl.toLowerCase().endsWith('.pdf')) {
-      updateTab(activeTabId, { url: finalUrl, isPdf: true, title: finalUrl.split('/').pop() || 'PDF Document' });
+      updateTab(targetedTabId, { url: finalUrl, isPdf: true, title: finalUrl.split('/').pop() || 'PDF Document' });
       setInputUrl(finalUrl);
       return;
     }
 
-    const wv = webviewRefs.current[activeTabId];
+    const wv = webviewRefs.current[targetedTabId];
     if (wv) {
       try {
         wv.loadURL(finalUrl);
@@ -998,17 +1021,17 @@ function App() {
   };
 
   const goBack = () => {
-    const wv = webviewRefs.current[activeTabId];
+    const wv = webviewRefs.current[targetedTabId];
     if (wv && wv.canGoBack()) wv.goBack();
   };
 
   const goForward = () => {
-    const wv = webviewRefs.current[activeTabId];
+    const wv = webviewRefs.current[targetedTabId];
     if (wv && wv.canGoForward()) wv.goForward();
   };
 
   const reload = () => {
-    const wv = webviewRefs.current[activeTabId];
+    const wv = webviewRefs.current[targetedTabId];
     if (wv) wv.reload();
   };
 
@@ -1017,7 +1040,7 @@ function App() {
   };
 
   const toggleBookmark = () => {
-    const tab = tabs.find(t => t.id === activeTabIdRef.current);
+    const tab = tabs.find(t => t.id === targetedTabId);
     if (!tab) return;
     const isBookmarked = bookmarks.some(b => b.url === tab.url);
     if (isBookmarked) {
@@ -1027,7 +1050,8 @@ function App() {
     }
   };
 
-  const isCurrentBookmarked = activeTab ? bookmarks.some(b => b.url === activeTab.url) : false;
+  const targetedTab = tabs.find(t => t.id === targetedTabId);
+  const isCurrentBookmarked = targetedTab ? bookmarks.some(b => b.url === targetedTab.url) : false;
 
   const getDomainFromUrl = (url: string) => {
     try {
@@ -1061,35 +1085,131 @@ function App() {
   };
 
   const handleZoom = (delta: number) => {
-    const currentZoom = activeTab?.zoomLevel || 1;
+    const currentZoom = targetedTab?.zoomLevel || 1;
     const newZoom = Math.max(0.25, Math.min(5, delta === (1 - currentZoom) ? 1 : currentZoom + delta));
 
-    updateTab(activeTabId, { zoomLevel: newZoom });
-    if (activeTab) {
-      saveZoom(activeTab.url, newZoom);
+    updateTab(targetedTabId, { zoomLevel: newZoom });
+    if (targetedTab) {
+      saveZoom(targetedTab.url, newZoom);
     }
-    const wv = webviewRefs.current[activeTabId];
+    const wv = webviewRefs.current[targetedTabId];
     if (wv) wv.setZoomFactor(newZoom);
   };
 
   const handlePrint = () => {
-    const wv = webviewRefs.current[activeTabId];
+    const wv = webviewRefs.current[targetedTabId];
     if (wv) wv.print();
     setShowMenu(false);
   };
 
   const toggleDevTools = () => {
-    const wv = webviewRefs.current[activeTabId];
+    const wv = webviewRefs.current[targetedTabId];
     if (wv) wv.openDevTools();
     setShowMenu(false);
   };
 
   return (
     <div className="browser-container">
+      {/* Web Panels Sidebar (Right) - Now globally scoped outside content area */}
+      <div className="web-panels-sidebar" style={{ position: 'absolute', right: 0, top: 0, bottom: 0, zIndex: 150 }}>
+         <div className="web-panels-icons">
+           {webPanels.map(panel => (
+              <button
+                key={panel.id}
+                className={`web-panel-btn ${activePanelId === panel.id ? 'active' : ''}`}
+                title={panel.title}
+                onClick={() => setActivePanelId(activePanelId === panel.id ? null : panel.id)}
+              >
+                 <panel.icon size={20} strokeWidth={1.5} />
+              </button>
+           ))}
+         </div>
+      </div>
+
+      {/* Web Panel Slide-out View */}
+      {activePanelId && (
+        <div className="web-panel-view" style={{ position: 'absolute', right: '48px', top: 0, bottom: 0, zIndex: 149 }}>
+           <div className="web-panel-header">
+              <span style={{fontSize: '13px', fontWeight: 'bold'}}>{webPanels.find(p => p.id === activePanelId)?.title}</span>
+              <button className="nav-btn" onClick={() => setActivePanelId(null)}><X size={14}/></button>
+           </div>
+           <webview // @ts-ignore
+              src={webPanels.find(p => p.id === activePanelId)?.url || 'about:blank'}
+              style={{flex: 1, border: 'none', background: '#fff'}}
+              webpreferences="contextIsolation=yes, nodeIntegration=no"
+           />
+        </div>
+      )}
+
+      {/* Wrap main browser in a div that respects the right sidebar */}
+      <div style={{ flex: 1, display: 'flex', flexDirection: 'column', marginRight: '48px' }}>
+
       {/* Titlebar with tabs */}
       <div className="titlebar" style={settings.verticalTabs ? { paddingLeft: '80px', height: '40px' } : {}}>
+
+        {/* Workspaces Selector */}
+        <div style={{ padding: '0 8px', display: 'flex', alignItems: 'center' }}>
+          <select
+            value={activeWorkspaceId}
+            onChange={(e) => {
+               const newWorkspaceId = e.target.value;
+               if (newWorkspaceId === 'new_workspace') {
+                 const name = prompt('Workspace Name:');
+                 if (name) {
+                    const id = Date.now().toString();
+                    setWorkspaces(prev => [...prev, {id, name}]);
+                    setActiveWorkspaceId(id);
+                    // create first tab in new workspace
+                    const newTab: Tab = {
+                      id: Date.now().toString(),
+                      url: settingsRef.current?.homepageUrl || 'https://www.google.com',
+                      title: t('newTab', settings.language),
+                      loading: false, canGoBack: false, canGoForward: false, isSecure: true, zoomLevel: 1, blockedCount: 0,
+                      workspaceId: id
+                    };
+                    setTabs(prevTabs => [...prevTabs, newTab]);
+                    setTimeout(() => setActiveTabId(newTab.id), 0);
+                 }
+               } else {
+                 setActiveWorkspaceId(newWorkspaceId);
+                 // find first tab in this workspace
+                 const wsTabs = tabs.filter(t => (t.workspaceId || 'default') === newWorkspaceId);
+                 if (wsTabs.length > 0) {
+                    setActiveTabId(wsTabs[wsTabs.length - 1].id);
+                 } else {
+                    const newTab: Tab = {
+                      id: Date.now().toString(),
+                      url: settingsRef.current?.homepageUrl || 'https://www.google.com',
+                      title: t('newTab', settings.language),
+                      loading: false, canGoBack: false, canGoForward: false, isSecure: true, zoomLevel: 1, blockedCount: 0,
+                      workspaceId: newWorkspaceId
+                    };
+                    setTabs(prevTabs => [...prevTabs, newTab]);
+                    setTimeout(() => setActiveTabId(newTab.id), 0);
+                 }
+               }
+            }}
+            style={{
+              background: 'var(--tab-active-bg)',
+              color: 'var(--text-color)',
+              border: '1px solid var(--border-color)',
+              borderRadius: '4px',
+              padding: '2px 4px',
+              fontSize: '11px',
+              outline: 'none',
+              maxWidth: '100px',
+              cursor: 'pointer'
+            }}
+          >
+            {workspaces.map(ws => (
+               <option key={ws.id} value={ws.id}>{ws.name}</option>
+            ))}
+            <option value="new_workspace">+ New Workspace</option>
+          </select>
+        </div>
+
         <div className="tabs" style={{ display: settings.verticalTabs ? 'none' : 'flex' }}>
-          {[...tabs].sort((a, b) => {
+          {[...tabs].filter(t => (t.workspaceId || 'default') === activeWorkspaceId).sort((a, b) => {
             if (a.isPinned === b.isPinned) return 0;
             return a.isPinned ? -1 : 1;
           }).map(tab => (
@@ -1172,32 +1292,51 @@ function App() {
             <Plus size={16} />
           </button>
         </div>
+      </div>
 
-        {/* Window controls */}
-        <div className="window-controls">
-          <button className="control-btn" onClick={() => window.electronAPI?.minimize()} />
-          <button className="control-btn" onClick={() => window.electronAPI?.maximize()} />
-          <button className="control-btn close" onClick={() => window.electronAPI?.close()} />
-        </div>
+      {/* Window controls */}
+      <div className="window-controls" style={{ position: 'absolute', top: 0, right: 0, zIndex: 100 }}>
+        <button className="control-btn" onClick={() => window.electronAPI?.minimize()} />
+        <button className="control-btn" onClick={() => window.electronAPI?.maximize()} />
+        <button className="control-btn close" onClick={() => window.electronAPI?.close()} />
       </div>
 
       {/* Toolbar */}
       <div className="toolbar">
         <div className="nav-buttons">
-          <button className="nav-btn" onClick={goBack} disabled={!activeTab?.canGoBack}>
+          <button className="nav-btn" onClick={goBack} disabled={!targetedTab?.canGoBack}>
             <ArrowLeft size={16} />
           </button>
-          <button className="nav-btn" onClick={goForward} disabled={!activeTab?.canGoForward}>
+          <button className="nav-btn" onClick={goForward} disabled={!targetedTab?.canGoForward}>
             <ArrowRight size={16} />
           </button>
           <button className="nav-btn" onClick={reload}>
-            <RotateCw size={16} className={activeTab?.loading ? "animate-spin" : ""} />
+            <RotateCw size={16} className={targetedTab?.loading ? "animate-spin" : ""} />
           </button>
           <button className="nav-btn" onClick={goHome}>
             <Home size={16} />
           </button>
+          <button className="nav-btn" title="Split View" onClick={() => {
+            if (splitTabId) {
+              setSplitTabId(null);
+              setFocusedPane('main');
+            } else {
+              const newTab: Tab = {
+                id: Date.now().toString(),
+                url: settingsRef.current?.homepageUrl || 'https://www.google.com',
+                title: t('newTab', settings.language),
+                loading: false, canGoBack: false, canGoForward: false, isSecure: true, zoomLevel: 1, blockedCount: 0,
+                workspaceId: activeWorkspaceId
+              };
+              setTabs(prev => [...prev, newTab]);
+              setSplitTabId(newTab.id);
+              setFocusedPane('split');
+            }
+          }}>
+            {splitTabId ? <PanelRight size={16} /> : <Columns size={16} />}
+          </button>
           <button className="nav-btn" title="Picture in Picture" onClick={() => {
-            const wv = webviewRefs.current[activeTabId];
+            const wv = webviewRefs.current[targetedTabId];
             if(wv) {
               wv.executeJavaScript("const v = document.querySelector('video'); if (v) { v.requestPictureInPicture(); } else { alert('No video found on this page.'); }", true);
             }
@@ -1208,7 +1347,7 @@ function App() {
 
         <form className="address-bar-container" onSubmit={onSubmit} style={{position: 'relative'}}>
           <div className="security-icon">
-            {activeTab?.isSecure ? <Lock size={14} color="#4caf50" /> : <Search size={14} />}
+            {targetedTab?.isSecure ? <Lock size={14} color="#4caf50" /> : <Search size={14} />}
           </div>
           <input
             ref={addressInputRef}
@@ -1283,7 +1422,7 @@ function App() {
           )}
 
           <button className="bookmark-toggle-btn" type="button" title="Reader Mode" onClick={() => {
-            const wv = webviewRefs.current[activeTabId];
+            const wv = webviewRefs.current[targetedTabId];
             if (wv) {
               const script = `
                 if (!document.body.dataset.readerMode) {
@@ -1328,16 +1467,16 @@ function App() {
           </button>
         </form>
         {settings.adBlockerEnabled !== false && (
-          <div className="shield-container" title={t('blockedAds', settings.language, { count: activeTab?.blockedCount || 0 })}>
-            <Shield size={16} color={activeTab && activeTab.blockedCount > 0 ? '#4caf50' : '#888'} />
-            {activeTab && activeTab.blockedCount > 0 && <span className="shield-count">{activeTab.blockedCount}</span>}
+          <div className="shield-container" title={t('blockedAds', settings.language, { count: targetedTab?.blockedCount || 0 })}>
+            <Shield size={16} color={targetedTab && targetedTab.blockedCount > 0 ? '#4caf50' : '#888'} />
+            {targetedTab && targetedTab.blockedCount > 0 && <span className="shield-count">{targetedTab.blockedCount}</span>}
           </div>
         )}
         <button className="nav-btn" title="Add to Reading List" onClick={() => {
-          const wv = webviewRefs.current[activeTabId];
+          const wv = webviewRefs.current[targetedTabId];
           if(wv) {
             wv.executeJavaScript("document.body.innerText").then((content: string) => {
-              setReadingList(prev => [{ title: activeTab?.title || '', url: activeTab?.url || '', content, savedAt: new Date().toLocaleString() }, ...prev]);
+              setReadingList(prev => [{ title: targetedTab?.title || '', url: targetedTab?.url || '', content, savedAt: new Date().toLocaleString() }, ...prev]);
               alert("Added to Reading List");
             });
           }
@@ -1348,7 +1487,7 @@ function App() {
           <Bookmark size={16} />
         </button>
         <button className="nav-btn" title="Share" onClick={() => {
-            const urlToShare = activeTab?.url || 'probaho://newtab';
+            const urlToShare = targetedTab?.url || 'probaho://newtab';
             if (urlToShare !== 'probaho://newtab' && urlToShare !== 'about:blank') {
                navigator.clipboard.writeText(urlToShare).then(() => {
                   alert('URL copied to clipboard!');
@@ -1978,7 +2117,7 @@ function App() {
               <button className="nav-btn" onClick={() => createTab(isPrivateWindow)}><Plus size={14} /></button>
             </div>
             <div style={{ padding: '8px', display: 'flex', flexDirection: 'column', gap: '4px' }}>
-              {[...tabs].sort((a, b) => {
+              {[...tabs].filter(t => (t.workspaceId || 'default') === activeWorkspaceId).sort((a, b) => {
                 if (a.isPinned === b.isPinned) return 0;
                 return a.isPinned ? -1 : 1;
               }).map(tab => (
@@ -2098,34 +2237,50 @@ function App() {
             </div>
           </div>
         )}
-        {tabs.map(tab => tab.url !== 'probaho://newtab' && !tab.isPdf && (
-          <webview // @ts-ignore
-            key={tab.id}
-            src="about:blank"
-            className={tab.id === activeTabId ? 'active' : ''}
-            ref={(el: any) => handleWebviewRef(tab.id, el, tab.url)}
-            webpreferences="contextIsolation=yes, nodeIntegration=no"
-            partition={tab.isPrivate ? `private-${tab.id}` : undefined}
-            allowpopups={true}
-          />
+        <div style={{ display: 'flex', flexDirection: 'row', flex: 1, width: '100%', height: '100%' }}>
+        {tabs.map(tab => tab.url !== 'probaho://newtab' && !tab.isPdf && (tab.id === activeTabId || tab.id === splitTabId) && (
+          <div key={`container-${tab.id}`} style={{
+              flex: 1, display: 'flex', position: 'relative',
+              borderRight: tab.id === activeTabId && splitTabId ? '2px solid var(--border-color)' : 'none',
+              boxShadow: focusedPane === 'main' && tab.id === activeTabId && splitTabId ? 'inset 0 0 0 2px var(--primary-color)' : (focusedPane === 'split' && tab.id === splitTabId ? 'inset 0 0 0 2px var(--primary-color)' : 'none')
+          }} onClick={() => { if (splitTabId) setFocusedPane(tab.id === activeTabId ? 'main' : 'split'); }}>
+            <webview // @ts-ignore
+              src="about:blank"
+              className="active"
+              ref={(el: any) => handleWebviewRef(tab.id, el, tab.url)}
+              webpreferences="contextIsolation=yes, nodeIntegration=no"
+              partition={tab.isPrivate ? `private-${tab.id}` : undefined}
+              allowpopups={true}
+              style={{ flex: 1, border: 'none', width: '100%', height: '100%' }}
+            />
+          </div>
         ))}
 
 
-        {tabs.map(tab => tab.id === activeTabId && tab.isPdf && (
-           <div key={`pdf-${tab.id}`} style={{height: '100%', width: '100%'}}>
+        {tabs.map(tab => tab.isPdf && (tab.id === activeTabId || tab.id === splitTabId) && (
+           <div key={`pdf-${tab.id}`} style={{
+              flex: 1, height: '100%', position: 'relative',
+              borderRight: tab.id === activeTabId && splitTabId ? '2px solid var(--border-color)' : 'none',
+              boxShadow: focusedPane === 'main' && tab.id === activeTabId && splitTabId ? 'inset 0 0 0 2px var(--primary-color)' : (focusedPane === 'split' && tab.id === splitTabId ? 'inset 0 0 0 2px var(--primary-color)' : 'none')
+           }} onClick={() => { if (splitTabId) setFocusedPane(tab.id === activeTabId ? 'main' : 'split'); }}>
               <PdfViewer url={tab.url} />
            </div>
         ))}
 
-        {tabs.map(tab => tab.id === activeTabId && tab.url === 'probaho://newtab' && (
+        {tabs.map(tab => tab.url === 'probaho://newtab' && (tab.id === activeTabId || tab.id === splitTabId) && (
           <div
             key={`ntp-${tab.id}`}
             className="new-tab-page"
-            style={settings.newTabBackgroundUrl ? {
+            onClick={() => { if (splitTabId) setFocusedPane(tab.id === activeTabId ? 'main' : 'split'); }}
+            style={Object.assign({
+              flex: 1, position: 'relative' as 'relative',
+              borderRight: tab.id === activeTabId && splitTabId ? '2px solid var(--border-color)' : 'none',
+              boxShadow: focusedPane === 'main' && tab.id === activeTabId && splitTabId ? 'inset 0 0 0 2px var(--primary-color)' : (focusedPane === 'split' && tab.id === splitTabId ? 'inset 0 0 0 2px var(--primary-color)' : 'none')
+            }, settings.newTabBackgroundUrl ? {
               backgroundImage: `url('${settings.newTabBackgroundUrl}')`,
               backgroundSize: 'cover',
               backgroundPosition: 'center'
-            } : {}}
+            } : {})}
           >
             <div style={{
               width: '100%',
@@ -2192,8 +2347,12 @@ function App() {
           </div>
         ))}
 
-        {tabs.map(tab => tab.id === activeTabId && tab.crashed && (
-          <div key={`crash-${tab.id}`} className="crash-overlay">
+        {tabs.map(tab => (tab.id === activeTabId || tab.id === splitTabId) && tab.crashed && (
+          <div key={`crash-${tab.id}`} className="crash-overlay" style={{
+            flex: 1, position: 'relative',
+            borderRight: tab.id === activeTabId && splitTabId ? '2px solid var(--border-color)' : 'none',
+            boxShadow: focusedPane === 'main' && tab.id === activeTabId && splitTabId ? 'inset 0 0 0 2px var(--primary-color)' : (focusedPane === 'split' && tab.id === splitTabId ? 'inset 0 0 0 2px var(--primary-color)' : 'none')
+          }} onClick={() => { if (splitTabId) setFocusedPane(tab.id === activeTabId ? 'main' : 'split'); }}>
             <div className="crash-content">
               <h2>{t('awSnap', settings.language)}</h2>
               <p>{t('crashedDesc', settings.language)}</p>
@@ -2212,38 +2371,9 @@ function App() {
           </div>
         ))}
         </div>
-
-        {/* Web Panels Sidebar (Right) */}
-        <div className="web-panels-sidebar" style={{ position: 'relative', zIndex: 150 }}>
-           <div className="web-panels-icons">
-             {webPanels.map(panel => (
-                <button
-                  key={panel.id}
-                  className={`web-panel-btn ${activePanelId === panel.id ? 'active' : ''}`}
-                  title={panel.title}
-                  onClick={() => setActivePanelId(activePanelId === panel.id ? null : panel.id)}
-                >
-                   <panel.icon size={20} strokeWidth={1.5} />
-                </button>
-             ))}
-           </div>
-        </div>
-
-        {/* Web Panel Slide-out View */}
-        {activePanelId && (
-          <div className="web-panel-view" style={{ position: 'absolute', right: '48px', top: 0, bottom: 0, zIndex: 149 }}>
-             <div className="web-panel-header">
-                <span style={{fontSize: '13px', fontWeight: 'bold'}}>{webPanels.find(p => p.id === activePanelId)?.title}</span>
-                <button className="nav-btn" onClick={() => setActivePanelId(null)}><X size={14}/></button>
-             </div>
-             <webview // @ts-ignore
-                src={webPanels.find(p => p.id === activePanelId)?.url || 'about:blank'}
-                style={{flex: 1, border: 'none', background: '#fff'}}
-                webpreferences="contextIsolation=yes, nodeIntegration=no"
-             />
-          </div>
-        )}
       </div>
+    </div>
+    </div>
     </div>
   );
 }
