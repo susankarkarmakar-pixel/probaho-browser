@@ -68,6 +68,9 @@ declare global {
       onZoomReset?: (callback: () => void) => void;
       onCommandPalette?: (callback: () => void) => void;
       onRestoreTab?: (callback: () => void) => void;
+      onShortcutBookmark?: (callback: () => void) => void;
+      onShortcutPrint?: (callback: () => void) => void;
+      onShortcutClearData?: (callback: () => void) => void;
       saveAsPdf?: () => void;
       onTriggerSaveAsPdf?: (callback: () => void) => void;
       executeSavePdf?: (data: ArrayBuffer) => void;
@@ -453,6 +456,35 @@ function App() {
       });
     }
 
+    if (window.electronAPI?.onShortcutBookmark) {
+      window.electronAPI.onShortcutBookmark(() => {
+        const currentTabs = tabsRef.current;
+        const tab = currentTabs.find(t => t.id === activeTabIdRef.current);
+        if (tab) {
+          const isBookmarked = bookmarksRef.current.some(b => b.url === tab.url);
+          if (isBookmarked) {
+            setBookmarks(prev => prev.filter(b => b.url !== tab.url));
+          } else {
+            setBookmarks(prev => [...prev, { title: tab.title, url: tab.url }]);
+          }
+        }
+      });
+    }
+
+    if (window.electronAPI?.onShortcutPrint) {
+      window.electronAPI.onShortcutPrint(() => {
+        const wv = webviewRefs.current[activeTabIdRef.current];
+        if (wv) wv.print();
+        setShowMenu(false);
+      });
+    }
+
+    if (window.electronAPI?.onShortcutClearData) {
+      window.electronAPI.onShortcutClearData(() => {
+        setShowSettings(true);
+      });
+    }
+
     if (window.electronAPI?.onTriggerSaveAsPdf) {
       window.electronAPI.onTriggerSaveAsPdf(() => {
         const wv = webviewRefs.current[activeTabIdRef.current];
@@ -513,6 +545,17 @@ function App() {
   }
 
   const webviewRefs = useRef<{ [key: string]: any }>({});
+
+  const tabsRef = useRef<Tab[]>(tabs);
+  const bookmarksRef = useRef<{title: string, url: string}[]>(bookmarks);
+
+  useEffect(() => {
+    tabsRef.current = tabs;
+  }, [tabs]);
+
+  useEffect(() => {
+    bookmarksRef.current = bookmarks;
+  }, [bookmarks]);
 
   useEffect(() => {
     const handleNewTab = () => {

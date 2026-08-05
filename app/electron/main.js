@@ -105,6 +105,18 @@ function createWindow(isPrivate = false) {
       mainWindow.webContents.send('shortcut-open-bookmarks');
       event.preventDefault();
     }
+    if ((input.control || input.meta) && input.key.toLowerCase() === 'd') {
+      mainWindow.webContents.send('shortcut-bookmark');
+      event.preventDefault();
+    }
+    if ((input.control || input.meta) && input.key.toLowerCase() === 'p') {
+      mainWindow.webContents.send('shortcut-print');
+      event.preventDefault();
+    }
+    if ((input.control || input.meta) && input.shift && input.key === 'Delete') {
+      mainWindow.webContents.send('shortcut-clear-data');
+      event.preventDefault();
+    }
     if ((input.control || input.meta) && (input.key === '=' || input.key === '+')) {
       mainWindow.webContents.send('shortcut-zoom-in');
       event.preventDefault();
