@@ -240,6 +240,14 @@ function App() {
   const [commandQuery, setCommandQuery] = useState('');
   const [commandSelectionIndex, setCommandSelectionIndex] = useState(0);
   const [recentlyClosed, setRecentlyClosed] = useState<{title: string, url: string}[]>([]);
+  const [tabContextMenu, setTabContextMenu] = useState<{ x: number, y: number, tabId: string } | null>(null);
+
+  // Close tab context menu on outside click
+  useEffect(() => {
+    const handleGlobalClick = () => setTabContextMenu(null);
+    window.addEventListener('click', handleGlobalClick);
+    return () => window.removeEventListener('click', handleGlobalClick);
+  }, []);
 
   useEffect(() => {
     localStorage.setItem('bookmarks', JSON.stringify(bookmarks));
@@ -1219,7 +1227,8 @@ function App() {
               onClick={() => setActiveTabId(tab.id)}
               onContextMenu={(e) => {
                 e.preventDefault();
-                updateTab(tab.id, { isPinned: !tab.isPinned });
+                e.stopPropagation();
+                setTabContextMenu({ x: e.clientX, y: e.clientY, tabId: tab.id });
               }}
               draggable
               onDragStart={(e) => {
@@ -1310,9 +1319,18 @@ function App() {
           <button className="nav-btn" onClick={goForward} disabled={!targetedTab?.canGoForward}>
             <ArrowRight size={16} />
           </button>
-          <button className="nav-btn" onClick={reload}>
-            <RotateCw size={16} className={targetedTab?.loading ? "animate-spin" : ""} />
-          </button>
+          {targetedTab?.loading ? (
+            <button className="nav-btn" onClick={() => {
+              const wv = webviewRefs.current[targetedTabId];
+              if (wv) wv.stop();
+            }} title="Stop Loading">
+              <X size={16} />
+            </button>
+          ) : (
+            <button className="nav-btn" onClick={reload} title="Reload">
+              <RotateCw size={16} />
+            </button>
+          )}
           <button className="nav-btn" onClick={goHome}>
             <Home size={16} />
           </button>
@@ -2100,6 +2118,47 @@ function App() {
         </div>
       )}
 
+      {/* Tab Context Menu */}
+      {tabContextMenu && (() => {
+        const targetTab = tabs.find(t => t.id === tabContextMenu.tabId);
+        if (!targetTab) return null;
+        return (
+          <div className="tab-context-menu" style={{ top: tabContextMenu.y, left: tabContextMenu.x }} onClick={(e) => e.stopPropagation()}>
+            <div className="menu-item" onClick={() => {
+              const newTab: Tab = {
+                id: Date.now().toString(),
+                url: targetTab.url,
+                title: targetTab.title,
+                loading: false, canGoBack: false, canGoForward: false, isSecure: targetTab.isSecure, zoomLevel: targetTab.zoomLevel, blockedCount: 0,
+                workspaceId: targetTab.workspaceId,
+                isPrivate: targetTab.isPrivate
+              };
+              setTabs(prev => [...prev, newTab]);
+              setTimeout(() => setActiveTabId(newTab.id), 0);
+              setTabContextMenu(null);
+            }}>Duplicate Tab</div>
+            <div className="menu-item" onClick={() => {
+              updateTab(targetTab.id, { isPinned: !targetTab.isPinned });
+              setTabContextMenu(null);
+            }}>{targetTab.isPinned ? 'Unpin Tab' : 'Pin Tab'}</div>
+            <div className="menu-item" onClick={() => {
+              const wv = webviewRefs.current[targetTab.id];
+              if (wv) {
+                const newMutedState = !targetTab.isMuted;
+                wv.setAudioMuted(newMutedState);
+                updateTab(targetTab.id, { isMuted: newMutedState });
+              }
+              setTabContextMenu(null);
+            }}>{targetTab.isMuted ? 'Unmute Tab' : 'Mute Tab'}</div>
+            <div className="menu-divider" />
+            <div className="menu-item" onClick={() => {
+              closeTabId(targetTab.id);
+              setTabContextMenu(null);
+            }}>Close Tab</div>
+          </div>
+        );
+      })()}
+
       {/* Content Area */}
       <div className="content-area" style={{ display: 'flex', flexDirection: 'row', flex: 1, overflow: 'hidden' }}>
 
@@ -2137,7 +2196,8 @@ function App() {
                   onClick={() => setActiveTabId(tab.id)}
                   onContextMenu={(e) => {
                     e.preventDefault();
-                    updateTab(tab.id, { isPinned: !tab.isPinned });
+                    e.stopPropagation();
+                    setTabContextMenu({ x: e.clientX, y: e.clientY, tabId: tab.id });
                   }}
                   draggable
                   onDragStart={(e) => {
