@@ -93,6 +93,7 @@ function App() {
   const [findText, setFindText] = useState('');
   const [draggedTabId, setDraggedTabId] = useState<string | null>(null);
   const [findResult, setFindResult] = useState({ activeMatchOrdinal: 0, matches: 0 });
+  const [tabContextMenu, setTabContextMenu] = useState<{tabId: string, x: number, y: number} | null>(null);
   const findInputRef = useRef<HTMLInputElement>(null);
   const addressInputRef = useRef<HTMLInputElement>(null);
   const settingsRef = useRef<any>(null);
@@ -1108,8 +1109,55 @@ function App() {
     setShowMenu(false);
   };
 
+  useEffect(() => {
+    const handleGlobalClick = () => {
+      if (tabContextMenu) setTabContextMenu(null);
+    };
+    document.addEventListener('click', handleGlobalClick);
+    return () => document.removeEventListener('click', handleGlobalClick);
+  }, [tabContextMenu]);
+
   return (
     <div className="browser-container">
+      {tabContextMenu && (
+        <div className="menu-panel" style={{ position: 'fixed', left: tabContextMenu.x, top: tabContextMenu.y, zIndex: 9999 }}>
+          <div className="menu-item" onClick={() => {
+            const tab = tabs.find(t => t.id === tabContextMenu.tabId);
+            if (tab) {
+              const newTab = { ...tab, id: Date.now().toString() };
+              setTabs(prev => [...prev, newTab]);
+              setActiveTabId(newTab.id);
+            }
+          }}>
+            <div className="menu-item-text">Duplicate</div>
+          </div>
+          <div className="menu-item" onClick={() => {
+            const tab = tabs.find(t => t.id === tabContextMenu.tabId);
+            if (tab) updateTab(tab.id, { isPinned: !tab.isPinned });
+          }}>
+            <div className="menu-item-text">{tabs.find(t => t.id === tabContextMenu.tabId)?.isPinned ? 'Unpin Tab' : 'Pin Tab'}</div>
+          </div>
+          <div className="menu-item" onClick={() => {
+            const tab = tabs.find(t => t.id === tabContextMenu.tabId);
+            if (tab) {
+              const wv = webviewRefs.current[tab.id];
+              if (wv) {
+                const newMutedState = !tab.isMuted;
+                wv.setAudioMuted(newMutedState);
+                updateTab(tab.id, { isMuted: newMutedState });
+              }
+            }
+          }}>
+            <div className="menu-item-text">{tabs.find(t => t.id === tabContextMenu.tabId)?.isMuted ? 'Unmute Site' : 'Mute Site'}</div>
+          </div>
+          <div className="menu-divider" />
+          <div className="menu-item" onClick={() => {
+             closeTabId(tabContextMenu.tabId);
+          }}>
+            <div className="menu-item-text">Close Tab</div>
+          </div>
+        </div>
+      )}
       {/* Web Panels Sidebar (Right) - Now globally scoped outside content area */}
       <div className="web-panels-sidebar" style={{ position: 'absolute', right: 0, top: 0, bottom: 0, zIndex: 150 }}>
          <div className="web-panels-icons">
@@ -1219,7 +1267,7 @@ function App() {
               onClick={() => setActiveTabId(tab.id)}
               onContextMenu={(e) => {
                 e.preventDefault();
-                updateTab(tab.id, { isPinned: !tab.isPinned });
+                setTabContextMenu({ tabId: tab.id, x: e.clientX, y: e.clientY });
               }}
               draggable
               onDragStart={(e) => {
@@ -1310,9 +1358,18 @@ function App() {
           <button className="nav-btn" onClick={goForward} disabled={!targetedTab?.canGoForward}>
             <ArrowRight size={16} />
           </button>
-          <button className="nav-btn" onClick={reload}>
-            <RotateCw size={16} className={targetedTab?.loading ? "animate-spin" : ""} />
-          </button>
+          {targetedTab?.loading ? (
+            <button className="nav-btn" onClick={() => {
+              const wv = webviewRefs.current[targetedTabId];
+              if (wv) wv.stop();
+            }}>
+              <X size={16} />
+            </button>
+          ) : (
+            <button className="nav-btn" onClick={reload}>
+              <RotateCw size={16} />
+            </button>
+          )}
           <button className="nav-btn" onClick={goHome}>
             <Home size={16} />
           </button>
@@ -2137,7 +2194,7 @@ function App() {
                   onClick={() => setActiveTabId(tab.id)}
                   onContextMenu={(e) => {
                     e.preventDefault();
-                    updateTab(tab.id, { isPinned: !tab.isPinned });
+                    setTabContextMenu({ tabId: tab.id, x: e.clientX, y: e.clientY });
                   }}
                   draggable
                   onDragStart={(e) => {
