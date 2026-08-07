@@ -33,7 +33,8 @@
           "arch": [
             "x64"
           ]
-        }
+        },
+        "portable"
       ],
       "publisherName": "Susankar Karmakar",
       "icon": "build/icon.ico",
