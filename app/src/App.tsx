@@ -46,6 +46,7 @@ declare global {
       close: () => void;
       onNewTab: (callback: () => void) => void;
       onNewPrivateTab: (callback: () => void) => void;
+      onNewWindow?: (callback: () => void) => void;
       onCloseTab: (callback: () => void) => void;
       onDownloadUpdate: (callback: (item: DownloadItem) => void) => void;
       openFile: (path: string) => void;
@@ -68,6 +69,7 @@ declare global {
       onZoomReset?: (callback: () => void) => void;
       onCommandPalette?: (callback: () => void) => void;
       onRestoreTab?: (callback: () => void) => void;
+      onAppCommand?: (callback: (cmd: string) => void) => void;
       saveAsPdf?: () => void;
       onTriggerSaveAsPdf?: (callback: () => void) => void;
       executeSavePdf?: (data: ArrayBuffer) => void;
@@ -80,6 +82,7 @@ declare global {
       deletePermission?: (origin: string, permission: string) => void;
       cancelDownload?: (id: string) => void;
       openPrivateWindow?: () => void;
+      openNewWindow?: () => void;
       loadExtension?: () => Promise<string | null>;
       getPassword?: (origin: string) => Promise<any>;
       savePassword?: (origin: string, creds: any) => void;
@@ -110,6 +113,7 @@ function App() {
           language: 'en' as Language,
           newTabBackgroundUrl: '',
           verticalTabs: false,
+          showBookmarksBar: false,
           accentColor: '#7b2cbf'
         };
         const merged = { ...def, ...parsed };
@@ -125,6 +129,7 @@ function App() {
       language: 'en' as Language,
       newTabBackgroundUrl: '',
       verticalTabs: false,
+          showBookmarksBar: false,
       accentColor: '#7b2cbf'
     };
     settingsRef.current = def;
@@ -463,6 +468,25 @@ function App() {
            }).catch((err: any) => console.error(err));
         }
       });
+
+    if (window.electronAPI?.onNewWindow) {
+      window.electronAPI.onNewWindow(() => {
+        window.electronAPI?.openNewWindow?.();
+      });
+    }
+
+    if (window.electronAPI?.onAppCommand) {
+      window.electronAPI.onAppCommand((cmd) => {
+        const wv = webviewRefs.current[activeTabIdRef.current];
+        if (wv) {
+          if (cmd === "browser-backward" && wv.canGoBack()) {
+            wv.goBack();
+          } else if (cmd === "browser-forward" && wv.canGoForward()) {
+            wv.goForward();
+          }
+        }
+      });
+    }
     }
   }, []);
 
@@ -1310,13 +1334,13 @@ function App() {
                   : <Globe size={14} style={{marginRight: tab.isPinned ? 0 : 6, opacity: 0.7, flexShrink: 0}} />
               )}
 
-              {!tab.isPinned && <span className="tab-title">{tab.title}</span>}
+              {!tab.isPinned && <span className="tab-title" title={tab.title}>{tab.title}</span>}
               {!tab.isPinned && (
                 <div className="tab-close" onClick={(e) => closeTab(e, tab.id)}>
                   <X size={12} />
                 </div>
               )}
-              {tab.isPinned && <span className="tab-title" style={{display: 'none'}}>{tab.title}</span>}
+              {tab.isPinned && <span className="tab-title" title={tab.title} style={{display: 'none'}}>{tab.title}</span>}
               {(tab.isAudible || tab.isMuted) && (
                 <div
                   className="tab-audio-indicator"
@@ -1450,6 +1474,35 @@ function App() {
                setTimeout(() => setShowAutocomplete(false), 200);
             }}
           />
+
+          {targetedTab && targetedTab.zoomLevel !== 1 && (
+            <button
+              className="bookmark-toggle-btn zoom-indicator"
+              type="button"
+              title="Reset Zoom"
+              onClick={() => {
+                updateTab(targetedTabId, { zoomLevel: 1 });
+                saveZoom(targetedTab.url, 1);
+                const wv = webviewRefs.current[targetedTabId];
+                if (wv) wv.setZoomFactor(1);
+              }}
+              style={{
+                display: 'flex',
+                alignItems: 'center',
+                padding: '0 8px',
+                fontSize: '11px',
+                fontWeight: 'bold',
+                color: 'var(--text-muted)',
+                background: 'var(--tab-bg)',
+                borderRadius: '12px',
+                marginRight: '8px',
+                whiteSpace: 'nowrap'
+              }}
+            >
+              <Search size={12} style={{marginRight: '4px'}} />
+              {Math.round(targetedTab.zoomLevel * 100)}%
+            </button>
+          )}
 
           {showAutocomplete && (
              <div style={{
@@ -1637,6 +1690,11 @@ function App() {
             <div className="menu-item-icon"><Plus size={16} /></div>
             <div className="menu-item-text">{t('newTab', settings.language)}</div>
             <div className="menu-item-shortcut">Ctrl+T</div>
+          </div>
+          <div className="menu-item" onClick={() => { setShowMenu(false); window.electronAPI?.openNewWindow?.(); }}>
+            <div className="menu-item-icon"><Columns size={16} /></div>
+            <div className="menu-item-text">{t('newWindow', settings.language)}</div>
+            <div className="menu-item-shortcut">Ctrl+N</div>
           </div>
           <div className="menu-item" onClick={() => { setShowMenu(false); window.electronAPI?.openPrivateWindow?.(); }}>
             <div className="menu-item-icon"><EyeOff size={16} /></div>
@@ -1849,6 +1907,18 @@ function App() {
                     style={{marginRight: '8px'}}
                   />
                   Enable Vertical Tabs Sidebar
+                </label>
+              </div>
+
+              <div style={{marginBottom: '16px'}}>
+                <label style={{display: 'flex', alignItems: 'center', cursor: 'pointer', fontSize: '13px', fontWeight: 'bold'}}>
+                  <input
+                    type="checkbox"
+                    checked={settings.showBookmarksBar === true}
+                    onChange={e => setSettings({...settings, showBookmarksBar: e.target.checked})}
+                    style={{marginRight: '8px'}}
+                  />
+                  {t('showBookmarksBar', settings.language)}
                 </label>
               </div>
 
@@ -2157,6 +2227,42 @@ function App() {
         </div>
       )}
 
+      {/* Bookmarks Bar */}
+      {settings.showBookmarksBar && !settings.verticalTabs && bookmarks.length > 0 && (
+        <div className="bookmarks-bar" style={{
+          display: 'flex',
+          alignItems: 'center',
+          padding: '4px 16px',
+          background: 'var(--bg-color)',
+          borderBottom: '1px solid var(--border-color)',
+          gap: '12px',
+          overflowX: 'auto',
+          whiteSpace: 'nowrap'
+        }}>
+          {bookmarks.map((b, i) => (
+            <div
+              key={i}
+              title={b.title + '\n' + b.url}
+              onClick={() => navigate(b.url)}
+              style={{
+                display: 'flex',
+                alignItems: 'center',
+                fontSize: '12px',
+                cursor: 'pointer',
+                padding: '4px 8px',
+                borderRadius: '4px',
+                color: 'var(--text-color)'
+              }}
+              onMouseEnter={(e) => e.currentTarget.style.backgroundColor = 'var(--tab-bg)'}
+              onMouseLeave={(e) => e.currentTarget.style.backgroundColor = 'transparent'}
+            >
+              <Globe size={12} style={{marginRight: '6px', opacity: 0.7}} />
+              <span style={{maxWidth: '120px', overflow: 'hidden', textOverflow: 'ellipsis'}}>{b.title}</span>
+            </div>
+          ))}
+        </div>
+      )}
+
       {/* Content Area */}
       <div className="content-area" style={{ display: 'flex', flexDirection: 'row', flex: 1, overflow: 'hidden' }}>
 
@@ -2233,7 +2339,7 @@ function App() {
                       : <Globe size={16} style={{marginRight: 8, opacity: 0.7, flexShrink: 0}} />
                   )}
 
-                  <span className="tab-title" style={{ flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', fontSize: '13px', color: tab.id === activeTabId ? 'var(--text-color)' : 'var(--text-muted)' }}>
+                  <span className="tab-title" title={tab.title} style={{ flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', fontSize: '13px', color: tab.id === activeTabId ? 'var(--text-color)' : 'var(--text-muted)' }}>
                     {tab.title}
                   </span>
 
