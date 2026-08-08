@@ -236,6 +236,7 @@ function App() {
   const [showAbout, setShowAbout] = useState(false);
   const [showAutocomplete, setShowAutocomplete] = useState(false);
   const [autocompleteSuggestions, setAutocompleteSuggestions] = useState<{title: string, url: string}[]>([]);
+  const [autocompleteSelectedIndex, setAutocompleteSelectedIndex] = useState(-1);
   const [showCommandPalette, setShowCommandPalette] = useState(false);
   const [commandQuery, setCommandQuery] = useState('');
   const [commandSelectionIndex, setCommandSelectionIndex] = useState(0);
@@ -1025,7 +1026,15 @@ function App() {
 
   const onSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    navigate(inputUrl);
+    if (showAutocomplete && autocompleteSelectedIndex >= 0 && autocompleteSuggestions[autocompleteSelectedIndex]) {
+      navigate(autocompleteSuggestions[autocompleteSelectedIndex].url);
+      setShowAutocomplete(false);
+      setAutocompleteSelectedIndex(-1);
+    } else {
+      navigate(inputUrl);
+      setShowAutocomplete(false);
+      setAutocompleteSelectedIndex(-1);
+    }
   };
 
   const goBack = () => {
@@ -1375,6 +1384,7 @@ function App() {
             onChange={(e) => {
                const val = e.target.value;
                setInputUrl(val);
+               setAutocompleteSelectedIndex(-1);
 
                if (val.trim().length > 0) {
                  const lowerVal = val.toLowerCase();
@@ -1405,10 +1415,27 @@ function App() {
                  setShowAutocomplete(false);
                }
             }}
+            onKeyDown={(e) => {
+               if (!showAutocomplete || autocompleteSuggestions.length === 0) return;
+
+               if (e.key === 'ArrowDown') {
+                 e.preventDefault();
+                 setAutocompleteSelectedIndex(prev => (prev + 1) % autocompleteSuggestions.length);
+               } else if (e.key === 'ArrowUp') {
+                 e.preventDefault();
+                 setAutocompleteSelectedIndex(prev => prev <= 0 ? autocompleteSuggestions.length - 1 : prev - 1);
+               } else if (e.key === 'Escape') {
+                 setShowAutocomplete(false);
+                 setAutocompleteSelectedIndex(-1);
+               }
+            }}
             onFocus={(e) => e.target.select()}
             onBlur={() => {
                // timeout so clicks on suggestions register before hiding
-               setTimeout(() => setShowAutocomplete(false), 200);
+               setTimeout(() => {
+                 setShowAutocomplete(false);
+                 setAutocompleteSelectedIndex(-1);
+               }, 200);
             }}
           />
 
@@ -1420,17 +1447,19 @@ function App() {
                 maxHeight: '300px', overflowY: 'auto'
              }}>
                 {autocompleteSuggestions.map((s, i) => (
-                   <div key={i} style={{
-                      padding: '8px 12px', cursor: 'pointer', display: 'flex', flexDirection: 'column',
-                      borderBottom: i < autocompleteSuggestions.length - 1 ? '1px solid var(--border-color)' : 'none'
-                   }}
+                   <div key={i}
                    onMouseDown={(e) => {
                       e.preventDefault(); // prevent input blur
                       navigate(s.url);
                       setShowAutocomplete(false);
+                      setAutocompleteSelectedIndex(-1);
                    }}
-                   onMouseEnter={(e) => e.currentTarget.style.backgroundColor = 'var(--tab-bg)'}
-                   onMouseLeave={(e) => e.currentTarget.style.backgroundColor = 'transparent'}
+                   onMouseEnter={() => setAutocompleteSelectedIndex(i)}
+                   style={{
+                      padding: '8px 12px', cursor: 'pointer', display: 'flex', flexDirection: 'column',
+                      borderBottom: i < autocompleteSuggestions.length - 1 ? '1px solid var(--border-color)' : 'none',
+                      backgroundColor: autocompleteSelectedIndex === i ? 'var(--tab-bg)' : 'transparent'
+                   }}
                    >
                       <div style={{fontSize: '13px', fontWeight: 'bold', color: 'var(--text-color)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis'}}>{s.title}</div>
                       <div style={{fontSize: '11px', color: '#888', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis'}}>{s.url}</div>
