@@ -43,6 +43,9 @@ function createWindow(isPrivate = false) {
     if ((input.control || input.meta) && input.shift && input.key.toLowerCase() === 'n') {
       mainWindow.webContents.send('shortcut-new-private-tab');
       event.preventDefault();
+    } else if ((input.control || input.meta) && !input.shift && input.key.toLowerCase() === 'n') {
+      mainWindow.webContents.send('shortcut-new-window');
+      event.preventDefault();
     } else if ((input.control || input.meta) && input.key.toLowerCase() === 't') {
       mainWindow.webContents.send('shortcut-new-tab');
       event.preventDefault();
@@ -125,6 +128,16 @@ function createWindow(isPrivate = false) {
       mainWindow.webContents.send('shortcut-restore-tab');
       event.preventDefault();
     }
+    if (input.type === 'keyDown' && (input.key === 'BrowserBack' || input.key === 'BrowserForward')) {
+       // app-command takes care of this on Windows, but this is a fallback for some environments
+       const cmd = input.key === 'BrowserBack' ? 'browser-backward' : 'browser-forward';
+       mainWindow.webContents.send('app-command', cmd);
+       event.preventDefault();
+    }
+  });
+
+  mainWindow.on('app-command', (e, cmd) => {
+    mainWindow.webContents.send('app-command', cmd);
   });
 }
 
@@ -168,6 +181,10 @@ app.whenReady().then(() => {
 
   ipcMain.on('open-private-window', () => {
     createWindow(true);
+  });
+
+  ipcMain.on('open-new-window', () => {
+    createWindow(false);
   });
 
   ipcMain.handle('load-extension', async (event) => {
