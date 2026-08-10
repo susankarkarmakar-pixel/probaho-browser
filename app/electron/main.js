@@ -85,7 +85,7 @@ function createWindow(isPrivate = false) {
       mainWindow.webContents.send('shortcut-reload');
       event.preventDefault();
     }
-    if ((input.control || input.meta) && input.shift && input.key.toLowerCase() === 'i') {
+    if (input.key === 'F12' || ((input.control || input.meta) && input.shift && input.key.toLowerCase() === 'i')) {
       mainWindow.webContents.send('shortcut-devtools');
       event.preventDefault();
     }
@@ -128,9 +128,10 @@ function createWindow(isPrivate = false) {
       mainWindow.webContents.send('shortcut-restore-tab');
       event.preventDefault();
     }
-    if (input.type === 'keyDown' && (input.key === 'BrowserBack' || input.key === 'BrowserForward')) {
+    if (input.type === 'keyDown' && (input.key === 'BrowserBack' || input.key === 'BrowserForward' || (input.alt && (input.key === 'ArrowLeft' || input.key === 'ArrowRight')))) {
        // app-command takes care of this on Windows, but this is a fallback for some environments
-       const cmd = input.key === 'BrowserBack' ? 'browser-backward' : 'browser-forward';
+       const isBack = input.key === 'BrowserBack' || (input.alt && input.key === 'ArrowLeft');
+       const cmd = isBack ? 'browser-backward' : 'browser-forward';
        mainWindow.webContents.send('app-command', cmd);
        event.preventDefault();
     }
