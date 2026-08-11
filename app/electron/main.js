@@ -35,9 +35,15 @@ function createWindow(isPrivate = false) {
 
   // Handle local shortcuts
   mainWindow.webContents.on('before-input-event', (event, input) => {
-    if (input.key === 'F12') {
-      mainWindow.webContents.toggleDevTools();
-      event.preventDefault();
+    if (input.type === 'keyDown') {
+      if (input.key === 'F12' || ((input.control || input.meta) && input.shift && !input.alt && input.key.toLowerCase() === 'i')) {
+        mainWindow.webContents.send('shortcut-devtools');
+        event.preventDefault();
+      }
+      if ((input.control || input.meta) && input.shift && input.alt && input.key.toLowerCase() === 'i') {
+        mainWindow.webContents.toggleDevTools();
+        event.preventDefault();
+      }
     }
     // Handle Ctrl/Cmd+T and Ctrl/Cmd+W
     if ((input.control || input.meta) && input.shift && input.key.toLowerCase() === 'n') {
@@ -576,8 +582,17 @@ ipcMain.on('show-context-menu', (event, params) => {
     });
   }
 
+
   if (params.hasImageContents && params.srcURL) {
     template.push({ type: 'separator' });
+    template.push({
+      label: 'Save Image As',
+      click: () => {
+        if (win) {
+          win.webContents.downloadURL(params.srcURL);
+        }
+      }
+    });
     template.push({
       label: 'Copy Image URL',
       click: () => {

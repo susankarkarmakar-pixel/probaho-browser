@@ -1145,6 +1145,14 @@ function App() {
     <div className="browser-container">
       {tabContextMenu && (
         <div className="menu-panel" style={{ position: 'fixed', left: tabContextMenu.x, top: tabContextMenu.y, zIndex: 9999 }}>
+
+          <div className="menu-item" onClick={() => {
+            const wv = webviewRefs.current[tabContextMenu.tabId];
+            if (wv) wv.reload();
+          }}>
+            <div className="menu-item-text">Reload</div>
+          </div>
+          <div className="menu-divider" />
           <div className="menu-item" onClick={() => {
             const tab = tabs.find(t => t.id === tabContextMenu.tabId);
             if (tab) {
@@ -1175,6 +1183,43 @@ function App() {
             <div className="menu-item-text">{tabs.find(t => t.id === tabContextMenu.tabId)?.isMuted ? 'Unmute Site' : 'Mute Site'}</div>
           </div>
           <div className="menu-divider" />
+
+          <div className="menu-item" onClick={() => {
+            const index = tabs.findIndex(t => t.id === tabContextMenu.tabId);
+            if (index !== -1) {
+              const tabsToRight = tabs.slice(index + 1);
+              tabsToRight.forEach(t => {
+                 const tabToClose = t;
+                 if (tabToClose && tabToClose.url !== 'probaho://newtab' && tabToClose.url !== 'about:blank') {
+                   setRecentlyClosed(rc => [{title: tabToClose.title, url: tabToClose.url}, ...rc].slice(0, 10));
+                 }
+                 delete webviewRefs.current[t.id];
+              });
+              const keep = tabs.slice(0, index + 1);
+              setTabs(keep);
+              if (!keep.find(t => t.id === activeTabIdRef.current)) {
+                setActiveTabId(keep[keep.length - 1].id);
+              }
+            }
+          }}>
+            <div className="menu-item-text">Close Tabs to the Right</div>
+          </div>
+          <div className="menu-item" onClick={() => {
+             tabs.forEach(t => {
+               if (t.id !== tabContextMenu.tabId) {
+                 const tabToClose = t;
+                 if (tabToClose && tabToClose.url !== 'probaho://newtab' && tabToClose.url !== 'about:blank') {
+                   setRecentlyClosed(rc => [{title: tabToClose.title, url: tabToClose.url}, ...rc].slice(0, 10));
+                 }
+                 delete webviewRefs.current[t.id];
+               }
+             });
+             const keep = tabs.filter(t => t.id === tabContextMenu.tabId);
+             setTabs(keep);
+             setActiveTabId(keep[0].id);
+          }}>
+            <div className="menu-item-text">Close Other Tabs</div>
+          </div>
           <div className="menu-item" onClick={() => {
              closeTabId(tabContextMenu.tabId);
           }}>
