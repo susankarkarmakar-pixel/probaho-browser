@@ -569,6 +569,14 @@ ipcMain.on('show-context-menu', (event, params) => {
       }
     });
     template.push({
+      label: 'Save Link As...',
+      click: () => {
+        if (win) {
+          win.webContents.downloadURL(params.linkURL);
+        }
+      }
+    });
+    template.push({
       label: 'Copy Link Address',
       click: () => {
         clipboard.writeText(params.linkURL);
@@ -578,6 +586,22 @@ ipcMain.on('show-context-menu', (event, params) => {
 
   if (params.hasImageContents && params.srcURL) {
     template.push({ type: 'separator' });
+    template.push({
+      label: 'Open Image in New Tab',
+      click: () => {
+        if (win) {
+          win.webContents.send('open-link-new-tab', params.srcURL);
+        }
+      }
+    });
+    template.push({
+      label: 'Save Image As...',
+      click: () => {
+        if (win) {
+          win.webContents.downloadURL(params.srcURL);
+        }
+      }
+    });
     template.push({
       label: 'Copy Image URL',
       click: () => {
