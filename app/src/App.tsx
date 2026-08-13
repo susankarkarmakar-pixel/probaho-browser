@@ -244,6 +244,7 @@ function App() {
   const [showMenu, setShowMenu] = useState(false);
   const [showAbout, setShowAbout] = useState(false);
   const [showAutocomplete, setShowAutocomplete] = useState(false);
+  const [showShields, setShowShields] = useState(false);
   const [autocompleteSuggestions, setAutocompleteSuggestions] = useState<{title: string, url: string}[]>([]);
   const fetchTimeoutRef = useRef<NodeJS.Timeout | null>(null);
   const fetchAbortControllerRef = useRef<AbortController | null>(null);
@@ -1141,10 +1142,11 @@ function App() {
   useEffect(() => {
     const handleGlobalClick = () => {
       if (tabContextMenu) setTabContextMenu(null);
+      if (showShields) setShowShields(false);
     };
     document.addEventListener('click', handleGlobalClick);
     return () => document.removeEventListener('click', handleGlobalClick);
-  }, [tabContextMenu]);
+  }, [tabContextMenu, showShields]);
 
   return (
     <div className="browser-container">
@@ -1616,12 +1618,35 @@ function App() {
             <Star size={16} fill={isCurrentBookmarked ? "#f5d44f" : "none"} color={isCurrentBookmarked ? "#f5d44f" : "currentColor"} />
           </button>
         </form>
-        {settings.adBlockerEnabled !== false && (
-          <div className="shield-container" title={t('blockedAds', settings.language, { count: targetedTab?.blockedCount || 0 })}>
-            <Shield size={16} color={targetedTab && targetedTab.blockedCount > 0 ? '#4caf50' : '#888'} />
-            {targetedTab && targetedTab.blockedCount > 0 && <span className="shield-count">{targetedTab.blockedCount}</span>}
+        <div style={{ position: 'relative' }}>
+          <div className="shield-container" title={t('blockedAds', settings.language, { count: targetedTab?.blockedCount || 0 })} onClick={(e) => { e.stopPropagation(); setShowBookmarks(false); setShowHistory(false); setShowMenu(false); setShowReadingList(false); setShowDownloads(false); setShowShields(!showShields); }} style={{ cursor: 'pointer' }}>
+            <Shield size={16} color={!settings.adBlockerEnabled ? '#d32f2f' : (targetedTab && targetedTab.blockedCount > 0 ? '#4caf50' : '#888')} />
+            {settings.adBlockerEnabled && targetedTab && targetedTab.blockedCount > 0 && <span className="shield-count">{targetedTab.blockedCount}</span>}
           </div>
-        )}
+
+          {showShields && (
+            <div className="downloads-popout" onClick={(e) => e.stopPropagation()} style={{
+              position: 'absolute', top: '100%', right: 0, width: '280px',
+              background: 'var(--bg-color)', border: '1px solid var(--border-color)',
+              borderRadius: '8px', zIndex: 150, boxShadow: '0 8px 24px rgba(0,0,0,0.2)',
+              marginTop: '8px', padding: '16px'
+            }}>
+              <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '8px', borderBottom: '1px solid var(--border-color)', paddingBottom: '16px', marginBottom: '16px' }}>
+                <Shield size={32} color={!settings.adBlockerEnabled ? '#d32f2f' : '#4caf50'} />
+                <h3 style={{ margin: 0, fontSize: '16px' }}>{targetedTab?.blockedCount || 0}</h3>
+                <span style={{ fontSize: '12px', color: 'var(--text-color)', opacity: 0.8 }}>Trackers & ads blocked on this site</span>
+              </div>
+              <label style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', cursor: 'pointer', fontSize: '13px', fontWeight: 'bold' }}>
+                <span>Shields (Global)</span>
+                <input
+                  type="checkbox"
+                  checked={settings.adBlockerEnabled !== false}
+                  onChange={e => setSettings({...settings, adBlockerEnabled: e.target.checked})}
+                />
+              </label>
+            </div>
+          )}
+        </div>
         <button className="nav-btn" title="Add to Reading List" onClick={() => {
           const wv = webviewRefs.current[targetedTabId];
           if(wv) {
