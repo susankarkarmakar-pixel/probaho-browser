@@ -180,6 +180,20 @@ app.whenReady().then(() => {
     }
   });
 
+  ipcMain.on('pause-download', (event, id) => {
+    const item = activeDownloadsMap.get(id);
+    if (item && item.canResume()) {
+      item.pause();
+    }
+  });
+
+  ipcMain.on('resume-download', (event, id) => {
+    const item = activeDownloadsMap.get(id);
+    if (item && item.canResume()) {
+      item.resume();
+    }
+  });
+
   ipcMain.on('open-private-window', () => {
     createWindow(true);
   });
@@ -404,11 +418,15 @@ app.whenReady().then(() => {
 
     item.on('updated', (event, state) => {
       updateTaskbarProgress();
+
+      const isPaused = item.isPaused();
+      const updatedState = isPaused ? 'paused' : state;
+
       if (win && !win.isDestroyed()) {
         win.webContents.send('download-update', {
           id: downloadId,
           fileName: fileName,
-          state: state,
+          state: updatedState,
           receivedBytes: item.getReceivedBytes(),
           totalBytes: item.getTotalBytes(),
           savePath: savePath
@@ -417,7 +435,7 @@ app.whenReady().then(() => {
         BrowserWindow.getAllWindows().forEach(w => w.webContents.send('download-update', {
           id: downloadId,
           fileName: fileName,
-          state: state,
+          state: updatedState,
           receivedBytes: item.getReceivedBytes(),
           totalBytes: item.getTotalBytes(),
           savePath: savePath

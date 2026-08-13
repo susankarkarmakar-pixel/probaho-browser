@@ -9,7 +9,7 @@ import {
 interface DownloadItem {
   id: string;
   fileName: string;
-  state: 'progressing' | 'completed' | 'cancelled' | 'interrupted';
+  state: 'progressing' | 'completed' | 'cancelled' | 'interrupted' | 'paused';
   receivedBytes: number;
   totalBytes: number;
   savePath: string;
@@ -82,6 +82,8 @@ declare global {
       getPermissions?: () => Promise<Record<string, Record<string, boolean>>>;
       deletePermission?: (origin: string, permission: string) => void;
       cancelDownload?: (id: string) => void;
+      pauseDownload?: (id: string) => void;
+      resumeDownload?: (id: string) => void;
       openPrivateWindow?: () => void;
       openNewWindow?: () => void;
       loadExtension?: () => Promise<string | null>;
@@ -1699,8 +1701,18 @@ function App() {
                             </button>
                           </>
                         )}
+                        {d.state === 'progressing' && (
+                          <button className="nav-btn" style={{width: '24px', height: '24px', padding: 0}} title="Pause" onClick={() => window.electronAPI?.pauseDownload?.(d.id)}>
+                            <Square size={10} style={{fill: 'currentColor'}} />
+                          </button>
+                        )}
+                        {d.state === 'paused' && (
+                          <button className="nav-btn" style={{width: '24px', height: '24px', padding: 0}} title="Resume" onClick={() => window.electronAPI?.resumeDownload?.(d.id)}>
+                            <ArrowRight size={12} />
+                          </button>
+                        )}
                         <button className="nav-btn" style={{width: '24px', height: '24px', padding: 0}} title="Remove" onClick={() => {
-                          if (d.state === 'progressing') {
+                          if (d.state === 'progressing' || d.state === 'paused') {
                             window.electronAPI?.cancelDownload?.(d.id);
                           }
                           setDownloads(prev => prev.filter(item => item.id !== d.id));
