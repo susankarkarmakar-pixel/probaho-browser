@@ -47,5 +47,6 @@ contextBridge.exposeInMainWorld('electronAPI', {
   savePassword: (origin, creds) => ipcRenderer.send('save-password', origin, creds),
   saveAsPdf: () => ipcRenderer.send('save-as-pdf'),
   onTriggerSaveAsPdf: (callback) => ipcRenderer.on('trigger-save-as-pdf', () => callback()),
-  executeSavePdf: (data) => ipcRenderer.send('execute-save-pdf', data)
+  executeSavePdf: (data) => ipcRenderer.send('execute-save-pdf', data),
+  fetchSuggestions: (query) => ipcRenderer.invoke('fetch-suggestions', query)
 });
