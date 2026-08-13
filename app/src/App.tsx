@@ -245,6 +245,7 @@ function App() {
   const [showAbout, setShowAbout] = useState(false);
   const [showAutocomplete, setShowAutocomplete] = useState(false);
   const [showShields, setShowShields] = useState(false);
+  const [showMediaControls, setShowMediaControls] = useState(false);
   const [autocompleteSuggestions, setAutocompleteSuggestions] = useState<{title: string, url: string}[]>([]);
   const fetchTimeoutRef = useRef<NodeJS.Timeout | null>(null);
   const fetchAbortControllerRef = useRef<AbortController | null>(null);
@@ -1143,10 +1144,11 @@ function App() {
     const handleGlobalClick = () => {
       if (tabContextMenu) setTabContextMenu(null);
       if (showShields) setShowShields(false);
+      if (showMediaControls) setShowMediaControls(false);
     };
     document.addEventListener('click', handleGlobalClick);
     return () => document.removeEventListener('click', handleGlobalClick);
-  }, [tabContextMenu, showShields]);
+  }, [tabContextMenu, showShields, showMediaControls]);
 
   return (
     <div className="browser-container">
@@ -1671,6 +1673,42 @@ function App() {
         }}>
           <Share2 size={16} />
         </button>
+
+        <div style={{ position: 'relative' }}>
+          <button className="nav-btn" title="Global Media Controls" onClick={(e) => { e.stopPropagation(); setShowBookmarks(false); setShowHistory(false); setShowMenu(false); setShowReadingList(false); setShowDownloads(false); setShowShields(false); setShowMediaControls(!showMediaControls); }}>
+            <Music size={16} />
+          </button>
+          {showMediaControls && (
+            <div className="downloads-popout" onClick={(e) => e.stopPropagation()} style={{
+              position: 'absolute', top: '100%', right: 0, width: '320px',
+              background: 'var(--bg-color)', border: '1px solid var(--border-color)',
+              borderRadius: '8px', zIndex: 150, boxShadow: '0 8px 24px rgba(0,0,0,0.2)',
+              marginTop: '8px', padding: '16px'
+            }}>
+              <h3 style={{ margin: '0 0 12px 0', fontSize: '14px', borderBottom: '1px solid var(--border-color)', paddingBottom: '8px' }}>Global Media Controls</h3>
+              {tabs.filter(t => t.isAudible).length === 0 ? (
+                <div style={{ fontSize: '13px', color: '#888', textAlign: 'center', padding: '16px 0' }}>No media playing</div>
+              ) : (
+                tabs.filter(t => t.isAudible).map(t => (
+                  <div key={t.id} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '8px', padding: '8px', background: 'var(--tab-bg)', borderRadius: '6px' }}>
+                    <div style={{ overflow: 'hidden', whiteSpace: 'nowrap', textOverflow: 'ellipsis', fontSize: '13px', marginRight: '8px' }}>
+                      {t.title}
+                    </div>
+                    <button className="nav-btn" style={{ padding: '4px' }} onClick={() => {
+                      const newMutedState = !t.isMuted;
+                      updateTab(t.id, { isMuted: newMutedState });
+                      const wv = webviewRefs.current[t.id];
+                      if (wv) wv.setAudioMuted(newMutedState);
+                    }}>
+                      {t.isMuted ? <VolumeX size={16} /> : <Volume2 size={16} />}
+                    </button>
+                  </div>
+                ))
+              )}
+            </div>
+          )}
+        </div>
+
         <div style={{ position: 'relative' }}>
           <button
             className="nav-btn"
