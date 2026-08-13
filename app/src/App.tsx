@@ -34,6 +34,7 @@ interface Tab {
   isMuted?: boolean;
   favicon?: string;
   workspaceId?: string;
+  groupId?: string;
 }
 
 const DEFAULT_URL = 'https://www.google.com';
@@ -154,6 +155,11 @@ function App() {
   });
   const [activeWorkspaceId, setActiveWorkspaceId] = useState<string>(() => {
     return localStorage.getItem('activeWorkspaceId') || 'default';
+  });
+
+  const [tabGroups, setTabGroups] = useState<{id: string, name: string, color: string}[]>(() => {
+    const saved = localStorage.getItem('tabGroups');
+    return saved ? JSON.parse(saved) : [];
   });
 
   const [splitTabId, setSplitTabId] = useState<string | null>(null);
@@ -526,6 +532,10 @@ function App() {
   useEffect(() => {
     localStorage.setItem('activeWorkspaceId', activeWorkspaceId);
   }, [activeWorkspaceId]);
+
+  useEffect(() => {
+    localStorage.setItem('tabGroups', JSON.stringify(tabGroups));
+  }, [tabGroups]);
 
   const targetedTabId = focusedPane === 'split' && splitTabId ? splitTabId : activeTabId;
 
@@ -1184,6 +1194,27 @@ function App() {
             <div className="menu-item-text">{tabs.find(t => t.id === tabContextMenu.tabId)?.isMuted ? 'Unmute Site' : 'Mute Site'}</div>
           </div>
           <div className="menu-divider" />
+          <div className="menu-divider" />
+          <div className="menu-item" onClick={() => {
+            const name = prompt('Group Name:');
+            if (name) {
+               const id = Date.now().toString();
+               const colors = ['#ff5252', '#4caf50', '#2196f3', '#ffeb3b', '#9c27b0', '#ff9800', '#00bcd4'];
+               const color = colors[Math.floor(Math.random() * colors.length)];
+               setTabGroups(prev => [...prev, { id, name, color }]);
+               updateTab(tabContextMenu.tabId, { groupId: id });
+            }
+          }}>
+            <div className="menu-item-text">Add to New Group</div>
+          </div>
+          {tabs.find(t => t.id === tabContextMenu.tabId)?.groupId && (
+            <div className="menu-item" onClick={() => {
+              updateTab(tabContextMenu.tabId, { groupId: undefined });
+            }}>
+              <div className="menu-item-text">Remove from Group</div>
+            </div>
+          )}
+          <div className="menu-divider" />
           <div className="menu-item" onClick={() => {
              closeTabId(tabContextMenu.tabId);
           }}>
@@ -1291,12 +1322,28 @@ function App() {
 
         <div className="tabs" style={{ display: settings.verticalTabs ? 'none' : 'flex' }}>
           {[...tabs].filter(t => (t.workspaceId || 'default') === activeWorkspaceId).sort((a, b) => {
-            if (a.isPinned === b.isPinned) return 0;
-            return a.isPinned ? -1 : 1;
-          }).map(tab => (
+            if (a.isPinned !== b.isPinned) return a.isPinned ? -1 : 1;
+            if (a.groupId !== b.groupId) return (a.groupId || '') > (b.groupId || '') ? 1 : -1;
+            return 0;
+          }).map((tab, i, arr) => {
+            const group = tab.groupId ? tabGroups.find(g => g.id === tab.groupId) : null;
+            const isFirstInGroup = group && (i === 0 || arr[i - 1].groupId !== tab.groupId);
+
+            return (
+            <React.Fragment key={tab.id}>
+              {isFirstInGroup && (
+                 <div style={{
+                    display: 'flex', alignItems: 'center', justifyContent: 'center',
+                    padding: '2px 8px', margin: '4px 2px 4px 4px', borderRadius: '12px',
+                    backgroundColor: group.color, color: '#fff', fontSize: '11px', fontWeight: 'bold',
+                    maxWidth: '80px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap'
+                 }} title={group.name}>
+                    {group.name}
+                 </div>
+              )}
             <div
-              key={tab.id}
               className={`tab ${tab.id === activeTabId ? 'active' : ''} ${tab.isPrivate ? 'private' : ''} ${tab.isPinned ? 'pinned' : ''}`}
+              style={{ borderTop: group ? `3px solid ${group.color}` : undefined }}
               onClick={() => setActiveTabId(tab.id)}
               onContextMenu={(e) => {
                 e.preventDefault();
@@ -1368,7 +1415,8 @@ function App() {
                 </div>
               )}
             </div>
-          ))}
+            </React.Fragment>
+          )})}
           <button className="new-tab-btn" onClick={() => createTab(isPrivateWindow)}>
             <Plus size={16} />
           </button>
@@ -2394,11 +2442,25 @@ function App() {
             </div>
             <div style={{ padding: '8px', display: 'flex', flexDirection: 'column', gap: '4px' }}>
               {[...tabs].filter(t => (t.workspaceId || 'default') === activeWorkspaceId).sort((a, b) => {
-                if (a.isPinned === b.isPinned) return 0;
-                return a.isPinned ? -1 : 1;
-              }).map(tab => (
+                if (a.isPinned !== b.isPinned) return a.isPinned ? -1 : 1;
+                if (a.groupId !== b.groupId) return (a.groupId || '') > (b.groupId || '') ? 1 : -1;
+                return 0;
+              }).map((tab, i, arr) => {
+                const group = tab.groupId ? tabGroups.find(g => g.id === tab.groupId) : null;
+                const isFirstInGroup = group && (i === 0 || arr[i - 1].groupId !== tab.groupId);
+
+                return (
+                <React.Fragment key={tab.id}>
+                  {isFirstInGroup && (
+                     <div style={{
+                        display: 'flex', alignItems: 'center', padding: '2px 8px', margin: '4px 0',
+                        borderRadius: '6px', backgroundColor: group.color, color: '#fff',
+                        fontSize: '11px', fontWeight: 'bold'
+                     }}>
+                        {group.name}
+                     </div>
+                  )}
                 <div
-                  key={tab.id}
                   className={`tab vertical-tab ${tab.id === activeTabId ? 'active' : ''} ${tab.isPrivate ? 'private' : ''} ${tab.isPinned ? 'pinned' : ''}`}
                   style={{
                      display: 'flex',
@@ -2407,7 +2469,7 @@ function App() {
                      borderRadius: '6px',
                      cursor: 'default',
                      background: tab.id === activeTabId ? 'var(--tab-active-bg)' : 'transparent',
-                     border: '1px solid transparent',
+                     borderLeft: group ? `3px solid ${group.color}` : '1px solid transparent',
                      userSelect: 'none'
                   }}
                   onClick={() => setActiveTabId(tab.id)}
@@ -2478,7 +2540,8 @@ function App() {
                     <X size={12} />
                   </div>
                 </div>
-              ))}
+                </React.Fragment>
+              )})}
             </div>
           </div>
         )}
