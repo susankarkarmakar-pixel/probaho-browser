@@ -73,6 +73,7 @@ declare global {
       saveAsPdf?: () => void;
       onTriggerSaveAsPdf?: (callback: () => void) => void;
       executeSavePdf?: (data: ArrayBuffer) => void;
+      fetchSuggestions?: (query: string) => Promise<string[]>;
       setAdBlocker: (enabled: boolean) => void;
       onAdBlocked: (callback: (webContentsId: number) => void) => void;
       onTabCrashed: (callback: (webContentsId: number, reason: string) => void) => void;
@@ -242,6 +243,8 @@ function App() {
   const [showAbout, setShowAbout] = useState(false);
   const [showAutocomplete, setShowAutocomplete] = useState(false);
   const [autocompleteSuggestions, setAutocompleteSuggestions] = useState<{title: string, url: string}[]>([]);
+  const fetchTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+  const fetchAbortControllerRef = useRef<AbortController | null>(null);
   const [showCommandPalette, setShowCommandPalette] = useState(false);
   const [commandQuery, setCommandQuery] = useState('');
   const [commandSelectionIndex, setCommandSelectionIndex] = useState(0);
@@ -1435,7 +1438,7 @@ function App() {
             className="address-input"
             type="text"
             value={inputUrl}
-            onChange={(e) => {
+            onChange={async (e) => {
                const val = e.target.value;
                setInputUrl(val);
 
@@ -1462,7 +1465,42 @@ function App() {
                      }
                    }
                  });
-                 setAutocompleteSuggestions(matches.slice(0, 6)); // max 6 suggestions
+
+                 // Debounce and fetch live suggestions
+                 if (fetchTimeoutRef.current) clearTimeout(fetchTimeoutRef.current);
+                 if (fetchAbortControllerRef.current) fetchAbortControllerRef.current.abort();
+
+                 fetchTimeoutRef.current = setTimeout(async () => {
+                   if (window.electronAPI?.fetchSuggestions && !val.includes('://')) {
+                     try {
+                       const controller = new AbortController();
+                       fetchAbortControllerRef.current = controller;
+
+                       // Set initial matches (local only) so it appears fast
+                       setAutocompleteSuggestions(matches.slice(0, 8));
+                       setShowAutocomplete(matches.length > 0);
+
+                       const suggestions = await window.electronAPI.fetchSuggestions(val);
+
+                       if (controller.signal.aborted) return;
+
+                       suggestions.forEach((s: string) => {
+                         const suggestionUrl = settings.defaultSearchEngine === 'Bing' ? `https://www.bing.com/search?q=${encodeURIComponent(s)}` : settings.defaultSearchEngine === 'DuckDuckGo' ? `https://duckduckgo.com/?q=${encodeURIComponent(s)}` : `https://www.google.com/search?q=${encodeURIComponent(s)}`;
+                         if (!seen.has(suggestionUrl)) {
+                           matches.push({ title: s, url: suggestionUrl });
+                           seen.add(suggestionUrl);
+                         }
+                       });
+
+                       setAutocompleteSuggestions(matches.slice(0, 8));
+                     } catch (err) {
+                       console.error('Failed to fetch suggestions', err);
+                     }
+                   }
+                 }, 150);
+
+                 // Immediately show local matches
+                 setAutocompleteSuggestions(matches.slice(0, 8)); // max 8 suggestions
                  setShowAutocomplete(matches.length > 0);
                } else {
                  setShowAutocomplete(false);

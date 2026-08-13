@@ -635,3 +635,18 @@ ipcMain.handle('fetch-pdf', async (event, url) => {
     throw error;
   }
 });
+
+ipcMain.handle('fetch-suggestions', async (event, query) => {
+  try {
+    const response = await fetch(`https://duckduckgo.com/ac/?q=${encodeURIComponent(query)}&type=list`);
+    if (!response.ok) return [];
+    const data = await response.json();
+    if (Array.isArray(data) && data.length > 1 && Array.isArray(data[1])) {
+      return data[1];
+    }
+    return [];
+  } catch (error) {
+    console.error('Error fetching suggestions:', error);
+    return [];
+  }
+});
