@@ -166,10 +166,15 @@ app.whenReady().then(() => {
   }
 
   let adBlockerEnabled = true;
+  let currentSettings = {};
   const activeDownloadsMap = new Map();
 
   ipcMain.on('set-adblocker', (event, enabled) => {
     adBlockerEnabled = enabled;
+  });
+
+  ipcMain.on('update-settings', (event, settings) => {
+    currentSettings = settings;
   });
 
   ipcMain.on('cancel-download', (event, id) => {
@@ -281,6 +286,11 @@ app.whenReady().then(() => {
   // Set a standard Chromium User Agent
   session.defaultSession.webRequest.onBeforeSendHeaders((details, callback) => {
     details.requestHeaders['User-Agent'] = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.0.0 Safari/537.36';
+
+    if (currentSettings.doNotTrack) {
+      details.requestHeaders['DNT'] = '1';
+    }
+
     callback({ cancel: false, requestHeaders: details.requestHeaders });
   });
 
@@ -365,7 +375,11 @@ app.whenReady().then(() => {
     const downloadId = Date.now().toString();
     const fileName = item.getFilename();
     const savePath = path.join(app.getPath('downloads'), fileName);
-    item.setSavePath(savePath);
+
+    // Check if the user wants to be asked where to save the file
+    if (!currentSettings.askDownloadLocation) {
+      item.setSavePath(savePath);
+    }
 
     activeDownloadsMap.set(downloadId, item);
 
