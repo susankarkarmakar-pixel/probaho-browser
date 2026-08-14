@@ -76,6 +76,7 @@ declare global {
       executeSavePdf?: (data: ArrayBuffer) => void;
       fetchSuggestions?: (query: string) => Promise<string[]>;
       setAdBlocker: (enabled: boolean) => void;
+      updateSettings?: (settings: any) => void;
       onAdBlocked: (callback: (webContentsId: number) => void) => void;
       onTabCrashed: (callback: (webContentsId: number, reason: string) => void) => void;
       onOpenPdfViewer: (callback: (url: string, webContentsId?: number) => void) => void;
@@ -118,7 +119,9 @@ function App() {
           newTabBackgroundUrl: '',
           verticalTabs: false,
           showBookmarksBar: false,
-          accentColor: '#7b2cbf'
+          accentColor: '#7b2cbf',
+          doNotTrack: false,
+          askDownloadLocation: false
         };
         const merged = { ...def, ...parsed };
         settingsRef.current = merged;
@@ -133,8 +136,10 @@ function App() {
       language: 'en' as Language,
       newTabBackgroundUrl: '',
       verticalTabs: false,
-          showBookmarksBar: false,
-      accentColor: '#7b2cbf'
+      showBookmarksBar: false,
+      accentColor: '#7b2cbf',
+      doNotTrack: false,
+      askDownloadLocation: false
     };
     settingsRef.current = def;
     return def;
@@ -252,6 +257,7 @@ function App() {
   const [showAutocomplete, setShowAutocomplete] = useState(false);
   const [showShields, setShowShields] = useState(false);
   const [showMediaControls, setShowMediaControls] = useState(false);
+  const [showSiteInfo, setShowSiteInfo] = useState(false);
   const [autocompleteSuggestions, setAutocompleteSuggestions] = useState<{title: string, url: string}[]>([]);
   const fetchTimeoutRef = useRef<NodeJS.Timeout | null>(null);
   const fetchAbortControllerRef = useRef<AbortController | null>(null);
@@ -286,6 +292,10 @@ function App() {
 
     if (window.electronAPI?.setAdBlocker) {
       window.electronAPI.setAdBlocker(settings.adBlockerEnabled !== false);
+    }
+
+    if (window.electronAPI?.updateSettings) {
+      window.electronAPI.updateSettings(settings);
     }
   }, [settings]);
 
@@ -1155,10 +1165,11 @@ function App() {
       if (tabContextMenu) setTabContextMenu(null);
       if (showShields) setShowShields(false);
       if (showMediaControls) setShowMediaControls(false);
+      if (showSiteInfo) setShowSiteInfo(false);
     };
     document.addEventListener('click', handleGlobalClick);
     return () => document.removeEventListener('click', handleGlobalClick);
-  }, [tabContextMenu, showShields, showMediaControls]);
+  }, [tabContextMenu, showShields, showMediaControls, showSiteInfo]);
 
   return (
     <div className="browser-container">
@@ -1484,9 +1495,39 @@ function App() {
         </div>
 
         <form className="address-bar-container" onSubmit={onSubmit} style={{position: 'relative'}}>
-          <div className="security-icon">
+          <div className="security-icon" onClick={(e) => { e.stopPropagation(); setShowSiteInfo(!showSiteInfo); }} style={{cursor: 'pointer'}}>
             {targetedTab?.isSecure ? <Lock size={14} color="#4caf50" /> : <Search size={14} />}
           </div>
+
+          {showSiteInfo && (
+            <div className="downloads-popout" onClick={(e) => e.stopPropagation()} style={{
+              position: 'absolute', top: '100%', left: 0, width: '280px',
+              background: 'var(--bg-color)', border: '1px solid var(--border-color)',
+              borderRadius: '8px', zIndex: 150, boxShadow: '0 8px 24px rgba(0,0,0,0.2)',
+              marginTop: '8px', padding: '16px'
+            }}>
+              <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '8px', borderBottom: '1px solid var(--border-color)', paddingBottom: '16px', marginBottom: '16px' }}>
+                {targetedTab?.isSecure ? <Lock size={32} color="#4caf50" /> : <Search size={32} color="#f44336" />}
+                <h3 style={{ margin: 0, fontSize: '16px', textAlign: 'center' }}>
+                  {targetedTab?.isSecure ? 'Connection is secure' : 'Your connection to this site is not secure'}
+                </h3>
+              </div>
+              <button
+                className="clear-history-btn"
+                style={{width: '100%', padding: '8px', fontSize: '13px', cursor: 'pointer'}}
+                onClick={() => {
+                  setShowSiteInfo(false);
+                  setShowSettings(true);
+                  if (window.electronAPI?.getPermissions) {
+                    window.electronAPI.getPermissions().then(setPermissions);
+                  }
+                }}
+              >
+                Site settings
+              </button>
+            </div>
+          )}
+
           <input
             ref={addressInputRef}
             className="address-input"
@@ -2080,6 +2121,30 @@ function App() {
                     style={{marginRight: '8px'}}
                   />
                   {t('showBookmarksBar', settings.language)}
+                </label>
+              </div>
+
+              <div style={{marginBottom: '16px'}}>
+                <label style={{display: 'flex', alignItems: 'center', cursor: 'pointer', fontSize: '13px', fontWeight: 'bold'}}>
+                  <input
+                    type="checkbox"
+                    checked={settings.doNotTrack === true}
+                    onChange={e => setSettings({...settings, doNotTrack: e.target.checked})}
+                    style={{marginRight: '8px'}}
+                  />
+                  Send a "Do Not Track" request with your browsing traffic
+                </label>
+              </div>
+
+              <div style={{marginBottom: '16px'}}>
+                <label style={{display: 'flex', alignItems: 'center', cursor: 'pointer', fontSize: '13px', fontWeight: 'bold'}}>
+                  <input
+                    type="checkbox"
+                    checked={settings.askDownloadLocation === true}
+                    onChange={e => setSettings({...settings, askDownloadLocation: e.target.checked})}
+                    style={{marginRight: '8px'}}
+                  />
+                  Ask where to save each file before downloading
                 </label>
               </div>
 

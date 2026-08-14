@@ -32,6 +32,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
   openFile: (path) => ipcRenderer.send('open-file', path),
   showInFolder: (path) => ipcRenderer.send('show-in-folder', path),
   setAdBlocker: (enabled) => ipcRenderer.send('set-adblocker', enabled),
+  updateSettings: (settings) => ipcRenderer.send('update-settings', settings),
   onAdBlocked: (callback) => ipcRenderer.on('ad-blocked', (event, webContentsId) => callback(webContentsId)),
 
   onOpenPdfViewer: (callback) => ipcRenderer.on('open-pdf-viewer', (event, url, webContentsId) => callback(url, webContentsId)),
