@@ -3,7 +3,7 @@ import { t, Language } from './i18n';
 import PdfViewer from './PdfViewer';
 import {
   ArrowLeft, ArrowRight, RotateCw, Home, Plus,
-  Lock, X, Square, Search, Star, Bookmark, Menu, History, ZoomIn, FileCode, Printer, LogOut, Info, Download, Folder, Settings, ChevronUp, ChevronDown, EyeOff, Shield, BookOpen, Volume2, VolumeX, Globe, BookPlus, PictureInPicture, Share2, MessageSquare, Music, MessageCircle, Library, Columns, PanelRight
+  Lock, X, Square, Search, Star, Bookmark, Menu, History, ZoomIn, FileCode, Printer, LogOut, Info, Download, Folder, Settings, ChevronUp, ChevronDown, EyeOff, Eye, Shield, BookOpen, Volume2, VolumeX, Globe, BookPlus, PictureInPicture, Share2, MessageSquare, Music, MessageCircle, Library, Columns, PanelRight
 } from 'lucide-react';
 
 interface DownloadItem {
@@ -90,7 +90,9 @@ declare global {
       openNewWindow?: () => void;
       loadExtension?: () => Promise<string | null>;
       getPassword?: (origin: string) => Promise<any>;
+      getAllPasswords?: () => Promise<any>;
       savePassword?: (origin: string, creds: any) => void;
+      deletePassword?: (origin: string) => void;
     };
   }
 }
@@ -252,6 +254,8 @@ function App() {
   const [showDownloads, setShowDownloads] = useState(false);
   const [downloads, setDownloads] = useState<DownloadItem[]>([]);
   const [permissions, setPermissions] = useState<Record<string, Record<string, boolean>>>({});
+  const [passwordsStore, setPasswordsStore] = useState<Record<string, any>>({});
+  const [showPasswords, setShowPasswords] = useState<Record<string, boolean>>({});
   const [showMenu, setShowMenu] = useState(false);
   const [showAbout, setShowAbout] = useState(false);
   const [showAutocomplete, setShowAutocomplete] = useState(false);
@@ -1521,6 +1525,9 @@ function App() {
                   if (window.electronAPI?.getPermissions) {
                     window.electronAPI.getPermissions().then(setPermissions);
                   }
+                  if (window.electronAPI?.getAllPasswords) {
+                    window.electronAPI.getAllPasswords().then(setPasswordsStore);
+                  }
                 }}
               >
                 Site settings
@@ -1955,6 +1962,9 @@ function App() {
             if (window.electronAPI?.getPermissions) {
               window.electronAPI.getPermissions().then(setPermissions);
             }
+            if (window.electronAPI?.getAllPasswords) {
+              window.electronAPI.getAllPasswords().then(setPasswordsStore);
+            }
           }}>
             <div className="menu-item-icon"><Settings size={16} /></div>
             <div className="menu-item-text">{t('settings', settings.language)}</div>
@@ -2198,6 +2208,68 @@ function App() {
                 >
                   Clear Browsing Data (History & Cache)
                 </button>
+              </div>
+
+              {/* Password Manager Section */}
+              <div style={{marginTop: '24px', borderTop: '1px solid var(--border-color)', paddingTop: '16px'}}>
+                <h4 style={{marginBottom: '12px', fontSize: '14px'}}>Password Manager</h4>
+                {Object.keys(passwordsStore).length === 0 ? (
+                  <div style={{fontSize: '13px', color: '#888'}}>No saved passwords.</div>
+                ) : (
+                  <div style={{maxHeight: '200px', overflowY: 'auto'}}>
+                    {Object.entries(passwordsStore).map(([origin, creds]: [string, any]) => (
+                      <div key={origin} style={{display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px', padding: '8px', background: 'var(--tab-bg)', borderRadius: '6px'}}>
+                        <div style={{flex: 1, overflow: 'hidden'}}>
+                          <div style={{fontWeight: 'bold', fontSize: '13px', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis'}}>{origin}</div>
+                          <div style={{fontSize: '12px', color: '#888'}}>Username: {creds.username || 'N/A'}</div>
+                          <div style={{fontSize: '12px', color: '#888', display: 'flex', alignItems: 'center', gap: '4px'}}>
+                            Password: {showPasswords[origin] ? creds.password : '••••••••'}
+                            <button
+                              className="nav-btn"
+                              style={{padding: '2px'}}
+                              onClick={() => setShowPasswords(prev => ({...prev, [origin]: !prev[origin]}))}
+                            >
+                              {showPasswords[origin] ? <EyeOff size={12} /> : <Eye size={12} />}
+                            </button>
+                          </div>
+                        </div>
+                        <div style={{display: 'flex', alignItems: 'center', gap: '8px'}}>
+                        <button
+                          className="clear-history-btn"
+                          style={{padding: '4px 8px', fontSize: '11px'}}
+                          onClick={() => {
+                            const newUsername = prompt("Enter new username:", creds.username);
+                            const newPassword = prompt("Enter new password:", creds.password);
+                            if (newUsername !== null && newPassword !== null) {
+                              const updatedCreds = { username: newUsername, password: newPassword };
+                              if (window.electronAPI?.savePassword) {
+                                window.electronAPI.savePassword(origin, updatedCreds);
+                                setPasswordsStore(prev => ({...prev, [origin]: updatedCreds}));
+                              }
+                            }
+                          }}
+                        >
+                          Edit
+                        </button>
+                        <button
+                          className="clear-history-btn"
+                          style={{padding: '4px 8px', fontSize: '11px'}}
+                          onClick={() => {
+                            if (window.electronAPI?.deletePassword) {
+                              window.electronAPI.deletePassword(origin);
+                              const newStore = { ...passwordsStore };
+                              delete newStore[origin];
+                              setPasswordsStore(newStore);
+                            }
+                          }}
+                        >
+                          Delete
+                        </button>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                )}
               </div>
 
               {/* Extensions Section */}

@@ -233,8 +233,16 @@ app.whenReady().then(() => {
     return passwordsStore.getPassword(origin);
   });
 
+  ipcMain.handle('get-all-passwords', () => {
+    return passwordsStore.getAllPasswords();
+  });
+
   ipcMain.on('save-password', (e, origin, creds) => {
     passwordsStore.setPassword(origin, creds);
+  });
+
+  ipcMain.on('delete-password', (e, origin) => {
+    passwordsStore.deletePassword(origin);
   });
 
   ipcMain.on('delete-permission', (event, origin, permission) => {

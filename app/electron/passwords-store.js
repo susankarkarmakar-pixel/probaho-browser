@@ -31,9 +31,20 @@ class PasswordsStore {
     return this.data[origin] || null;
   }
 
+  getAllPasswords() {
+    return this.data;
+  }
+
   setPassword(origin, credentials) {
     this.data[origin] = credentials;
     this.saveData();
+  }
+
+  deletePassword(origin) {
+    if (this.data[origin]) {
+      delete this.data[origin];
+      this.saveData();
+    }
   }
 }
 
