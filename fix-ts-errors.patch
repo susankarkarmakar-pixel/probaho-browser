@@ -1,0 +1,21 @@
+--- app/src/App.tsx
++++ app/src/App.tsx
+@@ -491,7 +491,7 @@
+
+     if (window.electronAPI?.onToggleBookmarksBar) {
+       window.electronAPI.onToggleBookmarksBar(() => {
+-        setSettings(prev => ({ ...prev, showBookmarksBar: !prev.showBookmarksBar }));
++        setSettings((prev: any) => ({ ...prev, showBookmarksBar: !prev.showBookmarksBar }));
+       });
+     }
+
+@@ -514,7 +514,7 @@
+         if (wv) {
+            const currentUrl = wv.getURL();
+            if (currentUrl && currentUrl !== 'about:blank' && !currentUrl.startsWith('probaho://')) {
+-              window.electronAPI?.onOpenLinkNewTab?.('view-source:' + currentUrl);
++              window.electronAPI?.onOpenLinkNewTab?.((url) => navigate(url)); // Fallback if direct call fails
++              navigate('view-source:' + currentUrl);
+            }
+         }
+       });

@@ -1,0 +1,34 @@
+--- app/src/App.tsx
++++ app/src/App.tsx
+@@ -48,7 +48,7 @@
+       openFile: (path: string) => void;
+       showInFolder: (path: string) => void;
+       onOpenLinkNewTab: (callback: (url: string) => void) => void;
+-      showContextMenu: (params: { x: number, y: number, linkURL: string, hasImageContents?: boolean, srcURL?: string, selectionText?: string }) => void;
++      showContextMenu: (params: { x: number, y: number, linkURL: string, hasImageContents?: boolean, srcURL?: string, selectionText?: string, pageURL?: string, searchEngine?: string }) => void;
+       onContextMenuAction: (callback: (action: string, x?: number, y?: number) => void) => void;
+       onFind: (callback: () => void) => void;
+       onCycleTabPrev: (callback: () => void) => void;
+@@ -957,7 +957,9 @@
+         linkURL: e.params.linkURL,
+         hasImageContents: e.params.hasImageContents,
+         srcURL: e.params.srcURL,
+-        selectionText: e.params.selectionText
++        selectionText: e.params.selectionText,
++        pageURL: e.params.pageURL,
++        searchEngine: settingsRef.current?.defaultSearchEngine || 'Google'
+       });
+     });
+
+@@ -829,6 +831,11 @@
+               wv.inspectElement(x, y);
+             }
+             break;
++          case 'copy-image':
++            if (x !== undefined && y !== undefined) {
++              wv.copyImageAt(x, y);
++            }
++            break;
+         }
+       });
+     }

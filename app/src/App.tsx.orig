@@ -70,9 +70,6 @@ declare global {
       onZoomReset?: (callback: () => void) => void;
       onCommandPalette?: (callback: () => void) => void;
       onRestoreTab?: (callback: () => void) => void;
-      onToggleBookmarksBar?: (callback: () => void) => void;
-      onOpenSettings?: (callback: () => void) => void;
-      onViewSource?: (callback: () => void) => void;
       onAppCommand?: (callback: (cmd: string) => void) => void;
       saveAsPdf?: () => void;
       onTriggerSaveAsPdf?: (callback: () => void) => void;
@@ -489,37 +486,6 @@ function App() {
       });
     }
 
-    if (window.electronAPI?.onToggleBookmarksBar) {
-      window.electronAPI.onToggleBookmarksBar(() => {
-        setSettings((prev: any) => ({ ...prev, showBookmarksBar: !prev.showBookmarksBar }));
-      });
-    }
-
-    if (window.electronAPI?.onOpenSettings) {
-      window.electronAPI.onOpenSettings(() => {
-        setShowMenu(false);
-        setShowSettings(true);
-        if (window.electronAPI?.getPermissions) {
-          window.electronAPI.getPermissions().then(setPermissions);
-        }
-        if (window.electronAPI?.getAllPasswords) {
-          window.electronAPI.getAllPasswords().then(setPasswordsStore);
-        }
-      });
-    }
-
-    if (window.electronAPI?.onViewSource) {
-      window.electronAPI.onViewSource(() => {
-        const wv = webviewRefs.current[activeTabIdRef.current];
-        if (wv) {
-           const currentUrl = wv.getURL();
-           if (currentUrl && currentUrl !== 'about:blank' && !currentUrl.startsWith('probaho://')) {
-              navigate('view-source:' + currentUrl);
-           }
-        }
-      });
-    }
-
     if (window.electronAPI?.onTriggerSaveAsPdf) {
       window.electronAPI.onTriggerSaveAsPdf(() => {
         const wv = webviewRefs.current[activeTabIdRef.current];
@@ -650,11 +616,6 @@ function App() {
           case 'inspect':
             if (x !== undefined && y !== undefined) {
               wv.inspectElement(x, y);
-            }
-            break;
-          case 'copy-image':
-            if (x !== undefined && y !== undefined) {
-              wv.copyImageAt(x, y);
             }
             break;
         }
@@ -1079,7 +1040,7 @@ function App() {
     if (!url) return;
     console.log('navigate called with', url);
     let finalUrl = url;
-    if (!url.startsWith('http://') && !url.startsWith('https://') && !url.startsWith('file://') && !url.startsWith('view-source:')) {
+    if (!url.startsWith('http://') && !url.startsWith('https://') && !url.startsWith('file://')) {
       if (url.includes('.') && !url.includes(' ') && !url.startsWith('localhost')) {
         finalUrl = `https://${url}`;
       } else {
