@@ -1,0 +1,27 @@
+--- app/electron/main.js
++++ app/electron/main.js
+@@ -647,8 +647,24 @@
+       label: 'Copy Image URL',
+       click: () => {
+         clipboard.writeText(params.srcURL);
+       }
+     });
++    template.push({
++      label: 'Copy Image',
++      click: () => {
++        if (win) win.webContents.send('context-menu-action', 'copy-image', params.x, params.y);
++      }
++    });
++  }
++
++  if (params.pageURL) {
++    template.push({ type: 'separator' });
++    template.push({
++      label: 'View Page Source',
++      click: () => {
++        if (win) win.webContents.send('open-link-new-tab', 'view-source:' + params.pageURL);
++      }
++    });
+   }
+
+   template.push({ type: 'separator' });

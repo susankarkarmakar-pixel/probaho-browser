@@ -1,0 +1,50 @@
+--- app/electron/main.js
++++ app/electron/main.js
+@@ -590,11 +590,20 @@
+   ];
+
+   if (params.selectionText) {
+     const trimmedText = params.selectionText.length > 15 ? params.selectionText.substring(0, 15) + '...' : params.selectionText;
++    let searchUrl = `https://www.google.com/search?q=${encodeURIComponent(params.selectionText)}`;
++    const searchEngine = params.searchEngine || 'Google';
++    if (searchEngine === 'Bing') {
++      searchUrl = `https://www.bing.com/search?q=${encodeURIComponent(params.selectionText)}`;
++    } else if (searchEngine === 'DuckDuckGo') {
++      searchUrl = `https://duckduckgo.com/?q=${encodeURIComponent(params.selectionText)}`;
++    }
++
+     template.push({
+-      label: `Search Google for "${trimmedText}"`,
++      label: `Search ${searchEngine} for "${trimmedText}"`,
+       click: () => {
+-        if (win) win.webContents.send('open-link-new-tab', `https://www.google.com/search?q=${encodeURIComponent(params.selectionText)}`);
++        if (win) win.webContents.send('open-link-new-tab', searchUrl);
+       }
+     });
+   }
+@@ -647,6 +656,12 @@
+       click: () => {
+         clipboard.writeText(params.srcURL);
+       }
++    });
++    template.push({
++      label: 'Copy Image',
++      click: () => {
++        if (win) win.webContents.send('context-menu-action', 'copy-image', params.x, params.y);
++      }
+     });
+   }
+
++  if (params.pageURL) {
++    template.push({ type: 'separator' });
++    template.push({
++      label: 'View Page Source',
++      click: () => {
++        if (win) win.webContents.send('open-link-new-tab', 'view-source:' + params.pageURL);
++      }
++    });
++  }
++
+   template.push({ type: 'separator' });
+   template.push({
+     label: 'Inspect Element',
