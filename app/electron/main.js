@@ -140,6 +140,14 @@ function createWindow(isPrivate = false) {
       mainWindow.webContents.send('shortcut-view-source');
       event.preventDefault();
     }
+    if ((input.control || input.meta) && input.key.toLowerCase() === 'p') {
+      mainWindow.webContents.send('shortcut-print');
+      event.preventDefault();
+    }
+    if ((input.control || input.meta) && input.key.toLowerCase() === 'd') {
+      mainWindow.webContents.send('shortcut-add-bookmark');
+      event.preventDefault();
+    }
     if (input.type === 'keyDown' && (input.key === 'BrowserBack' || input.key === 'BrowserForward' || (input.alt && (input.key === 'ArrowLeft' || input.key === 'ArrowRight')))) {
        // app-command takes care of this on Windows, but this is a fallback for some environments
        const isBack = input.key === 'BrowserBack' || (input.alt && input.key === 'ArrowLeft');

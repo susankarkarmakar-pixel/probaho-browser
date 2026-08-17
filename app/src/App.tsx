@@ -73,6 +73,8 @@ declare global {
       onToggleBookmarksBar?: (callback: () => void) => void;
       onOpenSettings?: (callback: () => void) => void;
       onViewSource?: (callback: () => void) => void;
+      onPrint?: (callback: () => void) => void;
+      onAddBookmark?: (callback: () => void) => void;
       onAppCommand?: (callback: (cmd: string) => void) => void;
       saveAsPdf?: () => void;
       onTriggerSaveAsPdf?: (callback: () => void) => void;
@@ -517,6 +519,34 @@ function App() {
               navigate('view-source:' + currentUrl);
            }
         }
+      });
+    }
+
+    if (window.electronAPI?.onPrint) {
+      window.electronAPI.onPrint(() => {
+        const wv = webviewRefs.current[activeTabIdRef.current];
+        if (wv) {
+          wv.print();
+        }
+      });
+    }
+
+    if (window.electronAPI?.onAddBookmark) {
+      window.electronAPI.onAddBookmark(() => {
+        setTabs(currentTabs => {
+          const activeTab = currentTabs.find(t => t.id === activeTabIdRef.current);
+          if (activeTab) {
+            setBookmarks(prev => {
+              const isBookmarked = prev.some(b => b.url === activeTab.url);
+              if (isBookmarked) {
+                return prev.filter(b => b.url !== activeTab.url);
+              } else {
+                return [...prev, { title: activeTab.title, url: activeTab.url }];
+              }
+            });
+          }
+          return currentTabs;
+        });
       });
     }
 

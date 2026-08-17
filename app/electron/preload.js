@@ -30,6 +30,8 @@ contextBridge.exposeInMainWorld('electronAPI', {
   onToggleBookmarksBar: (callback) => ipcRenderer.on('shortcut-toggle-bookmarks-bar', () => callback()),
   onOpenSettings: (callback) => ipcRenderer.on('shortcut-open-settings', () => callback()),
   onViewSource: (callback) => ipcRenderer.on('shortcut-view-source', () => callback()),
+  onPrint: (callback) => ipcRenderer.on('shortcut-print', () => callback()),
+  onAddBookmark: (callback) => ipcRenderer.on('shortcut-add-bookmark', () => callback()),
   onTabCrashed: (callback) => ipcRenderer.on('tab-crashed', (event, webContentsId, reason) => callback(webContentsId, reason)),
   onAppCommand: (callback) => ipcRenderer.on('app-command', (event, cmd) => callback(cmd)),
   openFile: (path) => ipcRenderer.send('open-file', path),
