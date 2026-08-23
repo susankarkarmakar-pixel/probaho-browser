@@ -82,6 +82,17 @@ test.describe('browser shell', () => {
     await expect(appPage.getByTestId('suspend-tabs-toggle')).toBeChecked();
   });
 
+  test('searches and manages the redesigned history panel', async ({ appPage }) => {
+    await appPage.getByTestId('menu-button').click();
+    await appPage.locator('.menu-panel').getByText('History', { exact: true }).click();
+    const panel = appPage.getByTestId('history-panel');
+    await expect(panel).toBeVisible();
+    await expect(panel.getByText('0 entries', { exact: true })).toBeVisible();
+    await expect(panel.getByTestId('clear-history-button')).toBeDisabled();
+    await panel.getByTestId('history-search').fill('missing-site');
+    await expect(panel.getByText('No history yet', { exact: true })).toBeVisible();
+  });
+
   test('shows tracker protection controls for the current site', async ({ appPage }) => {
     const addressInput = appPage.getByTestId('address-input');
     await addressInput.fill('https://example.com');

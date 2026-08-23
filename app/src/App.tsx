@@ -339,6 +339,7 @@ function App() {
     return saved ? JSON.parse(saved) : [];
   });
   const [showHistory, setShowHistory] = useState(false);
+  const [historyQuery, setHistoryQuery] = useState('');
   const [showDownloads, setShowDownloads] = useState(false);
   const [downloads, setDownloads] = useState<DownloadItem[]>([]);
   const [permissions, setPermissions] = useState<PermissionStore>({});
@@ -2303,25 +2304,50 @@ function App() {
 
       {/* History Panel */}
       {showHistory && (
-        <div className="bookmarks-panel">
-          <div className="bookmarks-header">
-            <h3>{t('history', settings.language)}</h3>
+        <div className="bookmarks-panel history-panel" data-testid="history-panel">
+          <div className="bookmarks-header history-header">
+            <div>
+              <h3>{t('history', settings.language)}</h3>
+              <span className="panel-subtitle">{history.length} {history.length === 1 ? 'entry' : 'entries'}</span>
+            </div>
             <div style={{display: 'flex', gap: '8px', alignItems: 'center'}}>
-              <button className="clear-history-btn" onClick={() => setHistory([])}>{t('clear', settings.language)}</button>
-              <button className="nav-btn" onClick={() => setShowHistory(false)}><X size={16} /></button>
+              <button className="clear-history-btn" data-testid="clear-history-button" disabled={history.length === 0} onClick={() => {
+                if (history.length > 0 && confirm('Clear all browsing history?')) setHistory([]);
+              }}>{t('clear', settings.language)}</button>
+              <button className="nav-btn" aria-label="Close history" title="Close history" onClick={() => setShowHistory(false)}><X size={16} /></button>
             </div>
           </div>
-          <div className="bookmarks-list">
-            {history.length === 0 ? (
-              <div className="no-bookmarks">{t('noHistory', settings.language)}</div>
-            ) : (
-              history.map((h, i) => (
-                <div key={i} className="bookmark-item" onClick={() => { navigate(h.url); setShowHistory(false); }}>
-                  <div className="bookmark-title">{h.title}</div>
-                  <div className="bookmark-url">{h.url} • {h.time}</div>
-                </div>
-              ))
-            )}
+          <div className="history-search-wrap">
+            <Search size={14} aria-hidden="true" />
+            <input
+              type="search"
+              data-testid="history-search"
+              aria-label="Search history"
+              placeholder="Search history"
+              value={historyQuery}
+              onChange={e => setHistoryQuery(e.target.value)}
+            />
+            {historyQuery && <button className="history-search-clear" aria-label="Clear history search" onClick={() => setHistoryQuery('')}><X size={13} /></button>}
+          </div>
+          <div className="bookmarks-list history-list">
+            {(() => {
+              const query = historyQuery.trim().toLowerCase();
+              const filteredHistory = query
+                ? history.filter(h => h.title.toLowerCase().includes(query) || h.url.toLowerCase().includes(query))
+                : history;
+              if (filteredHistory.length === 0) {
+                return <div className="no-bookmarks">{history.length === 0 ? t('noHistory', settings.language) : 'No matching history.'}</div>;
+              }
+              return filteredHistory.map((h, i) => (
+                <button key={`${h.url}-${h.time}-${i}`} type="button" className="bookmark-item history-item" onClick={() => { navigate(h.url); setShowHistory(false); }}>
+                  <span className="history-item-main">
+                    <span className="bookmark-title">{h.title || h.url}</span>
+                    <span className="bookmark-url">{h.url}</span>
+                  </span>
+                  <span className="history-item-time">{h.time}</span>
+                </button>
+              ));
+            })()}
           </div>
         </div>
       )}
