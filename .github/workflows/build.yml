@@ -31,9 +31,9 @@ jobs:
         working-directory: app
         run: npm run build
 
-      - name: Test tracker matching rules
+      - name: Test security and platform contracts
         working-directory: app
-        run: npm run test:tracker
+        run: npm run test:unit
 
       - name: Check Electron-side JavaScript
         working-directory: app

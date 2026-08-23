@@ -23,6 +23,28 @@ interface PermissionDecision {
 
 type PermissionStore = Record<string, Record<string, PermissionDecision>>;
 
+type ExtensionRecord = {
+  id: string;
+  path: string;
+  name: string;
+  version: string;
+  manifestVersion: number;
+  permissions: string[];
+  hostPermissions: string[];
+  description: string;
+  enabled: boolean;
+  loaded: boolean;
+};
+
+type PluginRecord = {
+  id: string;
+  type: 'command' | 'panel';
+  name: string;
+  url: string;
+  action: string | null;
+  enabled: boolean;
+};
+
 interface Tab {
   id: string;
   url: string;
@@ -106,7 +128,14 @@ declare global {
       resumeDownload?: (id: string) => void;
       openPrivateWindow?: () => void;
       openNewWindow?: () => void;
-      loadExtension?: () => Promise<string | null>;
+      loadExtension?: () => Promise<ExtensionRecord | { error: string } | null>;
+      getExtensions?: () => Promise<ExtensionRecord[]>;
+      setExtensionEnabled?: (id: string, enabled: boolean) => Promise<ExtensionRecord | { error: string } | null>;
+      removeExtension?: (id: string) => Promise<boolean>;
+      getPlugins?: () => Promise<PluginRecord[]>;
+      registerPlugin?: (plugin: Partial<PluginRecord>) => Promise<PluginRecord | { error: string }>;
+      setPluginEnabled?: (id: string, enabled: boolean) => Promise<PluginRecord | { error: string } | null>;
+      removePlugin?: (id: string) => Promise<boolean>;
       getPassword?: (origin: string) => Promise<any>;
       getAllPasswords?: () => Promise<any>;
       savePassword?: (origin: string, creds: any) => void;
@@ -313,6 +342,10 @@ function App() {
   const [showDownloads, setShowDownloads] = useState(false);
   const [downloads, setDownloads] = useState<DownloadItem[]>([]);
   const [permissions, setPermissions] = useState<PermissionStore>({});
+  const [extensions, setExtensions] = useState<ExtensionRecord[]>([]);
+  const [plugins, setPlugins] = useState<PluginRecord[]>([]);
+  const [extensionError, setExtensionError] = useState<string | null>(null);
+  const [pluginDraft, setPluginDraft] = useState('{"id":"my-panel","type":"panel","name":"My Panel","url":"https://example.com"}');
   const [passwordsStore, setPasswordsStore] = useState<Record<string, any>>({});
   const [showPasswords, setShowPasswords] = useState<Record<string, boolean>>({});
   const [showMenu, setShowMenu] = useState(false);
@@ -328,6 +361,17 @@ function App() {
   const [commandQuery, setCommandQuery] = useState('');
   const [commandSelectionIndex, setCommandSelectionIndex] = useState(0);
   const [recentlyClosed, setRecentlyClosed] = useState<{title: string, url: string}[]>([]);
+
+  useEffect(() => {
+    if (isPrivateWindow) return;
+    Promise.all([
+      window.electronAPI?.getExtensions?.(),
+      window.electronAPI?.getPlugins?.()
+    ]).then(([loadedExtensions, registeredPlugins]) => {
+      if (loadedExtensions) setExtensions(loadedExtensions);
+      if (registeredPlugins) setPlugins(registeredPlugins);
+    }).catch(() => setExtensionError('Unable to load extension metadata'));
+  }, [isPrivateWindow]);
 
   useEffect(() => {
     if (isPrivateWindow) return;
@@ -2566,21 +2610,92 @@ function App() {
                 )}
               </div>
 
-              {/* Extensions Section */}
-              <div style={{marginTop: '24px', borderTop: '1px solid var(--border-color)', paddingTop: '16px'}}>
-                <h4 style={{marginBottom: '12px', fontSize: '14px'}}>Extensions</h4>
+              {/* Extensions and Plugins Section */}
+              <div style={{marginTop: '24px', borderTop: '1px solid var(--border-color)', paddingTop: '16px'}} data-testid="extensions-section">
+                <h4 style={{marginBottom: '6px', fontSize: '14px'}}>Extensions</h4>
+                <div style={{fontSize: '11px', color: '#888', marginBottom: '12px'}}>Only manifest-validated unpacked extensions are loaded. Extension code remains isolated from this UI.</div>
                 <button
                   className="clear-history-btn"
+                  data-testid="load-extension-button"
                   style={{width: '100%', padding: '10px', fontSize: '13px', fontWeight: 'bold', background: 'var(--tab-bg)', color: 'var(--text-color)', border: '1px solid var(--border-color)', borderRadius: '4px', cursor: 'pointer'}}
-                  onClick={() => {
-                    if (window.electronAPI?.loadExtension) {
-                      window.electronAPI.loadExtension().then((path) => {
-                        if (path) alert(`Extension loaded from: ${path}`);
-                      });
-                    }
+                  onClick={async () => {
+                    setExtensionError(null);
+                    const result = await window.electronAPI?.loadExtension?.();
+                    if (!result) return;
+                    if ('error' in result) setExtensionError(result.error);
+                    else setExtensions(prev => [...prev.filter(item => item.id !== result.id), result]);
                   }}
                 >
                   Load Extension (Unpacked)
+                </button>
+                {extensionError && <div style={{color: '#f44336', fontSize: '11px', marginTop: '8px'}}>{extensionError}</div>}
+                <div style={{marginTop: '12px'}}>
+                  {extensions.length === 0 ? (
+                    <div style={{fontSize: '12px', color: '#888'}}>No custom extensions installed.</div>
+                  ) : extensions.map(extension => (
+                    <div key={extension.id} data-testid={`extension-${extension.id}`} style={{padding: '10px', marginBottom: '8px', border: '1px solid var(--border-color)', borderRadius: '6px'}}>
+                      <div style={{display: 'flex', justifyContent: 'space-between', gap: '8px'}}>
+                        <strong style={{fontSize: '12px'}}>{extension.name}</strong>
+                        <span style={{fontSize: '10px', color: '#888'}}>v{extension.version}</span>
+                      </div>
+                      {extension.description && <div style={{fontSize: '11px', color: '#999', marginTop: '4px'}}>{extension.description}</div>}
+                      <div style={{fontSize: '10px', color: '#888', marginTop: '6px'}}>Permissions: {extension.permissions.length ? extension.permissions.join(', ') : 'none'}</div>
+                      <div style={{display: 'flex', justifyContent: 'flex-end', gap: '6px', marginTop: '8px'}}>
+                        <button className="clear-history-btn" style={{padding: '4px 8px', fontSize: '10px'}} onClick={async () => {
+                          const result = await window.electronAPI?.setExtensionEnabled?.(extension.id, !extension.enabled);
+                          if (result && !('error' in result)) setExtensions(prev => prev.map(item => item.id === result.id ? result : item));
+                          else if (result && 'error' in result) setExtensionError(result.error);
+                        }}>{extension.enabled ? 'Disable' : 'Enable'}</button>
+                        <button className="clear-history-btn" style={{padding: '4px 8px', fontSize: '10px'}} onClick={async () => {
+                          await window.electronAPI?.removeExtension?.(extension.id);
+                          setExtensions(prev => prev.filter(item => item.id !== extension.id));
+                        }}>Remove</button>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+
+                <h4 style={{margin: '18px 0 6px', fontSize: '14px'}}>Plugins</h4>
+                <div style={{fontSize: '11px', color: '#888', marginBottom: '8px'}}>Plugins are declarative HTTPS panels or commands; arbitrary plugin JavaScript is not supported.</div>
+                {plugins.length === 0 ? (
+                  <div style={{fontSize: '12px', color: '#888'}}>No registered plugins.</div>
+                ) : plugins.map(plugin => (
+                  <div key={plugin.id} data-testid={`plugin-${plugin.id}`} style={{display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '8px 0', borderBottom: '1px solid var(--border-color)'}}>
+                    <span style={{fontSize: '12px'}}>{plugin.name} <span style={{color: '#888'}}>({plugin.type})</span></span>
+                    <div style={{display: 'flex', gap: '6px'}}>
+                      {plugin.type === 'panel' && <button className="clear-history-btn" style={{padding: '4px 8px', fontSize: '10px'}} onClick={() => { setShowSettings(false); navigate(plugin.url); }}>Open</button>}
+                      <button className="clear-history-btn" style={{padding: '4px 8px', fontSize: '10px'}} onClick={async () => {
+                        const result = await window.electronAPI?.setPluginEnabled?.(plugin.id, !plugin.enabled);
+                        if (result && !('error' in result)) setPlugins(prev => prev.map(item => item.id === result.id ? result : item));
+                      }}>{plugin.enabled ? 'Disable' : 'Enable'}</button>
+                    </div>
+                  </div>
+                ))}
+                <textarea
+                  data-testid="plugin-json-input"
+                  value={pluginDraft}
+                  onChange={e => setPluginDraft(e.target.value)}
+                  spellCheck={false}
+                  style={{width: '100%', minHeight: '76px', marginTop: '12px', padding: '8px', boxSizing: 'border-box', borderRadius: '4px', border: '1px solid var(--border-color)', background: 'var(--bg-color)', color: 'var(--text-color)', fontFamily: 'monospace', fontSize: '11px'}}
+                />
+                <button
+                  className="clear-history-btn"
+                  data-testid="register-plugin-button"
+                  style={{width: '100%', padding: '8px', marginTop: '8px'}}
+                  onClick={async () => {
+                    try {
+                      const result = await window.electronAPI?.registerPlugin?.(JSON.parse(pluginDraft));
+                      if (result && 'error' in result) setExtensionError(result.error);
+                      else if (result) {
+                        setPlugins(prev => [...prev.filter(item => item.id !== result.id), result]);
+                        setExtensionError(null);
+                      }
+                    } catch {
+                      setExtensionError('Plugin definition must be valid JSON');
+                    }
+                  }}
+                >
+                  Register HTTPS Plugin
                 </button>
               </div>
 

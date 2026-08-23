@@ -73,6 +73,23 @@ test.describe('browser shell', () => {
     await expect(siteToggle).not.toBeChecked();
   });
 
+  test('registers and toggles a declarative HTTPS plugin', async ({ appPage }) => {
+    await appPage.getByTestId('menu-button').click();
+    await appPage.getByText('Settings', { exact: true }).click();
+    await expect(appPage.getByTestId('extensions-section')).toBeVisible();
+    await appPage.getByTestId('plugin-json-input').fill(JSON.stringify({
+      id: 'test.panel',
+      type: 'panel',
+      name: 'Test Panel',
+      url: 'https://example.com/panel'
+    }));
+    await appPage.getByTestId('register-plugin-button').click();
+    const plugin = appPage.getByTestId('plugin-test.panel');
+    await expect(plugin).toBeVisible();
+    await plugin.getByText('Disable', { exact: true }).click();
+    await expect(plugin.getByText('Enable', { exact: true })).toBeVisible();
+  });
+
   test('shows the per-site permission manager for a fresh profile', async ({ appPage }) => {
     await appPage.getByTestId('menu-button').click();
     await appPage.getByText('Settings', { exact: true }).click();

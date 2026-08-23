@@ -6,8 +6,12 @@ const permissionsStore = require('./permissions-store');
 const passwordsStore = require('./passwords-store');
 const fs = require('fs');
 const { randomUUID } = require('crypto');
+const { ExtensionManager } = require('./extension-manager');
+const { PluginManager, validatePlugin } = require('./plugin-manager');
 
 const browserWindows = new Set();
+const extensionManager = new ExtensionManager();
+const pluginManager = new PluginManager(path.join(app.getPath('userData'), 'plugins.json'));
 const MAX_PDF_BYTES = 50 * 1024 * 1024;
 const PDF_FETCH_TIMEOUT_MS = 30_000;
 
@@ -253,10 +257,11 @@ function createWindow(isPrivate = false) {
 
 
 
-app.whenReady().then(() => {
+app.whenReady().then(async () => {
   if (typeof session.defaultSession.setWebRTCIPHandlingPolicy === 'function') {
     session.defaultSession.setWebRTCIPHandlingPolicy('disable-non-proxied-udp');
   }
+  await extensionManager.restore(session.defaultSession);
   createWindow();
 
   if (app.isPackaged) {
@@ -389,11 +394,57 @@ app.whenReady().then(() => {
   ipcMain.handle('load-extension', async (event) => {
     requireTrustedAppSender(event);
     const result = await dialog.showOpenDialog({ properties: ['openDirectory'] });
-    if (!result.canceled) {
-      await session.defaultSession.loadExtension(result.filePaths[0]);
-      return result.filePaths[0];
+    if (result.canceled || !result.filePaths[0]) return null;
+    try {
+      return await extensionManager.load(session.defaultSession, result.filePaths[0]);
+    } catch (error) {
+      console.error('Unable to load extension:', error.message);
+      return { error: error.message };
     }
-    return null;
+  });
+
+  ipcMain.handle('get-extensions', (event) => {
+    requireTrustedAppSender(event);
+    return extensionManager.list();
+  });
+
+  ipcMain.handle('set-extension-enabled', async (event, id, enabled) => {
+    requireTrustedAppSender(event);
+    try {
+      return await extensionManager.setEnabled(session.defaultSession, id, enabled);
+    } catch (error) {
+      console.error('Unable to change extension state:', error.message);
+      return { error: error.message };
+    }
+  });
+
+  ipcMain.handle('remove-extension', (event, id) => {
+    requireTrustedAppSender(event);
+    return extensionManager.remove(session.defaultSession, id);
+  });
+
+  ipcMain.handle('get-plugins', (event) => {
+    requireTrustedAppSender(event);
+    return pluginManager.list();
+  });
+
+  ipcMain.handle('register-plugin', (event, plugin) => {
+    requireTrustedAppSender(event);
+    try {
+      return pluginManager.register(validatePlugin(plugin));
+    } catch (error) {
+      return { error: error.message };
+    }
+  });
+
+  ipcMain.handle('set-plugin-enabled', (event, id, enabled) => {
+    requireTrustedAppSender(event);
+    return pluginManager.setEnabled(id, enabled) || { error: 'Plugin not found' };
+  });
+
+  ipcMain.handle('remove-plugin', (event, id) => {
+    requireTrustedAppSender(event);
+    return pluginManager.remove(id);
   });
 
   ipcMain.on('clear-cache', (event) => {
