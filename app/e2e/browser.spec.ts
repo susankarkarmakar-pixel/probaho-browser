@@ -11,6 +11,16 @@ test.describe('browser shell', () => {
     await expect(appPage.locator('.new-tab-page')).toBeVisible();
   });
 
+  test('renders an accessible toolbar and address bar', async ({ appPage }) => {
+    await expect(appPage.getByTestId('browser-toolbar')).toBeVisible();
+    await expect(appPage.getByRole('button', { name: 'Go back' })).toBeDisabled();
+    await expect(appPage.getByRole('button', { name: 'Go forward' })).toBeDisabled();
+    await expect(appPage.getByRole('button', { name: 'Reload page' })).toBeVisible();
+    await expect(appPage.getByRole('button', { name: 'Go home' })).toBeVisible();
+    await appPage.getByTestId('address-input').focus();
+    await expect(appPage.getByTestId('address-input')).toBeFocused();
+  });
+
   test('creates and closes tabs', async ({ appPage }) => {
     await appPage.getByTestId('new-tab-button').click();
     await expect.poll(() => tabCount(appPage)).toBe(2);

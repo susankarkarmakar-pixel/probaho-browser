@@ -1710,27 +1710,27 @@ function App() {
       </div>
 
       {/* Toolbar */}
-      <div className="toolbar">
-        <div className="nav-buttons">
-          <button className="nav-btn" onClick={goBack} disabled={!targetedTab?.canGoBack}>
+      <div className="toolbar" data-testid="browser-toolbar">
+        <div className="nav-buttons" aria-label="Page navigation">
+          <button className="nav-btn" aria-label="Go back" title="Go back" onClick={goBack} disabled={!targetedTab?.canGoBack}>
             <ArrowLeft size={16} />
           </button>
-          <button className="nav-btn" onClick={goForward} disabled={!targetedTab?.canGoForward}>
+          <button className="nav-btn" aria-label="Go forward" title="Go forward" onClick={goForward} disabled={!targetedTab?.canGoForward}>
             <ArrowRight size={16} />
           </button>
           {targetedTab?.loading ? (
-            <button className="nav-btn" onClick={() => {
+            <button className="nav-btn" aria-label="Stop loading" title="Stop loading" onClick={() => {
               const wv = webviewRefs.current[targetedTabId];
               if (wv) wv.stop();
             }}>
               <X size={16} />
             </button>
           ) : (
-            <button className="nav-btn" onClick={reload}>
+            <button className="nav-btn" aria-label="Reload page" title="Reload page" onClick={reload}>
               <RotateCw size={16} />
             </button>
           )}
-          <button className="nav-btn" onClick={goHome}>
+          <button className="nav-btn" aria-label="Go home" title="Go home" onClick={goHome}>
             <Home size={16} />
           </button>
           <button className="nav-btn" title="Split View" onClick={() => {
