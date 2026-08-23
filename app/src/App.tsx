@@ -2333,13 +2333,13 @@ function App() {
       {/* Settings Modal */}
       {showSettings && (
         <div className="about-modal-overlay" data-testid="settings-overlay" onClick={() => setShowSettings(false)}>
-          <div className="about-modal" data-testid="settings-modal" style={{width: '500px', maxHeight: '80vh', overflowY: 'auto'}} onClick={e => e.stopPropagation()}>
-            <div className="about-header">
+          <div className="about-modal settings-modal" data-testid="settings-modal" style={{width: '500px', maxHeight: '80vh', overflowY: 'auto'}} onClick={e => e.stopPropagation()}>
+            <div className="about-header settings-header">
               <h3>{t('settings', settings.language)}</h3>
               <button className="nav-btn" onClick={() => setShowSettings(false)}><X size={16} /></button>
             </div>
-            <div className="about-content" style={{textAlign: 'left', padding: '16px 24px'}}>
-              <div style={{marginBottom: '16px', display: 'flex', gap: '8px'}}>
+            <div className="about-content settings-content" style={{textAlign: 'left', padding: '16px 24px'}}>
+              <div className="settings-profile-actions" style={{marginBottom: '16px', display: 'flex', gap: '8px'}}>
                 <button className="clear-history-btn" style={{flex: 1, padding: '8px'}} onClick={() => {
                   const data = { bookmarks, history, readingList, settings };
                   const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
@@ -2559,8 +2559,8 @@ function App() {
               </div>
 
               {/* Password Manager Section */}
-              <div style={{marginTop: '24px', borderTop: '1px solid var(--border-color)', paddingTop: '16px'}}>
-                <h4 style={{marginBottom: '12px', fontSize: '14px'}}>Password Manager</h4>
+              <div className="settings-section" style={{marginTop: '24px', borderTop: '1px solid var(--border-color)', paddingTop: '16px'}}>
+                <h4 className="settings-section-title" style={{marginBottom: '12px', fontSize: '14px'}}>Password Manager</h4>
                 {Object.keys(passwordsStore).length === 0 ? (
                   <div style={{fontSize: '13px', color: '#888'}}>No saved passwords.</div>
                 ) : (
@@ -2621,8 +2621,8 @@ function App() {
               </div>
 
               {/* Extensions and Plugins Section */}
-              <div style={{marginTop: '24px', borderTop: '1px solid var(--border-color)', paddingTop: '16px'}} data-testid="extensions-section">
-                <h4 style={{marginBottom: '6px', fontSize: '14px'}}>Extensions</h4>
+              <div className="settings-section" style={{marginTop: '24px', borderTop: '1px solid var(--border-color)', paddingTop: '16px'}} data-testid="extensions-section">
+                <h4 className="settings-section-title" style={{marginBottom: '6px', fontSize: '14px'}}>Extensions</h4>
                 <div style={{fontSize: '11px', color: '#888', marginBottom: '12px'}}>Only manifest-validated unpacked extensions are loaded. Extension code remains isolated from this UI.</div>
                 <button
                   className="clear-history-btn"
@@ -2710,7 +2710,7 @@ function App() {
               </div>
 
               {/* Site Permissions Section */}
-              <div style={{marginTop: '24px', borderTop: '1px solid var(--border-color)', paddingTop: '16px'}} data-testid="permissions-section">
+              <div className="settings-section" style={{marginTop: '24px', borderTop: '1px solid var(--border-color)', paddingTop: '16px'}} data-testid="permissions-section">
                 <div style={{display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '12px'}}>
                   <h4 style={{margin: 0, fontSize: '14px'}}>Site Permissions</h4>
                   {Object.keys(permissions).length > 0 && (

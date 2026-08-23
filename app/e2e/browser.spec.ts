@@ -75,7 +75,11 @@ test.describe('browser shell', () => {
     await appPage.getByTestId('menu-button').click();
     await appPage.getByText('Settings', { exact: true }).click();
     await expect(appPage.getByTestId('settings-modal')).toBeVisible();
+    await expect(appPage.getByTestId('settings-modal')).toHaveClass(/settings-modal/);
     await expect(appPage.getByText('Homepage URL', { exact: true })).toBeVisible();
+    await expect(appPage.getByTestId('performance-settings')).toBeVisible();
+    await expect(appPage.getByTestId('lazy-tabs-toggle')).toBeChecked();
+    await expect(appPage.getByTestId('suspend-tabs-toggle')).toBeChecked();
   });
 
   test('shows tracker protection controls for the current site', async ({ appPage }) => {
