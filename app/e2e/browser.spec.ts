@@ -73,7 +73,7 @@ test.describe('browser shell', () => {
 
   test('opens the settings dialog from the application menu', async ({ appPage }) => {
     await appPage.getByTestId('menu-button').click();
-    await appPage.getByText('Settings', { exact: true }).click();
+    await appPage.locator('.menu-panel').getByText('Settings', { exact: true }).click();
     await expect(appPage.getByTestId('settings-modal')).toBeVisible();
     await expect(appPage.getByTestId('settings-modal')).toHaveClass(/settings-modal/);
     await expect(appPage.getByText('Homepage URL', { exact: true })).toBeVisible();
@@ -102,7 +102,7 @@ test.describe('browser shell', () => {
 
   test('registers and toggles a declarative HTTPS plugin', async ({ appPage }) => {
     await appPage.getByTestId('menu-button').click();
-    await appPage.getByText('Settings', { exact: true }).click();
+    await appPage.locator('.menu-panel').getByText('Settings', { exact: true }).click();
     await expect(appPage.getByTestId('extensions-section')).toBeVisible();
     await appPage.getByTestId('plugin-json-input').fill(JSON.stringify({
       id: 'test.panel',
@@ -119,7 +119,7 @@ test.describe('browser shell', () => {
 
   test('shows the per-site permission manager for a fresh profile', async ({ appPage }) => {
     await appPage.getByTestId('menu-button').click();
-    await appPage.getByText('Settings', { exact: true }).click();
+    await appPage.locator('.menu-panel').getByText('Settings', { exact: true }).click();
     const permissionsSection = appPage.getByTestId('permissions-section');
     await expect(permissionsSection).toBeVisible();
     await expect(permissionsSection.getByText('No permissions saved.', { exact: true })).toBeVisible();
@@ -144,7 +144,7 @@ test.describe('browser shell', () => {
     await expect(privatePage.locator('.tab:not(.private)')).toHaveCount(0);
 
     await privatePage.getByTestId('menu-button').click();
-    await privatePage.getByText('History', { exact: true }).click();
+    await privatePage.locator('.menu-panel').getByText('History', { exact: true }).click();
     await expect(privatePage.locator('.bookmarks-panel .no-bookmarks').filter({ hasText: 'No history yet' })).toBeVisible();
   });
 });

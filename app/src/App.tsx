@@ -3194,6 +3194,7 @@ function App() {
           <div
             key={`ntp-${tab.id}`}
             className="new-tab-page"
+            data-testid="new-tab-page"
             onClick={() => { if (splitTabId) setFocusedPane(tab.id === activeTabId ? 'main' : 'split'); }}
             style={Object.assign({
               flex: 1, position: 'relative' as 'relative',
@@ -3215,14 +3216,19 @@ function App() {
             }}>
               <div className="ntp-content" style={{ marginTop: '100px' }}>
                 <div className="ntp-logo" style={settings.newTabBackgroundUrl ? { color: '#fff' } : {}}>
-                  <span style={{fontSize: '48px'}}>🌐</span>
-                  <h1 style={{marginTop: '10px'}}>PROBAHO</h1>
+                  <span className="ntp-logo-mark" aria-hidden="true">🌐</span>
+                  <h1>PROBAHO</h1>
+                  <p className="ntp-tagline">A calmer, faster space for the web</p>
                 </div>
-              <div className="ntp-search">
+              <div className="ntp-search" role="search">
+                <label className="sr-only" htmlFor={`ntp-search-${tab.id}`}>Search the web</label>
                 <Search size={18} color="#888" style={{marginLeft: '16px', position: 'absolute'}} />
                 <input
+                  id={`ntp-search-${tab.id}`}
                   type="text"
                   className="ntp-search-input"
+                  data-testid="ntp-search-input"
+                  aria-label="Search the web"
                   placeholder={t('searchPlaceholder', settings.language, { engine: settings.defaultSearchEngine })}
                   onKeyDown={(e) => {
                     if (e.key === 'Enter') {
@@ -3231,6 +3237,13 @@ function App() {
                   }}
                   autoFocus
                 />
+              </div>
+
+              <div className="ntp-quick-actions" data-testid="ntp-quick-actions">
+                <button type="button" className="ntp-quick-action" onClick={() => setShowHistory(true)}><History size={15} /><span>History</span></button>
+                <button type="button" className="ntp-quick-action" onClick={() => setShowBookmarks(true)}><Bookmark size={15} /><span>Bookmarks</span></button>
+                <button type="button" className="ntp-quick-action" onClick={() => setShowDownloads(true)}><Download size={15} /><span>Downloads</span></button>
+                <button type="button" className="ntp-quick-action" onClick={() => setShowSettings(true)}><Settings size={15} /><span>Settings</span></button>
               </div>
 
               <div className="ntp-top-sites">
@@ -3256,12 +3269,12 @@ function App() {
                   }
 
                   return topSites.map((site, i) => (
-                    <div key={i} className="ntp-tile" onClick={() => navigate(site.url)} style={settings.newTabBackgroundUrl ? { backgroundColor: 'rgba(255,255,255,0.1)', backdropFilter: 'blur(10px)', border: '1px solid rgba(255,255,255,0.2)' } : {}}>
-                      <div className="ntp-tile-icon">
+                    <button key={i} type="button" data-testid="ntp-top-site" className="ntp-tile" onClick={() => navigate(site.url)} style={settings.newTabBackgroundUrl ? { backgroundColor: 'rgba(255,255,255,0.1)', backdropFilter: 'blur(10px)', border: '1px solid rgba(255,255,255,0.2)' } : {}}>
+                      <span className="ntp-tile-icon">
                         {site.title.charAt(0).toUpperCase()}
-                      </div>
-                      <div className="ntp-tile-title" style={settings.newTabBackgroundUrl ? { color: '#fff' } : {}}>{site.title || site.url}</div>
-                    </div>
+                      </span>
+                      <span className="ntp-tile-title" style={settings.newTabBackgroundUrl ? { color: '#fff' } : {}}>{site.title || site.url}</span>
+                    </button>
                   ));
                 })()}
               </div>
