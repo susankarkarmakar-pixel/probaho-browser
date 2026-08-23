@@ -36,6 +36,14 @@ test.describe('browser shell', () => {
     await expect(appPage.getByText('Homepage URL', { exact: true })).toBeVisible();
   });
 
+  test('shows the per-site permission manager for a fresh profile', async ({ appPage }) => {
+    await appPage.getByTestId('menu-button').click();
+    await appPage.getByText('Settings', { exact: true }).click();
+    const permissionsSection = appPage.getByTestId('permissions-section');
+    await expect(permissionsSection).toBeVisible();
+    await expect(permissionsSection.getByText('No permissions saved.', { exact: true })).toBeVisible();
+  });
+
   test('opens an isolated private window without normal tabs or history', async ({ appPage, electronApp }) => {
     await appPage.getByTestId('new-tab-button').click();
     await expect(appPage.locator('.tab')).toHaveCount(2);

@@ -404,7 +404,7 @@ app.whenReady().then(() => {
 
   ipcMain.handle('get-permissions', (event) => {
     requireTrustedAppSender(event);
-    return permissionsStore.data;
+    return permissionsStore.getAllPermissions();
   });
 
   ipcMain.handle('get-password', (event, origin) => {
@@ -433,13 +433,12 @@ app.whenReady().then(() => {
   ipcMain.on('delete-permission', (event, origin, permission) => {
     requireTrustedAppSender(event);
     if (typeof origin !== 'string' || typeof permission !== 'string') return;
-    if (permissionsStore.data[origin] && permissionsStore.data[origin][permission] !== undefined) {
-      delete permissionsStore.data[origin][permission];
-      if (Object.keys(permissionsStore.data[origin]).length === 0) {
-        delete permissionsStore.data[origin];
-      }
-      permissionsStore.saveData();
-    }
+    permissionsStore.deletePermission(origin, permission);
+  });
+
+  ipcMain.on('clear-permissions', (event) => {
+    requireTrustedAppSender(event);
+    permissionsStore.clear();
   });
 
   ipcMain.on('save-as-pdf', async (event) => {
@@ -493,23 +492,26 @@ app.whenReady().then(() => {
   });
 
   session.defaultSession.setPermissionRequestHandler((webContents, permission, callback, details) => {
-    const origin = new URL(details.requestingUrl).origin;
+    let origin;
+    try {
+      origin = new URL(details.requestingUrl).origin;
+    } catch {
+      return callback(false);
+    }
 
     // Ignore internal scheme
     if (origin.startsWith('probaho://')) {
       return callback(true);
     }
 
+    const promptPermissions = ['media', 'geolocation', 'notifications'];
+    if (!promptPermissions.includes(permission)) {
+      return callback(false);
+    }
+
     const savedPermission = permissionsStore.getPermission(origin, permission);
     if (savedPermission !== null) {
       return callback(savedPermission);
-    }
-
-    // Only prompt for common sensitive permissions
-    const promptPermissions = ['media', 'geolocation', 'notifications'];
-    if (!promptPermissions.includes(permission)) {
-       // Auto-allow or rely on default behavior for other things, or prompt. Let's auto-allow non-sensitive ones for simplicity unless otherwise requested.
-       return callback(true);
     }
 
     dialog.showMessageBox({

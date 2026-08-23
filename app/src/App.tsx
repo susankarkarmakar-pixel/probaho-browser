@@ -15,6 +15,14 @@ interface DownloadItem {
   savePath: string;
 }
 
+interface PermissionDecision {
+  allowed: boolean;
+  updatedAt: number;
+  expiresAt: number | null;
+}
+
+type PermissionStore = Record<string, Record<string, PermissionDecision>>;
+
 interface Tab {
   id: string;
   url: string;
@@ -86,8 +94,9 @@ declare global {
       onTabCrashed: (callback: (webContentsId: number, reason: string) => void) => void;
       onOpenPdfViewer: (callback: (url: string, webContentsId?: number) => void) => void;
       clearCache?: () => void;
-      getPermissions?: () => Promise<Record<string, Record<string, boolean>>>;
+      getPermissions?: () => Promise<PermissionStore>;
       deletePermission?: (origin: string, permission: string) => void;
+      clearPermissions?: () => void;
       cancelDownload?: (id: string) => void;
       pauseDownload?: (id: string) => void;
       resumeDownload?: (id: string) => void;
@@ -279,7 +288,7 @@ function App() {
   const [showHistory, setShowHistory] = useState(false);
   const [showDownloads, setShowDownloads] = useState(false);
   const [downloads, setDownloads] = useState<DownloadItem[]>([]);
-  const [permissions, setPermissions] = useState<Record<string, Record<string, boolean>>>({});
+  const [permissions, setPermissions] = useState<PermissionStore>({});
   const [passwordsStore, setPasswordsStore] = useState<Record<string, any>>({});
   const [showPasswords, setShowPasswords] = useState<Record<string, boolean>>({});
   const [showMenu, setShowMenu] = useState(false);
@@ -2417,31 +2426,49 @@ function App() {
               </div>
 
               {/* Site Permissions Section */}
-              <div style={{marginTop: '24px', borderTop: '1px solid var(--border-color)', paddingTop: '16px'}}>
-                <h4 style={{marginBottom: '12px', fontSize: '14px'}}>Site Permissions</h4>
+              <div style={{marginTop: '24px', borderTop: '1px solid var(--border-color)', paddingTop: '16px'}} data-testid="permissions-section">
+                <div style={{display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '12px'}}>
+                  <h4 style={{margin: 0, fontSize: '14px'}}>Site Permissions</h4>
+                  {Object.keys(permissions).length > 0 && (
+                    <button
+                      className="clear-history-btn"
+                      data-testid="clear-permissions-button"
+                      style={{padding: '4px 8px', fontSize: '11px'}}
+                      onClick={() => {
+                        if (confirm('Clear all saved site permissions?')) {
+                          window.electronAPI?.clearPermissions?.();
+                          setPermissions({});
+                        }
+                      }}
+                    >
+                      Clear all
+                    </button>
+                  )}
+                </div>
                 {Object.keys(permissions).length === 0 ? (
                   <div style={{fontSize: '13px', color: '#888'}}>No permissions saved.</div>
                 ) : (
-                  <div style={{maxHeight: '150px', overflowY: 'auto'}}>
+                  <div style={{maxHeight: '200px', overflowY: 'auto'}}>
                     {Object.entries(permissions).map(([origin, perms]) => (
                       <div key={origin} style={{marginBottom: '12px'}}>
                         <div style={{fontWeight: 'bold', fontSize: '13px', marginBottom: '4px'}}>{origin}</div>
-                        {Object.entries(perms).map(([perm, allowed]) => (
-                          <div key={perm} style={{display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontSize: '12px', paddingLeft: '8px', marginBottom: '4px'}}>
-                            <span>{perm}: {allowed ? <span style={{color: '#4caf50'}}>Allowed</span> : <span style={{color: '#f44336'}}>Blocked</span>}</span>
+                        {Object.entries(perms).map(([perm, decision]) => (
+                          <div key={perm} data-testid={`permission-${perm}`} style={{display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontSize: '12px', paddingLeft: '8px', marginBottom: '4px', gap: '8px'}}>
+                            <span>
+                              {perm}: {decision.allowed ? <span style={{color: '#4caf50'}}>Allowed</span> : <span style={{color: '#f44336'}}>Blocked</span>}
+                              <span style={{display: 'block', color: '#888', fontSize: '10px'}}>
+                                {decision.expiresAt === null ? 'Session only' : `Expires ${new Date(decision.expiresAt).toLocaleString()}`}
+                              </span>
+                            </span>
                             <button
                               className="clear-history-btn"
                               style={{padding: '4px 8px', fontSize: '11px'}}
                               onClick={() => {
-                                if (window.electronAPI?.deletePermission) {
-                                  window.electronAPI.deletePermission(origin, perm);
-                                  const newPerms = { ...permissions };
-                                  delete newPerms[origin][perm];
-                                  if (Object.keys(newPerms[origin]).length === 0) {
-                                    delete newPerms[origin];
-                                  }
-                                  setPermissions(newPerms);
-                                }
+                                window.electronAPI?.deletePermission?.(origin, perm);
+                                const newPerms: PermissionStore = { ...permissions, [origin]: { ...permissions[origin] } };
+                                delete newPerms[origin][perm];
+                                if (Object.keys(newPerms[origin]).length === 0) delete newPerms[origin];
+                                setPermissions(newPerms);
                               }}
                             >
                               Revoke
