@@ -9,6 +9,7 @@
     "test:tracker": "node --test tests/tracker-protection.test.js",
     "test:unit": "node --test tests/*.test.js",
     "test:e2e": "npm run build && playwright test",
+    "perf:smoke": "npm run build && xvfb-run --auto-servernum --server-args='-screen 0 1440x900x24' node scripts/performance-smoke.mjs",
     "test:e2e:ui": "npm run build && playwright test --ui",
     "preview": "vite preview",
     "electron": "electron .",

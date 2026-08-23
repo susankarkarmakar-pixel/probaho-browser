@@ -384,6 +384,23 @@ app.whenReady().then(async () => {
     return lookupSafeBrowsingUrl(rawUrl);
   });
 
+  ipcMain.handle('get-performance-snapshot', (event) => {
+    requireTrustedAppSender(event);
+    const metrics = app.getAppMetrics().map(metric => ({
+      pid: metric.pid,
+      type: metric.type,
+      cpuPercent: Number(metric.cpu?.percent || 0),
+      memoryWorkingSet: Number(metric.memory?.workingSetSize || 0),
+      memoryPrivate: Number(metric.memory?.privateBytes || 0)
+    }));
+    return {
+      capturedAt: new Date().toISOString(),
+      windowCount: BrowserWindow.getAllWindows().filter(window => !window.isDestroyed()).length,
+      rendererCount: metrics.filter(metric => metric.type === 'Tab' || metric.type === 'Renderer').length,
+      metrics
+    };
+  });
+
   let adBlockerEnabled = true;
   let trackerProtectionEnabled = true;
   let trackerExceptions = new Set();

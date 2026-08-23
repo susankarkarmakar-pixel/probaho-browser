@@ -1,6 +1,8 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useMemo } from 'react';
 import { t, Language } from './i18n';
 import PdfViewer from './PdfViewer';
+import TabCard from './TabCard';
+import WebPane from './WebPane';
 import {
   ArrowLeft, ArrowRight, RotateCw, Home, Plus,
   Lock, X, Square, Search, Star, Bookmark, Menu, History, ZoomIn, FileCode, Printer, LogOut, Info, Download, Folder, Settings, ChevronUp, ChevronDown, EyeOff, Eye, Shield, BookOpen, Volume2, VolumeX, Globe, BookPlus, PictureInPicture, Share2, MessageSquare, Music, MessageCircle, Library, Columns, PanelRight, Copy, Pin, FolderPlus, FolderMinus, Trash2, Moon, Pause, Play, CheckCircle2, AlertCircle, FileText, SlidersHorizontal, ShieldCheck, ShieldAlert
@@ -30,6 +32,13 @@ type SafeBrowsingWarning = {
 type SafeBrowsingStatus = {
   status: 'safe' | 'unsafe' | 'unavailable' | 'error' | 'skipped';
   reason?: string | null;
+};
+
+type PerformanceSnapshot = {
+  capturedAt: string;
+  windowCount: number;
+  rendererCount: number;
+  metrics: Array<{ pid: number; type: string; cpuPercent: number; memoryWorkingSet: number; memoryPrivate: number }>;
 };
 
 interface PermissionDecision {
@@ -195,6 +204,7 @@ declare global {
       allowUnsafeNavigation?: (url: string) => Promise<boolean>;
       onSafeBrowsingWarning?: (callback: (warning: SafeBrowsingWarning) => void) => void;
       onSafeBrowsingStatus?: (callback: (status: SafeBrowsingStatus) => void) => void;
+      getPerformanceSnapshot?: () => Promise<PerformanceSnapshot>;
     };
   }
 }
@@ -959,6 +969,13 @@ function App() {
 
 
   const activeTab = tabs.find(t => t.id === activeTabId);
+  const workspaceTabs = useMemo(() => [...tabs]
+    .filter(tab => (tab.workspaceId || 'default') === activeWorkspaceId)
+    .sort((a, b) => {
+      if (a.isPinned !== b.isPinned) return a.isPinned ? -1 : 1;
+      if (a.groupId !== b.groupId) return (a.groupId || '') > (b.groupId || '') ? 1 : -1;
+      return 0;
+    }), [tabs, activeWorkspaceId]);
 
   // Mark the selected tab as recently active and wake it if it was suspended.
   useEffect(() => {
@@ -1800,63 +1817,25 @@ function App() {
         </div>
 
         <div className="tabs" style={{ display: settings.verticalTabs ? 'none' : 'flex' }}>
-          {[...tabs].filter(t => (t.workspaceId || 'default') === activeWorkspaceId).sort((a, b) => {
-            if (a.isPinned !== b.isPinned) return a.isPinned ? -1 : 1;
-            if (a.groupId !== b.groupId) return (a.groupId || '') > (b.groupId || '') ? 1 : -1;
-            return 0;
-          }).map((tab, i, arr) => {
+          {workspaceTabs.map((tab, i, arr) => {
             const group = tab.groupId ? tabGroups.find(g => g.id === tab.groupId) : null;
-            const isFirstInGroup = group && (i === 0 || arr[i - 1].groupId !== tab.groupId);
-
-            return (
-            <React.Fragment key={tab.id}>
-              {isFirstInGroup && (
-                 <div style={{
-                    display: 'flex', alignItems: 'center', justifyContent: 'center',
-                    padding: '2px 8px', margin: '4px 2px 4px 4px', borderRadius: '12px',
-                    backgroundColor: group.color, color: '#fff', fontSize: '11px', fontWeight: 'bold',
-                    maxWidth: '80px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap'
-                 }} title={group.name}>
-                    {group.name}
-                 </div>
-              )}
-            <div
-              data-testid={`tab-${tab.id}`}
-              className={`tab ${tab.id === activeTabId ? 'active' : ''} ${tab.isPrivate ? 'private' : ''} ${tab.isPinned ? 'pinned' : ''} ${tab.suspended ? 'suspended' : ''}`}
-              role="tab"
-              tabIndex={0}
-              aria-selected={tab.id === activeTabId}
-              aria-label={`${tab.title}${tab.suspended ? ', suspended' : ''}`}
-              style={{ borderTop: group ? `3px solid ${group.color}` : undefined }}
-              onClick={() => setActiveTabId(tab.id)}
-              onKeyDown={(e) => {
-                if (e.key === 'Enter' || e.key === ' ') {
-                  e.preventDefault();
-                  setActiveTabId(tab.id);
-                }
-              }}
-              onContextMenu={(e) => {
-                e.preventDefault();
-                setTabContextMenu({ tabId: tab.id, x: e.clientX, y: e.clientY });
-              }}
-              draggable
-              onDragStart={(e) => {
-                setDraggedTabId(tab.id);
-                e.dataTransfer.effectAllowed = 'move';
-              }}
-              onDragOver={(e) => {
-                e.preventDefault();
-                e.dataTransfer.dropEffect = 'move';
-              }}
-              onDrop={(e) => {
-                e.preventDefault();
-                if (!draggedTabId || draggedTabId === tab.id) return;
-
+            return <TabCard
+              key={tab.id}
+              tab={tab}
+              group={group}
+              isFirstInGroup={Boolean(group && (i === 0 || arr[i - 1].groupId !== tab.groupId))}
+              isActive={tab.id === activeTabId}
+              onActivate={setActiveTabId}
+              onContextMenu={(event, id) => { event.preventDefault(); setTabContextMenu({ tabId: id, x: event.clientX, y: event.clientY }); }}
+              onDragStart={(event, id) => { setDraggedTabId(id); event.dataTransfer.effectAllowed = 'move'; }}
+              onDragOver={(event) => { event.preventDefault(); event.dataTransfer.dropEffect = 'move'; }}
+              onDrop={(event, id) => {
+                event.preventDefault();
+                if (!draggedTabId || draggedTabId === id) return;
                 setTabs(prev => {
                   const draggedIndex = prev.findIndex(t => t.id === draggedTabId);
-                  const dropIndex = prev.findIndex(t => t.id === tab.id);
+                  const dropIndex = prev.findIndex(t => t.id === id);
                   if (draggedIndex === -1 || dropIndex === -1) return prev;
-
                   const newTabs = [...prev];
                   const [removed] = newTabs.splice(draggedIndex, 1);
                   newTabs.splice(dropIndex, 0, removed);
@@ -1865,51 +1844,20 @@ function App() {
                 setDraggedTabId(null);
               }}
               onDragEnd={() => setDraggedTabId(null)}
-              onMouseDown={(e) => {
-                if (e.button === 1) { // Middle click
-                  closeTab(e, tab.id);
+              onMiddleClick={(event, id) => { if (event.button === 1) closeTab(event, id); }}
+              onClose={(event, id) => closeTab(event, id)}
+              onToggleMute={(event, id) => {
+                event.stopPropagation();
+                const wv = webviewRefs.current[id];
+                const target = tabs.find(item => item.id === id);
+                if (wv && target) {
+                  const newMutedState = !target.isMuted;
+                  wv.setAudioMuted(newMutedState);
+                  updateTab(id, { isMuted: newMutedState });
                 }
               }}
-            >
-              {tab.isPrivate && <EyeOff size={10} style={{marginRight: '4px', opacity: 0.8}} />}
-
-              {/* Favicon */}
-              {!tab.isPrivate && (
-                tab.favicon
-                  ? <img src={tab.favicon} style={{width: 14, height: 14, marginRight: tab.isPinned ? 0 : 6, flexShrink: 0}} />
-                  : <Globe size={14} style={{marginRight: tab.isPinned ? 0 : 6, opacity: 0.7, flexShrink: 0}} />
-              )}
-              {tab.loading && <span className="tab-loading-indicator" role="status" aria-label="Loading tab"><span /></span>}
-              {tab.loadError && <span className="tab-error-indicator" title={tab.loadError.description} aria-label="Page failed to load"><AlertCircle size={12} /></span>}
-
-              {!tab.isPinned && <span className="tab-title" title={tab.title}>{tab.title}</span>}
-              {tab.suspended && <span className="tab-suspended-badge">Suspended</span>}
-              {!tab.isPinned && (
-                <button className="tab-close" type="button" aria-label={`Close ${tab.title}`} onClick={(e) => closeTab(e, tab.id)}>
-                  <X size={12} />
-                </button>
-              )}
-              {tab.isPinned && <span className="tab-title" title={tab.title} style={{display: 'none'}}>{tab.title}</span>}
-              {(tab.isAudible || tab.isMuted) && (
-                <div
-                  className="tab-audio-indicator"
-                  style={{marginLeft: '4px', display: 'flex', alignItems: 'center', opacity: 0.8}}
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    const wv = webviewRefs.current[tab.id];
-                    if (wv) {
-                      const newMutedState = !tab.isMuted;
-                      wv.setAudioMuted(newMutedState);
-                      updateTab(tab.id, { isMuted: newMutedState });
-                    }
-                  }}
-                >
-                  {tab.isMuted ? <VolumeX size={12} /> : <Volume2 size={12} />}
-                </div>
-              )}
-            </div>
-            </React.Fragment>
-          )})}
+            />;
+          })}
           <button className="new-tab-btn" data-testid="new-tab-button" aria-label="New tab" onClick={() => createTab(isPrivateWindow)}>
             <Plus size={16} />
           </button>
@@ -3320,67 +3268,25 @@ function App() {
               <button className="nav-btn" onClick={() => createTab(isPrivateWindow)}><Plus size={14} /></button>
             </div>
             <div style={{ padding: '8px', display: 'flex', flexDirection: 'column', gap: '4px' }}>
-              {[...tabs].filter(t => (t.workspaceId || 'default') === activeWorkspaceId).sort((a, b) => {
-                if (a.isPinned !== b.isPinned) return a.isPinned ? -1 : 1;
-                if (a.groupId !== b.groupId) return (a.groupId || '') > (b.groupId || '') ? 1 : -1;
-                return 0;
-              }).map((tab, i, arr) => {
+              {workspaceTabs.map((tab, i, arr) => {
                 const group = tab.groupId ? tabGroups.find(g => g.id === tab.groupId) : null;
-                const isFirstInGroup = group && (i === 0 || arr[i - 1].groupId !== tab.groupId);
-
-                return (
-                <React.Fragment key={tab.id}>
-                  {isFirstInGroup && (
-                     <div style={{
-                        display: 'flex', alignItems: 'center', padding: '2px 8px', margin: '4px 0',
-                        borderRadius: '6px', backgroundColor: group.color, color: '#fff',
-                        fontSize: '11px', fontWeight: 'bold'
-                     }}>
-                        {group.name}
-                     </div>
-                  )}
-                <div
-                  className={`tab vertical-tab ${tab.id === activeTabId ? 'active' : ''} ${tab.isPrivate ? 'private' : ''} ${tab.isPinned ? 'pinned' : ''} ${tab.suspended ? 'suspended' : ''}`}
-                  role="tab"
-                  tabIndex={0}
-                  aria-selected={tab.id === activeTabId}
-                  aria-label={`${tab.title}${tab.suspended ? ', suspended' : ''}`}
-                  style={{
-                     display: 'flex',
-                     alignItems: 'center',
-                     padding: '8px',
-                     borderRadius: '6px',
-                     cursor: 'default',
-                     background: tab.id === activeTabId ? 'var(--tab-active-bg)' : 'transparent',
-                     borderLeft: group ? `3px solid ${group.color}` : '1px solid transparent',
-                     userSelect: 'none'
-                  }}
-                  onClick={() => setActiveTabId(tab.id)}
-                  onKeyDown={(e) => {
-                    if (e.key === 'Enter' || e.key === ' ') {
-                      e.preventDefault();
-                      setActiveTabId(tab.id);
-                    }
-                  }}
-                  onContextMenu={(e) => {
-                    e.preventDefault();
-                    setTabContextMenu({ tabId: tab.id, x: e.clientX, y: e.clientY });
-                  }}
-                  draggable
-                  onDragStart={(e) => {
-                    setDraggedTabId(tab.id);
-                    e.dataTransfer.effectAllowed = 'move';
-                  }}
-                  onDragOver={(e) => {
-                    e.preventDefault();
-                    e.dataTransfer.dropEffect = 'move';
-                  }}
-                  onDrop={(e) => {
-                    e.preventDefault();
-                    if (!draggedTabId || draggedTabId === tab.id) return;
+                return <TabCard
+                  key={tab.id}
+                  tab={tab}
+                  group={group}
+                  isFirstInGroup={Boolean(group && (i === 0 || arr[i - 1].groupId !== tab.groupId))}
+                  isActive={tab.id === activeTabId}
+                  isVertical
+                  onActivate={setActiveTabId}
+                  onContextMenu={(event, id) => { event.preventDefault(); setTabContextMenu({ tabId: id, x: event.clientX, y: event.clientY }); }}
+                  onDragStart={(event, id) => { setDraggedTabId(id); event.dataTransfer.effectAllowed = 'move'; }}
+                  onDragOver={(event) => { event.preventDefault(); event.dataTransfer.dropEffect = 'move'; }}
+                  onDrop={(event, id) => {
+                    event.preventDefault();
+                    if (!draggedTabId || draggedTabId === id) return;
                     setTabs(prev => {
                       const draggedIndex = prev.findIndex(t => t.id === draggedTabId);
-                      const dropIndex = prev.findIndex(t => t.id === tab.id);
+                      const dropIndex = prev.findIndex(t => t.id === id);
                       if (draggedIndex === -1 || dropIndex === -1) return prev;
                       const newTabs = [...prev];
                       const [removed] = newTabs.splice(draggedIndex, 1);
@@ -3390,50 +3296,20 @@ function App() {
                     setDraggedTabId(null);
                   }}
                   onDragEnd={() => setDraggedTabId(null)}
-                  onMouseDown={(e) => {
-                    if (e.button === 1) { // Middle click
-                      closeTab(e, tab.id);
+                  onMiddleClick={(event, id) => { if (event.button === 1) closeTab(event, id); }}
+                  onClose={(event, id) => closeTab(event, id)}
+                  onToggleMute={(event, id) => {
+                    event.stopPropagation();
+                    const wv = webviewRefs.current[id];
+                    const target = tabs.find(item => item.id === id);
+                    if (wv && target) {
+                      const newMutedState = !target.isMuted;
+                      wv.setAudioMuted(newMutedState);
+                      updateTab(id, { isMuted: newMutedState });
                     }
                   }}
-                >
-                  {tab.isPrivate && <EyeOff size={10} style={{marginRight: '8px', opacity: 0.8}} />}
-                  {!tab.isPrivate && (
-                    tab.favicon
-                      ? <img src={tab.favicon} style={{width: 16, height: 16, marginRight: 8, flexShrink: 0}} />
-                      : <Globe size={16} style={{marginRight: 8, opacity: 0.7, flexShrink: 0}} />
-                  )}
-                  {tab.loading && <span className="tab-loading-indicator" role="status" aria-label="Loading tab"><span /></span>}
-                  {tab.loadError && <span className="tab-error-indicator" title={tab.loadError.description} aria-label="Page failed to load"><AlertCircle size={12} /></span>}
-
-                  <span className="tab-title" title={tab.title} style={{ flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', fontSize: '13px', color: tab.id === activeTabId ? 'var(--text-color)' : 'var(--text-muted)' }}>
-                    {tab.title}
-                  </span>
-                  {tab.suspended && <span className="tab-suspended-badge">Suspended</span>}
-
-                  {(tab.isAudible || tab.isMuted) && (
-                    <div
-                      className="tab-audio-indicator"
-                      style={{marginLeft: '4px', display: 'flex', alignItems: 'center', opacity: 0.8, cursor: 'pointer'}}
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        const wv = webviewRefs.current[tab.id];
-                        if (wv) {
-                          const newMutedState = !tab.isMuted;
-                          wv.setAudioMuted(newMutedState);
-                          updateTab(tab.id, { isMuted: newMutedState });
-                        }
-                      }}
-                    >
-                      {tab.isMuted ? <VolumeX size={12} /> : <Volume2 size={12} />}
-                    </div>
-                  )}
-
-                  <button className="tab-close" type="button" aria-label={`Close ${tab.title}`} onClick={(e) => closeTab(e, tab.id)}>
-                    <X size={12} />
-                  </button>
-                </div>
-                </React.Fragment>
-              )})}
+                />;
+              })}
             </div>
           </div>
         )}
@@ -3470,43 +3346,17 @@ function App() {
         )}
         <div style={{ display: 'flex', flexDirection: 'row', flex: 1, width: '100%', height: '100%' }}>
         {tabs.map(tab => tab.url !== 'probaho://newtab' && !tab.isPdf && !tab.suspended && (!settings.lazyLoadTabs || tab.id === activeTabId || tab.id === splitTabId) && (
-          <div key={`container-${tab.id}`} style={{
-              flex: 1, display: 'flex', position: 'relative',
-              borderRight: tab.id === activeTabId && splitTabId ? '2px solid var(--border-color)' : 'none',
-              boxShadow: focusedPane === 'main' && tab.id === activeTabId && splitTabId ? 'inset 0 0 0 2px var(--primary-color)' : (focusedPane === 'split' && tab.id === splitTabId ? 'inset 0 0 0 2px var(--primary-color)' : 'none')
-          }} onClick={() => { if (splitTabId) setFocusedPane(tab.id === activeTabId ? 'main' : 'split'); }}>
-            <webview // @ts-ignore
-              src="about:blank"
-              className="active"
-              ref={(el: any) => handleWebviewRef(tab.id, el, tab.url)}
-              webpreferences="contextIsolation=yes, nodeIntegration=no"
-              partition={tab.isPrivate ? `private-${tab.id}` : undefined}
-              style={{ flex: 1, border: 'none', width: '100%', height: '100%' }}
-            />
-            {tab.loading && !tab.loadError && (tab.id === activeTabId || tab.id === splitTabId) && (
-              <div className="page-loading-overlay" data-testid={`loading-overlay-${tab.id}`} role="status" aria-live="polite">
-                <div className="page-loading-card">
-                  <span className="page-loading-spinner" aria-hidden="true" />
-                  <div><strong>Loading page</strong><span>Connecting securely…</span></div>
-                </div>
-              </div>
-            )}
-            {tab.loadError && (tab.id === activeTabId || tab.id === splitTabId) && (
-              <div className="load-error-overlay" data-testid={`load-error-${tab.id}`} role="alert">
-                <div className="load-error-card">
-                  <div className="load-error-icon"><AlertCircle size={22} /></div>
-                  <span className="load-error-kicker">Navigation interrupted</span>
-                  <h2>We couldn’t load this page</h2>
-                  <p>{tab.loadError.description}</p>
-                  <code>{tab.loadError.url}</code>
-                  <div className="load-error-actions">
-                    <button className="load-error-primary" type="button" onClick={() => retryTab(tab)}><RotateCw size={14} /> Try again</button>
-                    <button className="load-error-secondary" type="button" onClick={() => recoverTabHome(tab)}><Home size={14} /> Go to home</button>
-                  </div>
-                </div>
-              </div>
-            )}
-          </div>
+          <WebPane
+            key={`web-pane-${tab.id}`}
+            tab={tab}
+            isActive={tab.id === activeTabId}
+            isSplit={Boolean(splitTabId)}
+            focusedPane={focusedPane}
+            onFocusPane={setFocusedPane}
+            onWebviewRef={handleWebviewRef}
+            onRetry={() => retryTab(tab)}
+            onHome={() => recoverTabHome(tab)}
+          />
         ))}
 
 

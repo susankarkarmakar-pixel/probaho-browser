@@ -11,6 +11,14 @@ test.describe('browser shell', () => {
     await expect(appPage.locator('.new-tab-page')).toBeVisible();
   });
 
+  test('exposes a sanitized performance snapshot', async ({ appPage }) => {
+    const snapshot = await appPage.evaluate(() => window.electronAPI.getPerformanceSnapshot?.());
+    expect(snapshot).toBeTruthy();
+    expect(snapshot?.windowCount).toBeGreaterThanOrEqual(1);
+    expect(snapshot?.rendererCount).toBeGreaterThanOrEqual(0);
+    expect(snapshot?.metrics.every(metric => typeof metric.pid === 'number' && typeof metric.cpuPercent === 'number')).toBe(true);
+  });
+
   test('renders the premium home dashboard and quick actions', async ({ appPage }) => {
     const home = appPage.getByTestId('new-tab-page');
     await expect(home).toBeVisible();
