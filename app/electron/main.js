@@ -9,17 +9,41 @@ const { randomUUID } = require('crypto');
 const { ExtensionManager } = require('./extension-manager');
 const { PluginManager, validatePlugin } = require('./plugin-manager');
 const { isAllowedNavigationUrl } = require('./navigation-policy');
+const { lookupUrl: lookupSafeBrowsingUrl } = require('./safe-browsing');
 
 const browserWindows = new Set();
+const unsafeNavigationOverrides = new Set();
 const extensionManager = new ExtensionManager();
 const pluginManager = new PluginManager(path.join(app.getPath('userData'), 'plugins.json'));
 const MAX_PDF_BYTES = 50 * 1024 * 1024;
 const PDF_FETCH_TIMEOUT_MS = 30_000;
 const DEFAULT_DOH_SERVERS = 'https://cloudflare-dns.com/dns-query,https://dns.google/dns-query';
+const SECURITY_SETTINGS_PATH = path.join(app.getPath('userData'), 'security-settings.json');
 let updaterState = { state: 'idle', version: null, percent: 0, error: null };
 
+function readSecuritySettings() {
+  try {
+    const stored = JSON.parse(fs.readFileSync(SECURITY_SETTINGS_PATH, 'utf8'));
+    return stored && typeof stored === 'object' ? stored : {};
+  } catch {
+    return {};
+  }
+}
+
+function persistSecuritySettings(settings) {
+  try {
+    fs.writeFileSync(SECURITY_SETTINGS_PATH, JSON.stringify({
+      safeBrowsingEnabled: settings.safeBrowsingEnabled !== false,
+      dohEnabled: settings.dohEnabled !== false
+    }, null, 2), { mode: 0o600 });
+  } catch (error) {
+    console.error('Unable to persist security settings:', error);
+  }
+}
+
 function configureDnsPrivacy() {
-  const mode = process.env.PROBAHO_DOH_MODE === 'off' ? 'off' : 'secure';
+  const storedSettings = readSecuritySettings();
+  const mode = process.env.PROBAHO_DOH_MODE === 'off' || storedSettings.dohEnabled === false ? 'off' : 'secure';
   if (mode === 'off') return;
   const servers = String(process.env.PROBAHO_DOH_SERVERS || DEFAULT_DOH_SERVERS)
     .split(',')
@@ -346,6 +370,20 @@ app.whenReady().then(async () => {
     return updaterState;
   });
 
+  ipcMain.handle('allow-unsafe-navigation', (event, rawUrl) => {
+    requireTrustedAppSender(event);
+    if (typeof rawUrl !== 'string' || !isAllowedNavigationUrl(rawUrl)) return false;
+    const key = `${event.sender.id}:${rawUrl}`;
+    unsafeNavigationOverrides.add(key);
+    return true;
+  });
+
+  ipcMain.handle('check-url-reputation', async (event, rawUrl) => {
+    requireTrustedAppSender(event);
+    if (typeof rawUrl !== 'string' || !isAllowedNavigationUrl(rawUrl)) return { status: 'skipped', safe: false, matches: [] };
+    return lookupSafeBrowsingUrl(rawUrl);
+  });
+
   let adBlockerEnabled = true;
   let trackerProtectionEnabled = true;
   let trackerExceptions = new Set();
@@ -413,8 +451,12 @@ app.whenReady().then(async () => {
       trackerExceptions = normalizeExceptions(settings.trackerExceptions);
       currentSettings = {
         doNotTrack: settings.doNotTrack === true,
-        askDownloadLocation: settings.askDownloadLocation === true
+        askDownloadLocation: settings.askDownloadLocation === true,
+        safeBrowsingEnabled: settings.safeBrowsingEnabled !== false,
+        dohEnabled: settings.dohEnabled !== false
       };
+      const senderUrl = event.senderFrame?.url || event.sender.getURL();
+      if (!senderUrl.includes('private=true')) persistSecuritySettings(currentSettings);
     }
   });
 
@@ -799,6 +841,8 @@ app.whenReady().then(async () => {
 
 
 
+  const safeBrowsingPending = new Set();
+
   app.on('web-contents-created', (event, contents) => {
     contents.userAgent = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.0.0 Safari/537.36';
 
@@ -840,7 +884,42 @@ app.whenReady().then(async () => {
               w.webContents.send('open-pdf-viewer', url, contents.id);
             });
           }
+          return;
         }
+
+        const hostContents = contents.hostWebContents;
+        const hostId = hostContents?.id || contents.id;
+        const overrideKey = `${hostId}:${url}`;
+        if (unsafeNavigationOverrides.delete(overrideKey)) return;
+        if (currentSettings.safeBrowsingEnabled === false) {
+          unsafeNavigationOverrides.add(overrideKey);
+          event.preventDefault();
+          contents.loadURL(url).catch(() => {});
+          return;
+        }
+
+        event.preventDefault();
+        if (safeBrowsingPending.has(overrideKey)) return;
+        safeBrowsingPending.add(overrideKey);
+        lookupSafeBrowsingUrl(url).then(result => {
+          safeBrowsingPending.delete(overrideKey);
+          const hostWindow = hostContents && !hostContents.isDestroyed() ? hostContents : null;
+          if (result.status === 'unsafe') {
+            hostWindow?.send('safe-browsing-warning', { url, matches: result.matches });
+            return;
+          }
+          if (result.status === 'error' || result.status === 'unavailable') {
+            hostWindow?.send('safe-browsing-status', { status: result.status, reason: result.reason || null });
+          }
+          unsafeNavigationOverrides.add(overrideKey);
+          contents.loadURL(url).catch(error => {
+            hostWindow?.send('safe-browsing-status', { status: 'error', reason: error?.message || 'Navigation failed' });
+          });
+        }).catch(error => {
+          safeBrowsingPending.delete(overrideKey);
+          const hostWindow = hostContents && !hostContents.isDestroyed() ? hostContents : null;
+          hostWindow?.send('safe-browsing-status', { status: 'error', reason: error?.message || 'Reputation lookup failed' });
+        });
       });
     }
   });

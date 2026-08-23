@@ -71,5 +71,9 @@ contextBridge.exposeInMainWorld('electronAPI', {
   checkForUpdates: () => ipcRenderer.invoke('check-for-updates'),
   downloadUpdate: () => ipcRenderer.invoke('download-update'),
   installUpdate: () => ipcRenderer.invoke('install-update'),
-  onUpdateStatus: (callback) => ipcRenderer.on('update-status', (event, status) => callback(status))
+  onUpdateStatus: (callback) => ipcRenderer.on('update-status', (event, status) => callback(status)),
+  checkUrlReputation: (url) => ipcRenderer.invoke('check-url-reputation', url),
+  allowUnsafeNavigation: (url) => ipcRenderer.invoke('allow-unsafe-navigation', url),
+  onSafeBrowsingWarning: (callback) => ipcRenderer.on('safe-browsing-warning', (event, warning) => callback(warning)),
+  onSafeBrowsingStatus: (callback) => ipcRenderer.on('safe-browsing-status', (event, status) => callback(status))
 });

@@ -33,3 +33,11 @@ Prebuilt versions will be available in the Releases section.
 
 Susankar Karmakar
 Testing GitHub Actions build
+
+## Privacy service configuration
+
+Probaho keeps Safe Browsing credentials out of the renderer and source code. To enable Google Safe Browsing Lookup API reputation checks in a packaged build, provide `GOOGLE_SAFE_BROWSING_API_KEY` through the protected process environment used to launch the application. The browser sends only the destination URL to the main-process provider client, caches short-lived results, and reports `safe`, `unsafe`, `unavailable`, or `error` status to the renderer. If no key is configured, navigation remains available and the Settings page reports that the provider is not configured. Google documents the Lookup API as a non-commercial service; commercial deployments should evaluate Google Web Risk instead.
+
+DNS-over-HTTPS is enabled by default before Electron startup. The Settings page persists the DoH preference and applies a change after the next restart. For a controlled deployment, `PROBAHO_DOH_SERVERS` may contain a comma-separated list of HTTPS resolver endpoints. `PROBAHO_DOH_MODE=off` explicitly disables DoH for a deployment; non-HTTPS resolver endpoints are rejected by the startup policy.
+
+Never commit API keys or resolver credentials to the repository. Use the operating system’s protected environment, CI secret store, or a platform-specific secure deployment mechanism.

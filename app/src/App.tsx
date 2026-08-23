@@ -3,7 +3,7 @@ import { t, Language } from './i18n';
 import PdfViewer from './PdfViewer';
 import {
   ArrowLeft, ArrowRight, RotateCw, Home, Plus,
-  Lock, X, Square, Search, Star, Bookmark, Menu, History, ZoomIn, FileCode, Printer, LogOut, Info, Download, Folder, Settings, ChevronUp, ChevronDown, EyeOff, Eye, Shield, BookOpen, Volume2, VolumeX, Globe, BookPlus, PictureInPicture, Share2, MessageSquare, Music, MessageCircle, Library, Columns, PanelRight, Copy, Pin, FolderPlus, FolderMinus, Trash2, Moon, Pause, Play, CheckCircle2, AlertCircle, FileText, SlidersHorizontal, ShieldCheck
+  Lock, X, Square, Search, Star, Bookmark, Menu, History, ZoomIn, FileCode, Printer, LogOut, Info, Download, Folder, Settings, ChevronUp, ChevronDown, EyeOff, Eye, Shield, BookOpen, Volume2, VolumeX, Globe, BookPlus, PictureInPicture, Share2, MessageSquare, Music, MessageCircle, Library, Columns, PanelRight, Copy, Pin, FolderPlus, FolderMinus, Trash2, Moon, Pause, Play, CheckCircle2, AlertCircle, FileText, SlidersHorizontal, ShieldCheck, ShieldAlert
 } from 'lucide-react';
 
 interface DownloadItem {
@@ -20,6 +20,16 @@ type UpdateState = {
   version?: string | null;
   percent?: number;
   error?: string | null;
+};
+
+type SafeBrowsingWarning = {
+  url: string;
+  matches: Array<{ threatType: string; platformType: string }>;
+};
+
+type SafeBrowsingStatus = {
+  status: 'safe' | 'unsafe' | 'unavailable' | 'error' | 'skipped';
+  reason?: string | null;
 };
 
 interface PermissionDecision {
@@ -181,6 +191,10 @@ declare global {
       downloadUpdate?: () => Promise<UpdateState>;
       installUpdate?: () => Promise<UpdateState>;
       onUpdateStatus?: (callback: (status: UpdateState) => void) => void;
+      checkUrlReputation?: (url: string) => Promise<SafeBrowsingStatus & { matches?: SafeBrowsingWarning['matches']; safe?: boolean }>;
+      allowUnsafeNavigation?: (url: string) => Promise<boolean>;
+      onSafeBrowsingWarning?: (callback: (warning: SafeBrowsingWarning) => void) => void;
+      onSafeBrowsingStatus?: (callback: (status: SafeBrowsingStatus) => void) => void;
     };
   }
 }
@@ -214,7 +228,9 @@ function App() {
         suspendInactiveTabs: true,
         suspensionTimeoutMinutes: 5,
         trackerProtectionEnabled: true,
-        trackerExceptions: []
+        trackerExceptions: [],
+        safeBrowsingEnabled: true,
+        dohEnabled: true
       };
     }
     try {
@@ -235,7 +251,9 @@ function App() {
           askDownloadLocation: false,
           lazyLoadTabs: true,
           suspendInactiveTabs: true,
-          suspensionTimeoutMinutes: 5
+          suspensionTimeoutMinutes: 5,
+          safeBrowsingEnabled: true,
+          dohEnabled: true
         };
         const merged = { ...def, ...parsed };
         settingsRef.current = merged;
@@ -256,7 +274,9 @@ function App() {
       askDownloadLocation: false,
       lazyLoadTabs: true,
       suspendInactiveTabs: true,
-      suspensionTimeoutMinutes: 5
+      suspensionTimeoutMinutes: 5,
+      safeBrowsingEnabled: true,
+      dohEnabled: true
     };
     settingsRef.current = def;
     return def;
@@ -407,12 +427,16 @@ function App() {
   const [recentlyClosed, setRecentlyClosed] = useState<{title: string, url: string}[]>([]);
   const [updateStatus, setUpdateStatus] = useState<UpdateState>({ state: 'idle', percent: 0, error: null });
   const [updateActionBusy, setUpdateActionBusy] = useState(false);
+  const [safeBrowsingWarning, setSafeBrowsingWarning] = useState<SafeBrowsingWarning | null>(null);
+  const [safeBrowsingStatus, setSafeBrowsingStatus] = useState<SafeBrowsingStatus>({ status: 'unavailable', reason: 'api-key-not-configured' });
 
   useEffect(() => {
     if (window.electronAPI?.getUpdateStatus) {
       window.electronAPI.getUpdateStatus().then(setUpdateStatus).catch(() => {});
     }
     window.electronAPI?.onUpdateStatus?.(setUpdateStatus);
+    window.electronAPI?.onSafeBrowsingWarning?.(setSafeBrowsingWarning);
+    window.electronAPI?.onSafeBrowsingStatus?.(setSafeBrowsingStatus);
   }, []);
 
   useEffect(() => {
@@ -1427,6 +1451,25 @@ function App() {
   const goBack = () => {
     const wv = webviewRefs.current[targetedTabId];
     if (wv && wv.canGoBack()) wv.goBack();
+  };
+
+  const dismissSafeBrowsingWarning = () => {
+    setSafeBrowsingWarning(null);
+    const wv = webviewRefs.current[targetedTabId];
+    if (wv && wv.canGoBack()) {
+      try { wv.goBack(); } catch {}
+    } else {
+      updateTab(targetedTabId, { url: 'probaho://newtab', title: t('newTab', settingsRef.current?.language || 'en'), loading: false, loadError: undefined });
+    }
+  };
+
+  const continueSafeBrowsingNavigation = async () => {
+    if (!safeBrowsingWarning) return;
+    const url = safeBrowsingWarning.url;
+    const approved = await window.electronAPI?.allowUnsafeNavigation?.(url);
+    if (!approved) return;
+    setSafeBrowsingWarning(null);
+    navigate(url);
   };
 
   const goForward = () => {
@@ -2629,6 +2672,34 @@ function App() {
                   Enable Ad & Tracker Blocking
                 </label>
               </div>
+              <div className="privacy-services-settings" data-testid="privacy-services-settings">
+                <div className="privacy-services-heading">
+                  <div>
+                    <span className="settings-field-kicker">Reputation & transport</span>
+                    <h4>Privacy services</h4>
+                  </div>
+                  <span className={`privacy-provider-status provider-${safeBrowsingStatus.status}`} data-testid="safe-browsing-provider-status">{safeBrowsingStatus.status === 'safe' ? 'Connected' : safeBrowsingStatus.status === 'unavailable' ? 'Not configured' : safeBrowsingStatus.status === 'error' ? 'Unavailable' : 'Ready'}</span>
+                </div>
+                <label className="privacy-service-toggle">
+                  <input
+                    type="checkbox"
+                    data-testid="safe-browsing-toggle"
+                    checked={settings.safeBrowsingEnabled !== false}
+                    onChange={e => setSettings({...settings, safeBrowsingEnabled: e.target.checked})}
+                  />
+                  <span><strong>Safe Browsing reputation checks</strong><small>Check web destinations before navigation. Your API key stays in the main process.</small></span>
+                </label>
+                <label className="privacy-service-toggle">
+                  <input
+                    type="checkbox"
+                    data-testid="doh-toggle"
+                    checked={settings.dohEnabled !== false}
+                    onChange={e => setSettings({...settings, dohEnabled: e.target.checked})}
+                  />
+                  <span><strong>Use DNS-over-HTTPS</strong><small>Encrypt DNS lookups with a secure resolver. Applies after restarting Probaho.</small></span>
+                </label>
+                {safeBrowsingStatus.status === 'unavailable' && <p className="privacy-service-note" data-testid="safe-browsing-config-note">Safe Browsing is enabled, but no provider key is configured in this build. Navigation remains available and the status is reported transparently.</p>}
+              </div>
               <div style={{marginBottom: '16px'}}>
                 <label style={{display: 'flex', alignItems: 'center', cursor: 'pointer', fontSize: '13px', fontWeight: 'bold'}}>
                   <input
@@ -3209,6 +3280,25 @@ function App() {
                 <span>{b.title}</span>
               </button>
             ))}
+          </div>
+        </div>
+      )}
+
+      {safeBrowsingWarning && (
+        <div className="safe-browsing-overlay" data-testid="safe-browsing-warning" role="alertdialog" aria-labelledby="safe-browsing-warning-title" aria-describedby="safe-browsing-warning-copy">
+          <div className="safe-browsing-card">
+            <div className="safe-browsing-icon"><ShieldAlert size={24} /></div>
+            <span className="safe-browsing-kicker">Safe Browsing warning</span>
+            <h2 id="safe-browsing-warning-title">This destination may be unsafe</h2>
+            <p id="safe-browsing-warning-copy">Probaho’s reputation provider flagged this destination. It may contain malware, phishing, or unwanted software.</p>
+            <div className="safe-browsing-url" title={safeBrowsingWarning.url}>{safeBrowsingWarning.url}</div>
+            <div className="safe-browsing-threats">
+              {safeBrowsingWarning.matches.map((match, index) => <span key={`${match.threatType}-${index}`}>{match.threatType.split('_').join(' ')}</span>)}
+            </div>
+            <div className="safe-browsing-actions">
+              <button type="button" className="safe-browsing-back" data-testid="safe-browsing-go-back" onClick={dismissSafeBrowsingWarning}>Go back</button>
+              <button type="button" className="safe-browsing-continue" data-testid="safe-browsing-continue" onClick={continueSafeBrowsingNavigation}>Continue anyway</button>
+            </div>
           </div>
         </div>
       )}

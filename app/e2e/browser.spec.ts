@@ -113,6 +113,14 @@ test.describe('browser shell', () => {
     await expect(appPage.getByTestId('update-status')).toContainText(/Automatic checks on|Up to date/);
     await appPage.getByTestId('check-updates-button').click();
     await expect(appPage.getByTestId('update-status')).toHaveText('Up to date');
+    await expect(appPage.getByTestId('privacy-services-settings')).toBeVisible();
+    await expect(appPage.getByTestId('safe-browsing-toggle')).toBeChecked();
+    await expect(appPage.getByTestId('doh-toggle')).toBeChecked();
+    await expect(appPage.getByTestId('safe-browsing-config-note')).toBeVisible();
+    await appPage.getByTestId('doh-toggle').uncheck();
+    await expect(appPage.getByTestId('doh-toggle')).not.toBeChecked();
+    await appPage.getByTestId('doh-toggle').check();
+    await expect(appPage.getByTestId('doh-toggle')).toBeChecked();
   });
 
   test('opens the premium Download Manager with search and filters', async ({ appPage }) => {
