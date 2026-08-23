@@ -3,7 +3,7 @@ import { t, Language } from './i18n';
 import PdfViewer from './PdfViewer';
 import {
   ArrowLeft, ArrowRight, RotateCw, Home, Plus,
-  Lock, X, Square, Search, Star, Bookmark, Menu, History, ZoomIn, FileCode, Printer, LogOut, Info, Download, Folder, Settings, ChevronUp, ChevronDown, EyeOff, Eye, Shield, BookOpen, Volume2, VolumeX, Globe, BookPlus, PictureInPicture, Share2, MessageSquare, Music, MessageCircle, Library, Columns, PanelRight, Copy, Pin, FolderPlus, FolderMinus, Trash2, Moon
+  Lock, X, Square, Search, Star, Bookmark, Menu, History, ZoomIn, FileCode, Printer, LogOut, Info, Download, Folder, Settings, ChevronUp, ChevronDown, EyeOff, Eye, Shield, BookOpen, Volume2, VolumeX, Globe, BookPlus, PictureInPicture, Share2, MessageSquare, Music, MessageCircle, Library, Columns, PanelRight, Copy, Pin, FolderPlus, FolderMinus, Trash2, Moon, Pause, Play, CheckCircle2, AlertCircle, FileText, SlidersHorizontal, ShieldCheck
 } from 'lucide-react';
 
 interface DownloadItem {
@@ -72,6 +72,30 @@ interface Tab {
 }
 
 const DEFAULT_URL = 'https://www.google.com';
+
+function formatDownloadBytes(bytes: number): string {
+  if (!Number.isFinite(bytes) || bytes <= 0) return '0 B';
+  const units = ['B', 'KB', 'MB', 'GB'];
+  const unitIndex = Math.min(Math.floor(Math.log(bytes) / Math.log(1024)), units.length - 1);
+  const value = bytes / Math.pow(1024, unitIndex);
+  return `${value >= 100 || unitIndex === 0 ? Math.round(value) : value.toFixed(1)} ${units[unitIndex]}`;
+}
+
+function downloadProgress(item: DownloadItem): number {
+  if (item.totalBytes <= 0) return 0;
+  return Math.min(100, Math.max(0, (item.receivedBytes / item.totalBytes) * 100));
+}
+
+function downloadStatusLabel(item: DownloadItem): string {
+  switch (item.state) {
+    case 'progressing': return 'Downloading';
+    case 'paused': return 'Paused';
+    case 'completed': return 'Completed';
+    case 'cancelled': return 'Cancelled';
+    case 'interrupted': return 'Interrupted';
+    default: return item.state;
+  }
+}
 
 declare global {
   interface Window {
@@ -342,6 +366,8 @@ function App() {
   const [historyQuery, setHistoryQuery] = useState('');
   const [showDownloads, setShowDownloads] = useState(false);
   const [downloads, setDownloads] = useState<DownloadItem[]>([]);
+  const [downloadFilter, setDownloadFilter] = useState<'all' | 'active' | 'completed'>('all');
+  const [downloadQuery, setDownloadQuery] = useState('');
   const [permissions, setPermissions] = useState<PermissionStore>({});
   const [extensions, setExtensions] = useState<ExtensionRecord[]>([]);
   const [plugins, setPlugins] = useState<PluginRecord[]>([]);
@@ -737,8 +763,17 @@ function App() {
     activeTabIdRef.current = targetedTabId;
   }, [targetedTabId]);
 
-  const activeDownloads = downloads.filter(d => d.state === 'progressing');
-  const hasActiveDownloads = activeDownloads.length > 0;
+  const activeDownloads = downloads.filter(d => d.state === 'progressing' || d.state === 'paused');
+  const hasActiveDownloads = activeDownloads.some(d => d.state === 'progressing');
+  const completedDownloads = downloads.filter(d => d.state === 'completed');
+  const filteredDownloads = downloads.filter(item => {
+    const query = downloadQuery.trim().toLowerCase();
+    const matchesQuery = !query || item.fileName.toLowerCase().includes(query);
+    const matchesFilter = downloadFilter === 'all'
+      || (downloadFilter === 'active' && (item.state === 'progressing' || item.state === 'paused'))
+      || (downloadFilter === 'completed' && item.state === 'completed');
+    return matchesQuery && matchesFilter;
+  });
   let totalDownloadProgress = 0;
   if (hasActiveDownloads) {
     const totalBytes = activeDownloads.reduce((acc, curr) => acc + curr.totalBytes, 0);
@@ -2118,85 +2153,92 @@ function App() {
           )}
         </div>
 
-        <div style={{ position: 'relative' }}>
+        <div className="downloads-anchor">
           <button
-            className="nav-btn"
-            style={{ position: 'relative' }}
+            className="nav-btn downloads-trigger"
+            data-testid="downloads-button"
+            aria-label={`${t('downloads', settings.language)}${hasActiveDownloads ? ' — download in progress' : ''}`}
+            aria-expanded={showDownloads}
+            title={t('downloads', settings.language)}
             onClick={() => { setShowBookmarks(false); setShowHistory(false); setShowMenu(false); setShowReadingList(false); setShowDownloads(!showDownloads); }}
           >
             <Download size={16} />
-            {hasActiveDownloads && (
-              <div style={{ position: 'absolute', bottom: 0, left: 0, height: '3px', backgroundColor: '#4caf50', width: `${totalDownloadProgress}%`, transition: 'width 0.3s' }} />
-            )}
+            {hasActiveDownloads && <span className="downloads-trigger-progress" style={{ width: `${totalDownloadProgress}%` }} />}
+            {activeDownloads.length > 0 && <span className="downloads-count">{activeDownloads.length}</span>}
           </button>
 
-          {/* Downloads Pop-out Panel inside relative container */}
           {showDownloads && (
-            <div className="downloads-popout" style={{
-              position: 'absolute', top: '100%', right: 0, width: '350px',
-              background: 'var(--bg-color)', border: '1px solid var(--border-color)',
-              borderRadius: '8px', zIndex: 100, boxShadow: '0 8px 24px rgba(0,0,0,0.2)',
-              marginTop: '8px'
-            }}>
-              <div className="bookmarks-header" style={{padding: '12px 16px', borderBottom: '1px solid var(--border-color)', margin: 0}}>
-                <h3 style={{margin: 0, fontSize: '14px'}}>{t('downloads', settings.language)}</h3>
-                <div style={{display: 'flex', gap: '8px', alignItems: 'center'}}>
-                  <button className="clear-history-btn" onClick={() => setDownloads([])} style={{padding: '4px 8px'}}>{t('clear', settings.language)}</button>
+            <section className="downloads-popout download-manager" data-testid="downloads-popout" aria-label={t('downloads', settings.language)} onClick={e => e.stopPropagation()}>
+              <header className="download-manager-header">
+                <div>
+                  <span className="download-manager-kicker">Workspace</span>
+                  <h3>{t('downloads', settings.language)}</h3>
+                  <span className="panel-subtitle">{downloads.length} {downloads.length === 1 ? 'file' : 'files'} · {completedDownloads.length} completed</span>
+                </div>
+                <button className="nav-btn" aria-label="Close downloads" title="Close downloads" onClick={() => setShowDownloads(false)}><X size={16} /></button>
+              </header>
+
+              <div className="download-manager-summary">
+                <div className="download-summary-icon"><Download size={16} /></div>
+                <div>
+                  <strong>{hasActiveDownloads ? `${activeDownloads.filter(d => d.state === 'progressing').length} active download${activeDownloads.filter(d => d.state === 'progressing').length === 1 ? '' : 's'}` : 'All downloads are up to date'}</strong>
+                  <span>{hasActiveDownloads ? 'Transfers continue in the background.' : 'Your recent files stay available here.'}</span>
                 </div>
               </div>
-              <div className="bookmarks-list" style={{maxHeight: '300px', overflowY: 'auto', padding: '8px'}}>
-                {downloads.length === 0 ? (
-                  <div className="no-bookmarks" style={{padding: '16px', textAlign: 'center'}}>{t('noDownloads', settings.language)}</div>
-                ) : (
-                  downloads.map((d, i) => (
-                    <div key={i} className="download-item" style={{marginBottom: '8px', padding: '8px', borderRadius: '6px', background: 'var(--tab-bg)', display: 'flex', justifyContent: 'space-between'}}>
-                      <div className="download-info" style={{flex: 1, overflow: 'hidden'}}>
-                        <div className="bookmark-title" style={{marginBottom: '4px', fontSize: '13px', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis'}}>{d.fileName}</div>
-                        <div className="bookmark-url" style={{fontSize: '11px'}}>
-                          {d.state === 'completed' ? t('completed', settings.language) :
-                           d.state === 'progressing' ? `${Math.round(d.receivedBytes / 1024 / 1024 * 10) / 10} MB / ${Math.round(d.totalBytes / 1024 / 1024 * 10) / 10} MB` : d.state}
-                        </div>
-                        {d.state === 'progressing' && (
-                          <div className="download-progress-bar" style={{marginTop: '4px'}}>
-                            <div className="download-progress-fill" style={{width: `${(d.receivedBytes / d.totalBytes) * 100}%`}}></div>
-                          </div>
-                        )}
-                      </div>
-                      <div className="download-actions" style={{display: 'flex', gap: '4px', alignItems: 'center', paddingLeft: '8px'}}>
-                        {d.state === 'completed' && (
-                          <>
-                            <button className="nav-btn" style={{width: '24px', height: '24px', padding: 0}} title={t('openFile', settings.language)} onClick={() => window.electronAPI?.openFile(d.savePath)}>
-                              <FileCode size={12} />
-                            </button>
-                            <button className="nav-btn" style={{width: '24px', height: '24px', padding: 0}} title={t('showInFolder', settings.language)} onClick={() => window.electronAPI?.showInFolder(d.savePath)}>
-                              <Folder size={12} />
-                            </button>
-                          </>
-                        )}
-                        {d.state === 'progressing' && (
-                          <button className="nav-btn" style={{width: '24px', height: '24px', padding: 0}} title="Pause" onClick={() => window.electronAPI?.pauseDownload?.(d.id)}>
-                            <Square size={10} style={{fill: 'currentColor'}} />
-                          </button>
-                        )}
-                        {d.state === 'paused' && (
-                          <button className="nav-btn" style={{width: '24px', height: '24px', padding: 0}} title="Resume" onClick={() => window.electronAPI?.resumeDownload?.(d.id)}>
-                            <ArrowRight size={12} />
-                          </button>
-                        )}
-                        <button className="nav-btn" style={{width: '24px', height: '24px', padding: 0}} title="Remove" onClick={() => {
-                          if (d.state === 'progressing' || d.state === 'paused') {
-                            window.electronAPI?.cancelDownload?.(d.id);
-                          }
-                          setDownloads(prev => prev.filter(item => item.id !== d.id));
-                        }}>
-                          <X size={12} />
-                        </button>
-                      </div>
-                    </div>
-                  ))
-                )}
+
+              <div className="download-search-wrap">
+                <Search size={14} aria-hidden="true" />
+                <input type="search" data-testid="download-search" aria-label="Search downloads" placeholder="Search downloads" value={downloadQuery} onChange={e => setDownloadQuery(e.target.value)} />
+                {downloadQuery && <button className="download-search-clear" aria-label="Clear download search" onClick={() => setDownloadQuery('')}><X size={13} /></button>}
               </div>
-            </div>
+
+              <div className="download-filters" role="tablist" aria-label="Download filters">
+                {(['all', 'active', 'completed'] as const).map(filter => (
+                  <button key={filter} type="button" role="tab" aria-selected={downloadFilter === filter} className={`download-filter ${downloadFilter === filter ? 'active' : ''}`} onClick={() => setDownloadFilter(filter)}>
+                    {filter === 'all' ? 'All' : filter === 'active' ? `Active${activeDownloads.length ? ` · ${activeDownloads.length}` : ''}` : `Completed${completedDownloads.length ? ` · ${completedDownloads.length}` : ''}`}
+                  </button>
+                ))}
+              </div>
+
+              <div className="download-manager-list">
+                {downloads.length === 0 ? (
+                  <div className="download-empty" data-testid="downloads-empty">
+                    <div className="download-empty-icon"><Download size={22} /></div>
+                    <strong>No downloads yet</strong>
+                    <span>Files you download will appear here.</span>
+                  </div>
+                ) : filteredDownloads.length === 0 ? (
+                  <div className="download-empty"><Search size={22} /><strong>No matching downloads</strong><span>Try another filename or filter.</span></div>
+                ) : filteredDownloads.map(d => {
+                  const progress = downloadProgress(d);
+                  const status = downloadStatusLabel(d);
+                  const isTerminal = d.state === 'completed' || d.state === 'cancelled' || d.state === 'interrupted';
+                  return (
+                    <article key={d.id} className={`download-card download-state-${d.state}`} data-testid={`download-card-${d.id}`}>
+                      <div className="download-card-icon" aria-hidden="true">
+                        {d.state === 'completed' ? <CheckCircle2 size={17} /> : d.state === 'interrupted' || d.state === 'cancelled' ? <AlertCircle size={17} /> : <FileText size={17} />}
+                      </div>
+                      <div className="download-info">
+                        <div className="download-card-title" title={d.fileName}>{d.fileName}</div>
+                        <div className="download-card-meta"><span className={`download-status status-${d.state}`}>{status}</span><span>{formatDownloadBytes(d.receivedBytes)}{d.totalBytes > 0 ? ` / ${formatDownloadBytes(d.totalBytes)}` : ''}</span></div>
+                        {(d.state === 'progressing' || d.state === 'paused') && <div className="download-progress-bar" aria-label={`${Math.round(progress)}% downloaded`}><div className="download-progress-fill" style={{ width: `${progress}%` }} /></div>}
+                      </div>
+                      <div className="download-actions">
+                        {d.state === 'completed' && <>
+                          <button className="download-action-btn" aria-label={`Open ${d.fileName}`} title={t('openFile', settings.language)} onClick={() => window.electronAPI?.openFile(d.savePath)}><FileCode size={14} /></button>
+                          <button className="download-action-btn" aria-label={`Show ${d.fileName} in folder`} title={t('showInFolder', settings.language)} onClick={() => window.electronAPI?.showInFolder(d.savePath)}><Folder size={14} /></button>
+                        </>}
+                        {d.state === 'progressing' && <button className="download-action-btn" aria-label={`Pause ${d.fileName}`} title="Pause" onClick={() => window.electronAPI?.pauseDownload?.(d.id)}><Pause size={14} /></button>}
+                        {d.state === 'paused' && <button className="download-action-btn" aria-label={`Resume ${d.fileName}`} title="Resume" onClick={() => window.electronAPI?.resumeDownload?.(d.id)}><Play size={14} /></button>}
+                        <button className="download-action-btn remove" aria-label={`${isTerminal ? 'Remove' : 'Cancel'} ${d.fileName}`} title={isTerminal ? 'Remove' : 'Cancel'} onClick={() => { if (!isTerminal) window.electronAPI?.cancelDownload?.(d.id); setDownloads(prev => prev.filter(item => item.id !== d.id)); }}><Trash2 size={14} /></button>
+                      </div>
+                    </article>
+                  );
+                })}
+              </div>
+
+              {downloads.some(d => d.state !== 'progressing' && d.state !== 'paused') && <button className="download-clear-finished" type="button" onClick={() => setDownloads(prev => prev.filter(d => d.state === 'progressing' || d.state === 'paused'))}><Trash2 size={14} /> Clear finished</button>}
+            </section>
           )}
         </div>
 
@@ -2364,14 +2406,27 @@ function App() {
       {/* Settings Modal */}
       {showSettings && (
         <div className="about-modal-overlay" data-testid="settings-overlay" onClick={() => setShowSettings(false)}>
-          <div className="about-modal settings-modal" data-testid="settings-modal" style={{width: '500px', maxHeight: '80vh', overflowY: 'auto'}} onClick={e => e.stopPropagation()}>
+          <div className="about-modal settings-modal" data-testid="settings-modal" role="dialog" aria-modal="true" aria-labelledby="settings-title" style={{width: '500px', maxHeight: '80vh', overflowY: 'auto'}} onClick={e => e.stopPropagation()}>
             <div className="about-header settings-header">
-              <h3>{t('settings', settings.language)}</h3>
-              <button className="nav-btn" onClick={() => setShowSettings(false)}><X size={16} /></button>
+              <div className="settings-header-copy">
+                <span className="settings-kicker">Browser preferences</span>
+                <h3 id="settings-title" data-testid="settings-title">{t('settings', settings.language)}</h3>
+                <p>Make Probaho feel like your personal command center.</p>
+              </div>
+              <div className="settings-header-mark"><SlidersHorizontal size={19} /></div>
+              <button className="nav-btn settings-close-btn" aria-label="Close settings" onClick={() => setShowSettings(false)}><X size={16} /></button>
             </div>
-            <div className="about-content settings-content" style={{textAlign: 'left', padding: '16px 24px'}}>
+            <div className="about-content settings-content" data-testid="settings-content" style={{textAlign: 'left', padding: '16px 24px'}}>
+              <div className="settings-hero">
+                <div className="settings-hero-icon"><ShieldCheck size={18} /></div>
+                <div>
+                  <strong>Private by default</strong>
+                  <span>Performance, privacy and appearance controls are saved on this device.</span>
+                </div>
+              </div>
               <div className="settings-profile-actions" style={{marginBottom: '16px', display: 'flex', gap: '8px'}}>
-                <button className="clear-history-btn" style={{flex: 1, padding: '8px'}} onClick={() => {
+                                  <button className="clear-history-btn settings-action-btn" data-testid="export-profile-button" style={{flex: 1, padding: '8px'}} onClick={() => {
+
                   const data = { bookmarks, history, readingList, settings };
                   const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
                   const url = URL.createObjectURL(blob);
@@ -2381,7 +2436,7 @@ function App() {
                   a.click();
                   URL.revokeObjectURL(url);
                 }}>Export Profile</button>
-                <label className="clear-history-btn" style={{flex: 1, padding: '8px', textAlign: 'center', cursor: 'pointer'}}>
+                <label className="clear-history-btn settings-action-btn" data-testid="import-profile-button" style={{flex: 1, padding: '8px', textAlign: 'center', cursor: 'pointer'}}>
                   Import Profile
                   <input type="file" accept=".json" style={{display: 'none'}} onClick={(e) => { (e.target as HTMLInputElement).value = '' }} onChange={(e) => {
                     const file = e.target.files?.[0];
@@ -2590,8 +2645,8 @@ function App() {
               </div>
 
               {/* Password Manager Section */}
-              <div className="settings-section" style={{marginTop: '24px', borderTop: '1px solid var(--border-color)', paddingTop: '16px'}}>
-                <h4 className="settings-section-title" style={{marginBottom: '12px', fontSize: '14px'}}>Password Manager</h4>
+              <div className="settings-section" style={{marginTop: '24px', borderTop: '1px solid var(--border-color)', paddingTop: '16px'}} data-testid="passwords-section">
+                <h4 className="settings-section-title" style={{marginBottom: '12px', fontSize: '14px'}}><Lock size={15} /> Password Manager</h4>
                 {Object.keys(passwordsStore).length === 0 ? (
                   <div style={{fontSize: '13px', color: '#888'}}>No saved passwords.</div>
                 ) : (
@@ -2653,7 +2708,7 @@ function App() {
 
               {/* Extensions and Plugins Section */}
               <div className="settings-section" style={{marginTop: '24px', borderTop: '1px solid var(--border-color)', paddingTop: '16px'}} data-testid="extensions-section">
-                <h4 className="settings-section-title" style={{marginBottom: '6px', fontSize: '14px'}}>Extensions</h4>
+                <h4 className="settings-section-title" style={{marginBottom: '6px', fontSize: '14px'}}><SlidersHorizontal size={15} /> Extensions & Plugins</h4>
                 <div style={{fontSize: '11px', color: '#888', marginBottom: '12px'}}>Only manifest-validated unpacked extensions are loaded. Extension code remains isolated from this UI.</div>
                 <button
                   className="clear-history-btn"
@@ -2743,7 +2798,7 @@ function App() {
               {/* Site Permissions Section */}
               <div className="settings-section" style={{marginTop: '24px', borderTop: '1px solid var(--border-color)', paddingTop: '16px'}} data-testid="permissions-section">
                 <div style={{display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '12px'}}>
-                  <h4 style={{margin: 0, fontSize: '14px'}}>Site Permissions</h4>
+                  <h4 className="settings-section-title" style={{margin: 0, fontSize: '14px'}}><Shield size={15} /> Site Permissions</h4>
                   {Object.keys(permissions).length > 0 && (
                     <button
                       className="clear-history-btn"

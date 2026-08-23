@@ -76,10 +76,27 @@ test.describe('browser shell', () => {
     await appPage.locator('.menu-panel').getByText('Settings', { exact: true }).click();
     await expect(appPage.getByTestId('settings-modal')).toBeVisible();
     await expect(appPage.getByTestId('settings-modal')).toHaveClass(/settings-modal/);
+    await expect(appPage.getByTestId('settings-title')).toHaveText('Settings');
+    await expect(appPage.getByText('Private by default', { exact: true })).toBeVisible();
     await expect(appPage.getByText('Homepage URL', { exact: true })).toBeVisible();
     await expect(appPage.getByTestId('performance-settings')).toBeVisible();
     await expect(appPage.getByTestId('lazy-tabs-toggle')).toBeChecked();
     await expect(appPage.getByTestId('suspend-tabs-toggle')).toBeChecked();
+  });
+
+  test('opens the premium Download Manager with search and filters', async ({ appPage }) => {
+    await appPage.getByTestId('downloads-button').click();
+    const manager = appPage.getByTestId('downloads-popout');
+    await expect(manager).toBeVisible();
+    await expect(manager.getByText('Downloads', { exact: true })).toBeVisible();
+    await expect(manager.getByTestId('downloads-empty')).toBeVisible();
+    await expect(manager.getByTestId('download-search')).toBeVisible();
+    await expect(manager.getByRole('tab', { name: 'All' })).toHaveAttribute('aria-selected', 'true');
+    await manager.getByRole('tab', { name: 'Active' }).click();
+    await expect(manager.getByRole('tab', { name: 'Active' })).toHaveAttribute('aria-selected', 'true');
+    await expect(manager.getByTestId('downloads-empty')).toBeVisible();
+    await manager.getByRole('button', { name: 'Close downloads' }).click();
+    await expect(manager).not.toBeVisible();
   });
 
   test('searches and manages the redesigned history panel', async ({ appPage }) => {
