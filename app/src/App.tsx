@@ -101,6 +101,7 @@ declare global {
 }
 
 function App() {
+  const isPrivateWindow = window.location.search.includes('private=true');
   const [showSettings, setShowSettings] = useState(false);
   const [showFind, setShowFind] = useState(false);
   const [findText, setFindText] = useState('');
@@ -111,6 +112,21 @@ function App() {
   const addressInputRef = useRef<HTMLInputElement>(null);
   const settingsRef = useRef<any>(null);
   const [settings, setSettings] = useState(() => {
+    if (isPrivateWindow) {
+      return {
+        defaultSearchEngine: 'Google',
+        homepageUrl: 'probaho://newtab',
+        theme: 'dark',
+        adBlockerEnabled: true,
+        language: 'en' as Language,
+        newTabBackgroundUrl: '',
+        verticalTabs: false,
+        showBookmarksBar: false,
+        accentColor: '#7b2cbf',
+        doNotTrack: false,
+        askDownloadLocation: false
+      };
+    }
     try {
       const saved = localStorage.getItem('probaho-settings');
       if (saved) {
@@ -150,7 +166,6 @@ function App() {
     return def;
   });
 
-  const isPrivateWindow = window.location.search.includes('private=true');
   const [webPanels] = useState([
     { id: 'chatgpt', title: 'ChatGPT', url: 'https://chat.openai.com', icon: MessageSquare },
     { id: 'spotify', title: 'Spotify', url: 'https://open.spotify.com', icon: Music },
@@ -160,14 +175,17 @@ function App() {
   const [activePanelId, setActivePanelId] = useState<string | null>(null);
 
   const [workspaces, setWorkspaces] = useState<{id: string, name: string}[]>(() => {
+    if (isPrivateWindow) return [{id: 'default', name: 'Private'}];
     const saved = localStorage.getItem('workspaces');
     return saved ? JSON.parse(saved) : [{id: 'default', name: 'Personal'}];
   });
   const [activeWorkspaceId, setActiveWorkspaceId] = useState<string>(() => {
+    if (isPrivateWindow) return 'default';
     return localStorage.getItem('activeWorkspaceId') || 'default';
   });
 
   const [tabGroups, setTabGroups] = useState<{id: string, name: string, color: string}[]>(() => {
+    if (isPrivateWindow) return [];
     const saved = localStorage.getItem('tabGroups');
     return saved ? JSON.parse(saved) : [];
   });
@@ -240,16 +258,19 @@ function App() {
   }, [tabs, activeTabId]);
   const [inputUrl, setInputUrl] = useState(DEFAULT_URL);
   const [bookmarks, setBookmarks] = useState<{title: string, url: string}[]>(() => {
+    if (isPrivateWindow) return [];
     const saved = localStorage.getItem('bookmarks');
     return saved ? JSON.parse(saved) : [];
   });
   const [showBookmarks, setShowBookmarks] = useState(false);
   const [readingList, setReadingList] = useState<{title: string, url: string, content: string, savedAt: string}[]>(() => {
+    if (isPrivateWindow) return [];
     const saved = localStorage.getItem('readingList');
     return saved ? JSON.parse(saved) : [];
   });
   const [showReadingList, setShowReadingList] = useState(false);
   const [history, setHistory] = useState<{title: string, url: string, time: string}[]>(() => {
+    if (isPrivateWindow) return [];
     const saved = localStorage.getItem('history');
     return saved ? JSON.parse(saved) : [];
   });
@@ -274,20 +295,25 @@ function App() {
   const [recentlyClosed, setRecentlyClosed] = useState<{title: string, url: string}[]>([]);
 
   useEffect(() => {
+    if (isPrivateWindow) return;
     localStorage.setItem('bookmarks', JSON.stringify(bookmarks));
-  }, [bookmarks]);
+  }, [bookmarks, isPrivateWindow]);
 
   useEffect(() => {
+    if (isPrivateWindow) return;
     localStorage.setItem('readingList', JSON.stringify(readingList));
-  }, [readingList]);
+  }, [readingList, isPrivateWindow]);
 
   useEffect(() => {
+    if (isPrivateWindow) return;
     localStorage.setItem('history', JSON.stringify(history));
-  }, [history]);
+  }, [history, isPrivateWindow]);
 
   useEffect(() => {
     settingsRef.current = settings;
-    localStorage.setItem('probaho-settings', JSON.stringify(settings));
+    if (!isPrivateWindow) {
+      localStorage.setItem('probaho-settings', JSON.stringify(settings));
+    }
     document.body.className = settings.theme === 'light' ? 'theme-light' : '';
 
     // Apply custom accent color
@@ -499,10 +525,10 @@ function App() {
       window.electronAPI.onOpenSettings(() => {
         setShowMenu(false);
         setShowSettings(true);
-        if (window.electronAPI?.getPermissions) {
+        if (!isPrivateWindow && window.electronAPI?.getPermissions) {
           window.electronAPI.getPermissions().then(setPermissions);
         }
-        if (window.electronAPI?.getAllPasswords) {
+        if (!isPrivateWindow && window.electronAPI?.getAllPasswords) {
           window.electronAPI.getAllPasswords().then(setPasswordsStore);
         }
       });
@@ -574,16 +600,19 @@ function App() {
   }, [tabs, activeTabId, isPrivateWindow]);
 
   useEffect(() => {
+    if (isPrivateWindow) return;
     localStorage.setItem('workspaces', JSON.stringify(workspaces));
-  }, [workspaces]);
+  }, [workspaces, isPrivateWindow]);
 
   useEffect(() => {
+    if (isPrivateWindow) return;
     localStorage.setItem('activeWorkspaceId', activeWorkspaceId);
-  }, [activeWorkspaceId]);
+  }, [activeWorkspaceId, isPrivateWindow]);
 
   useEffect(() => {
+    if (isPrivateWindow) return;
     localStorage.setItem('tabGroups', JSON.stringify(tabGroups));
-  }, [tabGroups]);
+  }, [tabGroups, isPrivateWindow]);
 
   const targetedTabId = focusedPane === 'split' && splitTabId ? splitTabId : activeTabId;
 
@@ -858,7 +887,7 @@ function App() {
           const origin = parts[1];
           const user = parts[2];
           const pass = parts[3];
-          if (confirm('Save password for ' + origin + '?')) {
+          if (!isPrivateWindow && confirm('Save password for ' + origin + '?')) {
             window.electronAPI?.savePassword?.(origin, { username: user, password: pass });
           }
         }
@@ -873,7 +902,7 @@ function App() {
 
         // Handle Autofill
         const currentUrl = el.getURL();
-        if (currentUrl && currentUrl.startsWith('http')) {
+        if (!isPrivateWindow && currentUrl && currentUrl.startsWith('http')) {
           const origin = new URL(currentUrl).origin;
           window.electronAPI?.getPassword?.(origin).then(creds => {
             if (creds && creds.password) {
@@ -1160,6 +1189,7 @@ function App() {
   };
 
   const getSavedZoom = (url: string) => {
+    if (isPrivateWindow) return 1;
     try {
       const domain = getDomainFromUrl(url);
       const saved = localStorage.getItem('zoom_levels');
@@ -1172,6 +1202,7 @@ function App() {
   };
 
   const saveZoom = (url: string, zoomLevel: number) => {
+    if (isPrivateWindow) return;
     try {
       const domain = getDomainFromUrl(url);
       const saved = localStorage.getItem('zoom_levels');
