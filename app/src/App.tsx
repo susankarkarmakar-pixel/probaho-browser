@@ -1533,25 +1533,38 @@ function App() {
           </div>
         </div>
       )}
-      {/* Web Panels Sidebar (Right) - Now globally scoped outside content area */}
-      <div className="web-panels-sidebar" style={{ position: 'absolute', right: 0, top: 0, bottom: 0, zIndex: 150 }}>
-         <div className="web-panels-icons">
+      {/* Utility Rail */}
+      <aside className="web-panels-sidebar utility-rail" data-testid="utility-rail" aria-label="Browser utilities" style={{ position: 'absolute', right: 0, top: 0, bottom: 0, zIndex: 150 }}>
+         <div className="utility-rail-brand" aria-hidden="true"><span>Ｐ</span></div>
+         <div className="web-panels-icons utility-rail-actions">
+           <button type="button" className={`web-panel-btn utility-rail-btn ${showHistory ? 'active' : ''}`} data-testid="utility-history" aria-label="Open history" aria-pressed={showHistory} title="History" onClick={() => { setShowMenu(false); setShowBookmarks(false); setShowDownloads(false); setShowReadingList(false); setShowHistory(prev => !prev); }}><History size={17} /></button>
+           <button type="button" className={`web-panel-btn utility-rail-btn ${showDownloads ? 'active' : ''}`} data-testid="utility-downloads" aria-label="Open downloads" aria-pressed={showDownloads} title="Downloads" onClick={() => { setShowMenu(false); setShowHistory(false); setShowBookmarks(false); setShowReadingList(false); setShowDownloads(prev => !prev); }}><Download size={17} /></button>
+           <button type="button" className={`web-panel-btn utility-rail-btn ${showBookmarks ? 'active' : ''}`} data-testid="utility-bookmarks" aria-label="Open bookmarks" aria-pressed={showBookmarks} title="Bookmarks" onClick={() => { setShowMenu(false); setShowHistory(false); setShowDownloads(false); setShowReadingList(false); setShowBookmarks(prev => !prev); }}><Bookmark size={17} /></button>
+           <button type="button" className={`web-panel-btn utility-rail-btn ${showSettings ? 'active' : ''}`} data-testid="utility-settings" aria-label="Open settings" aria-pressed={showSettings} title="Settings" onClick={() => { setShowMenu(false); setShowHistory(false); setShowBookmarks(false); setShowDownloads(false); setShowReadingList(false); setShowSettings(prev => !prev); if (!isPrivateWindow && window.electronAPI?.getPermissions) window.electronAPI.getPermissions().then(setPermissions); if (!isPrivateWindow && window.electronAPI?.getAllPasswords) window.electronAPI.getAllPasswords().then(setPasswordsStore); }}>
+<Settings size={17} /></button>
+         </div>
+         <div className="utility-rail-divider" />
+         <div className="web-panels-icons utility-rail-actions">
            {webPanels.map(panel => (
               <button
+                type="button"
                 key={panel.id}
-                className={`web-panel-btn ${activePanelId === panel.id ? 'active' : ''}`}
+                className={`web-panel-btn utility-rail-btn ${activePanelId === panel.id ? 'active' : ''}`}
+                data-testid={`utility-panel-${panel.id}`}
+                aria-label={`Open ${panel.title}`}
+                aria-pressed={activePanelId === panel.id}
                 title={panel.title}
                 onClick={() => setActivePanelId(activePanelId === panel.id ? null : panel.id)}
               >
-                 <panel.icon size={20} strokeWidth={1.5} />
+                 <panel.icon size={17} strokeWidth={1.7} />
               </button>
            ))}
          </div>
-      </div>
+      </aside>
 
       {/* Web Panel Slide-out View */}
       {activePanelId && (
-        <div className="web-panel-view" style={{ position: 'absolute', right: '48px', top: 0, bottom: 0, zIndex: 149 }}>
+        <div className="web-panel-view" style={{ position: 'absolute', right: '52px', top: 0, bottom: 0, zIndex: 149 }}>
            <div className="web-panel-header">
               <span style={{fontSize: '13px', fontWeight: 'bold'}}>{webPanels.find(p => p.id === activePanelId)?.title}</span>
               <button className="nav-btn" onClick={() => setActivePanelId(null)}><X size={14}/></button>
@@ -1565,7 +1578,7 @@ function App() {
       )}
 
       {/* Wrap main browser in a div that respects the right sidebar */}
-      <div style={{ flex: 1, display: 'flex', flexDirection: 'column', marginRight: '48px' }}>
+      <div style={{ flex: 1, display: 'flex', flexDirection: 'column', marginRight: '52px' }}>
 
       {/* Titlebar with tabs */}
       <div className="titlebar" style={settings.verticalTabs ? { paddingLeft: '80px', height: '40px' } : {}}>
@@ -2048,49 +2061,53 @@ function App() {
           </div>
 
           {showShields && (
-            <div className="downloads-popout" data-testid="shields-popup" onClick={(e) => e.stopPropagation()} style={{
-              position: 'absolute', top: '100%', right: 0, width: '300px',
-              background: 'var(--bg-color)', border: '1px solid var(--border-color)',
-              borderRadius: '8px', zIndex: 150, boxShadow: '0 8px 24px rgba(0,0,0,0.2)',
-              marginTop: '8px', padding: '16px'
-            }}>
-              <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '8px', borderBottom: '1px solid var(--border-color)', paddingBottom: '16px', marginBottom: '16px' }}>
-                <Shield size={32} color={!settings.adBlockerEnabled || settings.trackerProtectionEnabled === false ? '#d32f2f' : isCurrentSiteExcepted ? '#f0a000' : '#4caf50'} />
-                <h3 style={{ margin: 0, fontSize: '16px' }}>{targetedTab?.blockedCount || 0}</h3>
-                <span style={{ fontSize: '12px', color: 'var(--text-color)', opacity: 0.8 }}>Trackers & ads blocked on this site</span>
-                {targetedTab?.blockedByCategory && Object.keys(targetedTab.blockedByCategory).length > 0 && (
-                  <div style={{ width: '100%', display: 'flex', justifyContent: 'center', gap: '8px', flexWrap: 'wrap', fontSize: '10px', color: '#999' }}>
-                    {Object.entries(targetedTab.blockedByCategory).map(([category, count]) => <span key={category}>{category}: {count}</span>)}
-                  </div>
-                )}
+            <section className="shields-popup" data-testid="shields-popup" aria-labelledby="shields-popup-title" onClick={(e) => e.stopPropagation()}>
+              <header className="shields-popup-header">
+                <div>
+                  <span className="shields-kicker">Privacy controls</span>
+                  <h3 id="shields-popup-title">Shields</h3>
+                  <span className="panel-subtitle">Protection for this browsing session</span>
+                </div>
+                <button className="nav-btn" aria-label="Close Shields" title="Close Shields" onClick={() => setShowShields(false)}><X size={15} /></button>
+              </header>
+
+              <div className={`shields-hero ${!settings.adBlockerEnabled || settings.trackerProtectionEnabled === false ? 'disabled' : isCurrentSiteExcepted ? 'paused' : 'protected'}`} data-testid="shields-status">
+                <div className="shields-hero-icon"><Shield size={21} /></div>
+                <div className="shields-hero-copy">
+                  <strong>{!settings.adBlockerEnabled || settings.trackerProtectionEnabled === false ? 'Shields are off' : isCurrentSiteExcepted ? 'Paused for this site' : 'You are protected'}</strong>
+                  <span>{currentSiteOrigin || 'No website is active yet'}</span>
+                </div>
+                <span className="shields-state-dot" aria-hidden="true" />
               </div>
-              <label style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', cursor: 'pointer', fontSize: '13px', fontWeight: 'bold', marginBottom: '12px' }}>
-                <span>Shields (Global)</span>
-                <input
-                  type="checkbox"
-                  data-testid="global-shields-toggle"
-                  checked={settings.adBlockerEnabled !== false && settings.trackerProtectionEnabled !== false}
-                  onChange={e => setSettings({...settings, adBlockerEnabled: e.target.checked, trackerProtectionEnabled: e.target.checked})}
-                />
-              </label>
-              <label style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', cursor: currentSiteOrigin ? 'pointer' : 'not-allowed', fontSize: '13px', opacity: currentSiteOrigin ? 1 : 0.55 }}>
-                <span>Pause for this site</span>
-                <input
-                  type="checkbox"
-                  data-testid="site-shields-toggle"
-                  disabled={!currentSiteOrigin}
-                  checked={isCurrentSiteExcepted}
-                  onChange={e => {
+
+              <div className="shields-total-card">
+                <div><strong>{targetedTab?.blockedCount || 0}</strong><span>trackers and ads blocked</span></div>
+                <div className="shields-total-caption">on this site</div>
+              </div>
+
+              <div className="shields-breakdown" aria-label="Blocked request categories">
+                {targetedTab?.blockedByCategory && Object.keys(targetedTab.blockedByCategory).length > 0 ? Object.entries(targetedTab.blockedByCategory).map(([category, count]) => (
+                  <div className="shields-breakdown-item" key={category}><span>{category}</span><strong>{count}</strong></div>
+                )) : <div className="shields-breakdown-empty">No blocked requests recorded yet.</div>}
+              </div>
+
+              <div className="shields-controls">
+                <label className="shield-toggle-row">
+                  <span><strong>Global protection</strong><small>Block known ads and trackers everywhere</small></span>
+                  <input type="checkbox" data-testid="global-shields-toggle" checked={settings.adBlockerEnabled !== false && settings.trackerProtectionEnabled !== false} onChange={e => setSettings({...settings, adBlockerEnabled: e.target.checked, trackerProtectionEnabled: e.target.checked})} />
+                </label>
+                <label className={`shield-toggle-row ${!currentSiteOrigin ? 'disabled' : ''}`}>
+                  <span><strong>Pause on this site</strong><small>{currentSiteOrigin ? 'Allow requests for this origin' : 'Available when a website is active'}</small></span>
+                  <input type="checkbox" data-testid="site-shields-toggle" disabled={!currentSiteOrigin} checked={isCurrentSiteExcepted} onChange={e => {
                     if (!currentSiteOrigin) return;
                     const exceptions = new Set(settings.trackerExceptions || []);
                     if (e.target.checked) exceptions.add(currentSiteOrigin);
                     else exceptions.delete(currentSiteOrigin);
                     setSettings({...settings, trackerExceptions: Array.from(exceptions)});
-                  }}
-                />
-              </label>
-              {currentSiteOrigin && <div style={{ marginTop: '8px', fontSize: '10px', color: '#888', wordBreak: 'break-all' }}>{currentSiteOrigin}</div>}
-            </div>
+                  }} />
+                </label>
+              </div>
+            </section>
           )}
         </div>
         <button className="nav-btn" title="Add to Reading List" onClick={() => {

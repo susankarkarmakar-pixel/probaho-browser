@@ -128,6 +128,38 @@ test.describe('browser shell', () => {
     await expect(contextMenu.getByRole('menuitem').first()).toBeVisible();
   });
 
+  test('opens the privacy Shields status panel', async ({ appPage }) => {
+    const addressInput = appPage.getByTestId('address-input');
+    await addressInput.fill('https://example.com');
+    await addressInput.press('Enter');
+    await expect(addressInput).toHaveValue(/^https:\/\/example\.com\/?$/);
+
+    await appPage.getByTestId('shields-button').click();
+    const popup = appPage.getByTestId('shields-popup');
+    await expect(popup).toBeVisible();
+    await expect(popup.getByTestId('shields-status')).toContainText('You are protected');
+    await expect(popup.getByText('No blocked requests recorded yet.', { exact: true })).toBeVisible();
+    await expect(popup.getByTestId('global-shields-toggle')).toBeChecked();
+    await popup.getByTestId('global-shields-toggle').uncheck();
+    await expect(popup.getByTestId('shields-status')).toContainText('Shields are off');
+    await popup.getByTestId('global-shields-toggle').check();
+    await popup.getByRole('button', { name: 'Close Shields' }).click();
+    await expect(popup).not.toBeVisible();
+  });
+
+  test('switches panels from the right-side utility rail', async ({ appPage }) => {
+    const rail = appPage.getByTestId('utility-rail');
+    await expect(rail).toBeVisible();
+    await expect(rail.getByTestId('utility-history')).toBeVisible();
+    await rail.getByTestId('utility-downloads').click();
+    await expect(appPage.getByTestId('downloads-popout')).toBeVisible();
+    await rail.getByTestId('utility-settings').click();
+    await expect(appPage.getByTestId('settings-modal')).toBeVisible();
+    await expect(appPage.getByTestId('downloads-popout')).not.toBeVisible();
+    await appPage.getByRole('button', { name: 'Close settings' }).click();
+    await expect(appPage.getByTestId('settings-modal')).not.toBeVisible();
+  });
+
   test('shows tracker protection controls for the current site', async ({ appPage }) => {
     const addressInput = appPage.getByTestId('address-input');
     await addressInput.fill('https://example.com');
