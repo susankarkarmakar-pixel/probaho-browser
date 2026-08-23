@@ -37,8 +37,7 @@
         "portable"
       ],
       "publisherName": "Susankar Karmakar",
-      "icon": "build/icon.ico",
-      "verifyUpdateCodeSignature": false
+      "icon": "build/icon.ico"
     },
     "nsis": {
       "oneClick": false,
