@@ -1282,7 +1282,7 @@ function App() {
   }, [tabContextMenu, showShields, showMediaControls, showSiteInfo]);
 
   return (
-    <div className="browser-container">
+    <div className="browser-container" data-testid="browser-shell">
       {tabContextMenu && (
         <div className="menu-panel" style={{ position: 'fixed', left: tabContextMenu.x, top: tabContextMenu.y, zIndex: 9999 }}>
           <div className="menu-item" onClick={() => {
@@ -1470,6 +1470,7 @@ function App() {
                  </div>
               )}
             <div
+              data-testid={`tab-${tab.id}`}
               className={`tab ${tab.id === activeTabId ? 'active' : ''} ${tab.isPrivate ? 'private' : ''} ${tab.isPinned ? 'pinned' : ''}`}
               style={{ borderTop: group ? `3px solid ${group.color}` : undefined }}
               onClick={() => setActiveTabId(tab.id)}
@@ -1545,7 +1546,7 @@ function App() {
             </div>
             </React.Fragment>
           )})}
-          <button className="new-tab-btn" onClick={() => createTab(isPrivateWindow)}>
+          <button className="new-tab-btn" data-testid="new-tab-button" aria-label="New tab" onClick={() => createTab(isPrivateWindow)}>
             <Plus size={16} />
           </button>
         </div>
@@ -1611,7 +1612,7 @@ function App() {
           </button>
         </div>
 
-        <form className="address-bar-container" onSubmit={onSubmit} style={{position: 'relative'}}>
+        <form className="address-bar-container" data-testid="address-bar" onSubmit={onSubmit} style={{position: 'relative'}}>
           <div className="security-icon" onClick={(e) => { e.stopPropagation(); setShowSiteInfo(!showSiteInfo); }} style={{cursor: 'pointer'}}>
             {targetedTab?.isSecure ? <Lock size={14} color="#4caf50" /> : <Search size={14} />}
           </div>
@@ -1651,6 +1652,7 @@ function App() {
           <input
             ref={addressInputRef}
             className="address-input"
+            data-testid="address-input"
             type="text"
             value={inputUrl}
             onChange={async (e) => {
@@ -2009,7 +2011,7 @@ function App() {
           )}
         </div>
 
-        <button className="nav-btn" onClick={() => { setShowBookmarks(false); setShowHistory(false); setShowDownloads(false); setShowReadingList(false); setShowMenu(!showMenu); }}>
+        <button className="nav-btn" data-testid="menu-button" aria-label="Open menu" onClick={() => { setShowBookmarks(false); setShowHistory(false); setShowDownloads(false); setShowReadingList(false); setShowMenu(!showMenu); }}>
           <Menu size={16} />
         </button>
       </div>
@@ -2027,7 +2029,7 @@ function App() {
             <div className="menu-item-text">{t('newWindow', settings.language)}</div>
             <div className="menu-item-shortcut">Ctrl+N</div>
           </div>
-          <div className="menu-item" onClick={() => { setShowMenu(false); window.electronAPI?.openPrivateWindow?.(); }}>
+          <div className="menu-item" data-testid="new-private-window" onClick={() => { setShowMenu(false); window.electronAPI?.openPrivateWindow?.(); }}>
             <div className="menu-item-icon"><EyeOff size={16} /></div>
             <div className="menu-item-text">{t('newPrivateTab', settings.language)}</div>
             <div className="menu-item-shortcut">Ctrl+Shift+N</div>
@@ -2147,8 +2149,8 @@ function App() {
 
       {/* Settings Modal */}
       {showSettings && (
-        <div className="about-modal-overlay" onClick={() => setShowSettings(false)}>
-          <div className="about-modal" style={{width: '500px', maxHeight: '80vh', overflowY: 'auto'}} onClick={e => e.stopPropagation()}>
+        <div className="about-modal-overlay" data-testid="settings-overlay" onClick={() => setShowSettings(false)}>
+          <div className="about-modal" data-testid="settings-modal" style={{width: '500px', maxHeight: '80vh', overflowY: 'auto'}} onClick={e => e.stopPropagation()}>
             <div className="about-header">
               <h3>{t('settings', settings.language)}</h3>
               <button className="nav-btn" onClick={() => setShowSettings(false)}><X size={16} /></button>

@@ -254,7 +254,9 @@ function createWindow(isPrivate = false) {
 
 
 app.whenReady().then(() => {
-  session.defaultSession.setWebRTCIPHandlingPolicy('disable-non-proxied-udp');
+  if (typeof session.defaultSession.setWebRTCIPHandlingPolicy === 'function') {
+    session.defaultSession.setWebRTCIPHandlingPolicy('disable-non-proxied-udp');
+  }
   createWindow();
 
   if (app.isPackaged) {
@@ -282,7 +284,9 @@ app.whenReady().then(() => {
   const configurePrivateSession = (privateSession) => {
     if (configuredPrivateSessions.has(privateSession)) return;
     configuredPrivateSessions.add(privateSession);
-    privateSession.setWebRTCIPHandlingPolicy('disable-non-proxied-udp');
+    if (typeof privateSession.setWebRTCIPHandlingPolicy === 'function') {
+      privateSession.setWebRTCIPHandlingPolicy('disable-non-proxied-udp');
+    }
 
     privateSession.webRequest.onBeforeSendHeaders((details, callback) => {
       details.requestHeaders['User-Agent'] = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.0.0 Safari/537.36';
