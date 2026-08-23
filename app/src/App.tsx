@@ -59,6 +59,11 @@ interface Tab {
   blockedByCategory?: Record<string, number>;
   isPrivate?: boolean;
   crashed?: boolean;
+  loadError?: {
+    code: number;
+    description: string;
+    url: string;
+  };
   isPdf?: boolean;
   suspended?: boolean;
   hasLoaded?: boolean;
@@ -511,7 +516,7 @@ function App() {
     if (window.electronAPI?.onTabCrashed) {
       window.electronAPI.onTabCrashed((webContentsId, reason) => {
         console.error('Tab crashed:', webContentsId, reason);
-        setTabs(prev => prev.map(t => t.webContentsId === webContentsId ? { ...t, crashed: true } : t));
+        setTabs(prev => prev.map(t => t.webContentsId === webContentsId ? { ...t, crashed: true, loading: false, loadError: undefined } : t));
       });
     }
 
@@ -782,6 +787,19 @@ function App() {
   }
 
   const webviewRefs = useRef<{ [key: string]: any }>({});
+  const loadTimeoutsRef = useRef<Record<string, ReturnType<typeof setTimeout>>>({});
+
+  const scheduleLoadTimeout = (id: string, el: any, fallbackUrl: string) => {
+    const existing = loadTimeoutsRef.current[id];
+    if (existing) clearTimeout(existing);
+    loadTimeoutsRef.current[id] = setTimeout(() => {
+      const currentUrl = (() => {
+        try { return el.getURL(); } catch { return fallbackUrl; }
+      })();
+      const errorUrl = currentUrl && currentUrl !== 'about:blank' ? currentUrl : fallbackUrl;
+      setTabLoadError(id, errorUrl, 'The page took too long to respond. Check your connection and try again.', -7);
+    }, 10000);
+  };
 
   useEffect(() => {
     const handleNewTab = () => {
@@ -1024,10 +1042,25 @@ function App() {
     setTabs(prev => prev.map(tab => tab.id === id ? { ...tab, ...updates } : tab));
   };
 
+  const setTabLoadError = (id: string, url: string, description = 'The page could not be loaded.', code = -1) => {
+    if (!url || url === 'about:blank' || url.startsWith('probaho://')) return;
+    updateTab(id, {
+      loading: false,
+      loadError: {
+        code: Number.isFinite(code) ? code : -1,
+        description,
+        url
+      }
+    });
+  };
+
   const handleWebviewRef = (id: string, el: any, initialUrl: string) => {
     // Handle React unmount / StrictMode double-mount: clean up old ref
     if (!el) {
       delete webviewRefs.current[id];
+      const existingTimeout = loadTimeoutsRef.current[id];
+      if (existingTimeout) clearTimeout(existingTimeout);
+      delete loadTimeoutsRef.current[id];
       return;
     }
 
@@ -1040,7 +1073,10 @@ function App() {
         try {
           if (el.getURL() === 'about:blank' || !el.getURL()) {
             updateTab(id, { hasLoaded: true, suspended: false, lastActiveAt: Date.now() });
-            el.loadURL(url);
+            scheduleLoadTimeout(id, el, url);
+            Promise.resolve(el.loadURL(url)).catch((error: any) => {
+              setTabLoadError(id, url, error?.message || 'The page could not be loaded.', Number(error?.errno ?? error?.code));
+            });
             const savedZoom = getSavedZoom(url);
             try { el.setZoomFactor(savedZoom); } catch {}
           }
@@ -1060,12 +1096,15 @@ function App() {
 
     // Initial load (skip internal New Tab Page)
     if (initialUrl && initialUrl !== 'probaho://newtab') {
+      scheduleLoadTimeout(id, el, initialUrl);
       loadWhenReady(initialUrl);
     }
 
     // Event: loading started
     el.addEventListener('did-start-loading', () => {
-      updateTab(id, { loading: true, crashed: false });
+      updateTab(id, { loading: true, crashed: false, loadError: undefined });
+      const activeUrl = (() => { try { return el.getURL() || initialUrl; } catch { return initialUrl; } })();
+      scheduleLoadTimeout(id, el, activeUrl);
     });
 
     // Event: loading stopped
@@ -1199,17 +1238,29 @@ function App() {
 
     // Event: page fully loaded
     el.addEventListener('did-finish-load', () => {
+      let finishedUrl = '';
+      try { finishedUrl = el.getURL(); } catch {}
+      if (finishedUrl === 'about:blank' && initialUrl !== 'about:blank') return;
+      const existingTimeout = loadTimeoutsRef.current[id];
+      if (existingTimeout) clearTimeout(existingTimeout);
+      delete loadTimeoutsRef.current[id];
       updateTab(id, {
+        loading: false,
+        crashed: false,
         canGoBack: el.canGoBack(),
         canGoForward: el.canGoForward()
       });
     });
 
-    // Event: navigation FAILED (NEW - Bug 5 fix)
+    // Event: navigation failed. Keep the original tab title and expose a recoverable error state.
     el.addEventListener('did-fail-load', (e: any) => {
-      if (e.isMainFrame && e.errorCode !== -3 && !e.validatedURL.startsWith('probaho://') && e.validatedURL !== '' && e.validatedURL !== 'about:blank') { // -3 is aborted, not a real error
-        console.error('Navigation failed:', e.errorCode, e.errorDescription, e.validatedURL);
-        updateTab(id, { loading: false, title: t('error', settingsRef.current?.language || 'en') });
+      const failedUrl = typeof e.validatedURL === 'string' ? e.validatedURL : el.getURL();
+      if (e.isMainFrame !== false && e.errorCode !== -3 && failedUrl && !failedUrl.startsWith('probaho://') && failedUrl !== 'about:blank') {
+        const existingTimeout = loadTimeoutsRef.current[id];
+        if (existingTimeout) clearTimeout(existingTimeout);
+        delete loadTimeoutsRef.current[id];
+        console.error('Navigation failed:', e.errorCode, e.errorDescription, failedUrl);
+        setTabLoadError(id, failedUrl, e.errorDescription || 'The page could not be loaded.', e.errorCode);
       }
     });
 
@@ -1323,7 +1374,7 @@ function App() {
       }
     }
 
-    updateTab(targetedTabId, { url: finalUrl, isPdf: false });
+    updateTab(targetedTabId, { url: finalUrl, isPdf: false, loading: true, crashed: false, loadError: undefined });
 
     if (finalUrl.toLowerCase().endsWith('.pdf')) {
       updateTab(targetedTabId, { url: finalUrl, isPdf: true, title: finalUrl.split('/').pop() || 'PDF Document' });
@@ -1334,9 +1385,13 @@ function App() {
     const wv = webviewRefs.current[targetedTabId];
     if (wv) {
       try {
-        wv.loadURL(finalUrl);
-      } catch (e) {
+        scheduleLoadTimeout(targetedTabId, wv, finalUrl);
+        Promise.resolve(wv.loadURL(finalUrl)).catch((error: any) => {
+          setTabLoadError(targetedTabId, finalUrl, error?.message || 'The page could not be loaded.', Number(error?.errno ?? error?.code));
+        });
+      } catch (e: any) {
         console.error('Error in wv.loadURL:', e);
+        setTabLoadError(targetedTabId, finalUrl, e?.message || 'The page could not be loaded.', Number(e?.errno ?? e?.code));
       }
     }
     setInputUrl(finalUrl);
@@ -1364,6 +1419,21 @@ function App() {
 
   const goHome = () => {
     navigate(settings.homepageUrl);
+  };
+  const retryTab = (tab: Tab) => {
+    updateTab(tab.id, { loading: true, crashed: false, loadError: undefined });
+    const wv = webviewRefs.current[tab.id];
+    if (wv) {
+      try { wv.reload(); } catch { try { wv.loadURL(tab.url); } catch {} }
+    }
+  };
+  const recoverTabHome = (tab: Tab) => {
+    const homeUrl = settingsRef.current?.homepageUrl || 'probaho://newtab';
+    updateTab(tab.id, { url: homeUrl, title: t('newTab', settingsRef.current?.language || 'en'), loading: true, crashed: false, loadError: undefined });
+    const wv = webviewRefs.current[tab.id];
+    if (wv && homeUrl !== 'probaho://newtab') {
+      try { wv.loadURL(homeUrl); } catch {}
+    }
   };
 
   const toggleBookmark = () => {
@@ -1731,6 +1801,8 @@ function App() {
                   ? <img src={tab.favicon} style={{width: 14, height: 14, marginRight: tab.isPinned ? 0 : 6, flexShrink: 0}} />
                   : <Globe size={14} style={{marginRight: tab.isPinned ? 0 : 6, opacity: 0.7, flexShrink: 0}} />
               )}
+              {tab.loading && <span className="tab-loading-indicator" role="status" aria-label="Loading tab"><span /></span>}
+              {tab.loadError && <span className="tab-error-indicator" title={tab.loadError.description} aria-label="Page failed to load"><AlertCircle size={12} /></span>}
 
               {!tab.isPinned && <span className="tab-title" title={tab.title}>{tab.title}</span>}
               {tab.suspended && <span className="tab-suspended-badge">Suspended</span>}
@@ -3187,6 +3259,8 @@ function App() {
                       ? <img src={tab.favicon} style={{width: 16, height: 16, marginRight: 8, flexShrink: 0}} />
                       : <Globe size={16} style={{marginRight: 8, opacity: 0.7, flexShrink: 0}} />
                   )}
+                  {tab.loading && <span className="tab-loading-indicator" role="status" aria-label="Loading tab"><span /></span>}
+                  {tab.loadError && <span className="tab-error-indicator" title={tab.loadError.description} aria-label="Page failed to load"><AlertCircle size={12} /></span>}
 
                   <span className="tab-title" title={tab.title} style={{ flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', fontSize: '13px', color: tab.id === activeTabId ? 'var(--text-color)' : 'var(--text-muted)' }}>
                     {tab.title}
@@ -3266,6 +3340,29 @@ function App() {
               partition={tab.isPrivate ? `private-${tab.id}` : undefined}
               style={{ flex: 1, border: 'none', width: '100%', height: '100%' }}
             />
+            {tab.loading && !tab.loadError && (tab.id === activeTabId || tab.id === splitTabId) && (
+              <div className="page-loading-overlay" data-testid={`loading-overlay-${tab.id}`} role="status" aria-live="polite">
+                <div className="page-loading-card">
+                  <span className="page-loading-spinner" aria-hidden="true" />
+                  <div><strong>Loading page</strong><span>Connecting securely…</span></div>
+                </div>
+              </div>
+            )}
+            {tab.loadError && (tab.id === activeTabId || tab.id === splitTabId) && (
+              <div className="load-error-overlay" data-testid={`load-error-${tab.id}`} role="alert">
+                <div className="load-error-card">
+                  <div className="load-error-icon"><AlertCircle size={22} /></div>
+                  <span className="load-error-kicker">Navigation interrupted</span>
+                  <h2>We couldn’t load this page</h2>
+                  <p>{tab.loadError.description}</p>
+                  <code>{tab.loadError.url}</code>
+                  <div className="load-error-actions">
+                    <button className="load-error-primary" type="button" onClick={() => retryTab(tab)}><RotateCw size={14} /> Try again</button>
+                    <button className="load-error-secondary" type="button" onClick={() => recoverTabHome(tab)}><Home size={14} /> Go to home</button>
+                  </div>
+                </div>
+              </div>
+            )}
           </div>
         ))}
 

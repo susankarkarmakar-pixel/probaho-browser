@@ -64,6 +64,18 @@ test.describe('browser shell', () => {
     await expect(appPage.locator('webview')).toHaveCount(1);
   });
 
+  test('shows a recoverable error state for a failed navigation', async ({ appPage }) => {
+    const addressInput = appPage.getByTestId('address-input');
+    await addressInput.fill('file:///tmp/probaho-does-not-exist.html');
+    await addressInput.press('Enter');
+    const errorSurface = appPage.locator('[data-testid^="load-error-"]').first();
+    await expect(errorSurface).toBeVisible({ timeout: 15000 });
+    await expect(errorSurface.locator('h2')).toHaveText(/couldn.t load this page/);
+    await expect(errorSurface.locator('.load-error-primary')).toBeVisible();
+    await errorSurface.locator('.load-error-secondary').click();
+    await expect(appPage.locator('.new-tab-page')).toBeVisible();
+  });
+
   test('normalizes an address-bar submission', async ({ appPage }) => {
     const addressInput = appPage.getByTestId('address-input');
     await addressInput.fill('example.com');
