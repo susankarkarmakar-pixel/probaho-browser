@@ -2798,7 +2798,6 @@ function App() {
               ref={(el: any) => handleWebviewRef(tab.id, el, tab.url)}
               webpreferences="contextIsolation=yes, nodeIntegration=no"
               partition={tab.isPrivate ? `private-${tab.id}` : undefined}
-              allowpopups={true}
               style={{ flex: 1, border: 'none', width: '100%', height: '100%' }}
             />
           </div>

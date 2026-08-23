@@ -10,6 +10,27 @@ let mainWindow;
 const MAX_PDF_BYTES = 50 * 1024 * 1024;
 const PDF_FETCH_TIMEOUT_MS = 30_000;
 
+function isAllowedNavigationUrl(rawUrl) {
+  if (rawUrl === 'about:blank') return true;
+  try {
+    const parsedUrl = new URL(rawUrl);
+    return ['http:', 'https:', 'view-source:'].includes(parsedUrl.protocol);
+  } catch {
+    return false;
+  }
+}
+
+function isTrustedAppSender(event) {
+  const senderUrl = event.senderFrame?.url || event.sender.getURL();
+  return senderUrl.startsWith('file://');
+}
+
+function requireTrustedAppSender(event) {
+  if (!isTrustedAppSender(event)) {
+    throw new Error('Untrusted IPC sender');
+  }
+}
+
 async function fetchPdfBytes(rawUrl) {
   let parsedUrl;
   try {
@@ -78,6 +99,7 @@ function createWindow(isPrivate = false) {
       preload: path.join(__dirname, 'preload.js'),
       nodeIntegration: false,
       contextIsolation: true,
+      sandbox: true,
       webviewTag: true
     }
   });
@@ -242,16 +264,72 @@ app.whenReady().then(() => {
   let adBlockerEnabled = true;
   let currentSettings = {};
   const activeDownloadsMap = new Map();
+  const configuredPrivateSessions = new WeakSet();
+
+  const configurePrivateSession = (privateSession) => {
+    if (configuredPrivateSessions.has(privateSession)) return;
+    configuredPrivateSessions.add(privateSession);
+    privateSession.setWebRTCIPHandlingPolicy('disable-non-proxied-udp');
+
+    privateSession.webRequest.onBeforeSendHeaders((details, callback) => {
+      details.requestHeaders['User-Agent'] = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.0.0 Safari/537.36';
+      if (currentSettings.doNotTrack) details.requestHeaders.DNT = '1';
+      callback({ cancel: false, requestHeaders: details.requestHeaders });
+    });
+
+    privateSession.setPermissionRequestHandler((webContents, permission, callback, details) => {
+      let origin;
+      try {
+        origin = new URL(details.requestingUrl).origin;
+      } catch {
+        return callback(false);
+      }
+
+      const promptPermissions = ['media', 'geolocation', 'notifications'];
+      if (!promptPermissions.includes(permission)) return callback(false);
+
+      dialog.showMessageBox({
+        type: 'question',
+        title: 'Private Window Permission Request',
+        message: `${origin} wants to access your ${permission}. This decision will not be saved.`,
+        buttons: ['Allow Once', 'Block'],
+        defaultId: 1,
+        cancelId: 1
+      }).then(result => callback(result.response === 0)).catch(() => callback(false));
+    });
+
+    privateSession.webRequest.onBeforeRequest({ urls: ['*://*/*'] }, (details, callback) => {
+      if (!adBlockerEnabled) return callback({ cancel: false });
+      const url = details.url.toLowerCase();
+      if (!blocklist.some(domain => url.includes(domain))) return callback({ cancel: false });
+
+      const wc = details.webContentsId ? require('electron').webContents.fromId(details.webContentsId) : null;
+      const hostContents = wc?.hostWebContents || wc;
+      if (hostContents && !hostContents.isDestroyed()) {
+        hostContents.send('ad-blocked', details.webContentsId);
+      }
+      callback({ cancel: true });
+    });
+  };
 
   ipcMain.on('set-adblocker', (event, enabled) => {
-    adBlockerEnabled = enabled;
+    requireTrustedAppSender(event);
+    if (typeof enabled === 'boolean') adBlockerEnabled = enabled;
   });
 
   ipcMain.on('update-settings', (event, settings) => {
-    currentSettings = settings;
+    requireTrustedAppSender(event);
+    if (settings && typeof settings === 'object' && !Array.isArray(settings)) {
+      currentSettings = {
+        doNotTrack: settings.doNotTrack === true,
+        askDownloadLocation: settings.askDownloadLocation === true
+      };
+    }
   });
 
   ipcMain.on('cancel-download', (event, id) => {
+    requireTrustedAppSender(event);
+    if (typeof id !== 'string') return;
     const item = activeDownloadsMap.get(id);
     if (item) {
       item.cancel();
@@ -260,6 +338,8 @@ app.whenReady().then(() => {
   });
 
   ipcMain.on('pause-download', (event, id) => {
+    requireTrustedAppSender(event);
+    if (typeof id !== 'string') return;
     const item = activeDownloadsMap.get(id);
     if (item && item.canResume()) {
       item.pause();
@@ -267,21 +347,26 @@ app.whenReady().then(() => {
   });
 
   ipcMain.on('resume-download', (event, id) => {
+    requireTrustedAppSender(event);
+    if (typeof id !== 'string') return;
     const item = activeDownloadsMap.get(id);
     if (item && item.canResume()) {
       item.resume();
     }
   });
 
-  ipcMain.on('open-private-window', () => {
+  ipcMain.on('open-private-window', (event) => {
+    requireTrustedAppSender(event);
     createWindow(true);
   });
 
-  ipcMain.on('open-new-window', () => {
+  ipcMain.on('open-new-window', (event) => {
+    requireTrustedAppSender(event);
     createWindow(false);
   });
 
   ipcMain.handle('load-extension', async (event) => {
+    requireTrustedAppSender(event);
     const result = await dialog.showOpenDialog({ properties: ['openDirectory'] });
     if (!result.canceled) {
       await session.defaultSession.loadExtension(result.filePaths[0]);
@@ -290,7 +375,8 @@ app.whenReady().then(() => {
     return null;
   });
 
-  ipcMain.on('clear-cache', () => {
+  ipcMain.on('clear-cache', (event) => {
+    requireTrustedAppSender(event);
     session.defaultSession.clearCache().then(() => {
       console.log('Cache cleared');
     });
@@ -299,27 +385,37 @@ app.whenReady().then(() => {
     });
   });
 
-  ipcMain.handle('get-permissions', () => {
+  ipcMain.handle('get-permissions', (event) => {
+    requireTrustedAppSender(event);
     return permissionsStore.data;
   });
 
-  ipcMain.handle('get-password', (e, origin) => {
+  ipcMain.handle('get-password', (event, origin) => {
+    requireTrustedAppSender(event);
+    if (typeof origin !== 'string') return null;
     return passwordsStore.getPassword(origin);
   });
 
-  ipcMain.handle('get-all-passwords', () => {
+  ipcMain.handle('get-all-passwords', (event) => {
+    requireTrustedAppSender(event);
     return passwordsStore.getAllPasswords();
   });
 
-  ipcMain.on('save-password', (e, origin, creds) => {
+  ipcMain.on('save-password', (event, origin, creds) => {
+    requireTrustedAppSender(event);
+    if (typeof origin !== 'string' || !creds || typeof creds !== 'object') return;
     passwordsStore.setPassword(origin, creds);
   });
 
-  ipcMain.on('delete-password', (e, origin) => {
+  ipcMain.on('delete-password', (event, origin) => {
+    requireTrustedAppSender(event);
+    if (typeof origin !== 'string') return;
     passwordsStore.deletePassword(origin);
   });
 
   ipcMain.on('delete-permission', (event, origin, permission) => {
+    requireTrustedAppSender(event);
+    if (typeof origin !== 'string' || typeof permission !== 'string') return;
     if (permissionsStore.data[origin] && permissionsStore.data[origin][permission] !== undefined) {
       delete permissionsStore.data[origin][permission];
       if (Object.keys(permissionsStore.data[origin]).length === 0) {
@@ -330,6 +426,7 @@ app.whenReady().then(() => {
   });
 
   ipcMain.on('save-as-pdf', async (event) => {
+    requireTrustedAppSender(event);
     const win = BrowserWindow.fromWebContents(event.sender);
     if (!win) return;
 
@@ -345,6 +442,8 @@ app.whenReady().then(() => {
   });
 
   ipcMain.on('execute-save-pdf', async (event, data) => {
+    requireTrustedAppSender(event);
+    if (!(data instanceof Uint8Array) && !Buffer.isBuffer(data)) return;
     const win = BrowserWindow.fromWebContents(event.sender);
     if (!win) return;
 
@@ -569,8 +668,35 @@ app.whenReady().then(() => {
 
   app.on('web-contents-created', (event, contents) => {
     contents.userAgent = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.0.0 Safari/537.36';
+
+    contents.on('will-attach-webview', (event, webPreferences, params) => {
+      delete webPreferences.preload;
+      webPreferences.nodeIntegration = false;
+      webPreferences.contextIsolation = true;
+      webPreferences.sandbox = true;
+
+      if (!isAllowedNavigationUrl(params.src)) {
+        event.preventDefault();
+        return;
+      }
+
+      if (params.partition?.startsWith('private-')) {
+        configurePrivateSession(session.fromPartition(params.partition));
+      }
+    });
+
     if (contents.getType() === 'webview') {
+      contents.setWindowOpenHandler(({ url }) => {
+        if (!isAllowedNavigationUrl(url)) return { action: 'deny' };
+        contents.hostWebContents?.send('open-link-new-tab', url);
+        return { action: 'deny' };
+      });
+
       contents.on('will-navigate', (event, url) => {
+        if (!isAllowedNavigationUrl(url)) {
+          event.preventDefault();
+          return;
+        }
         if (url.toLowerCase().endsWith('.pdf')) {
           event.preventDefault();
           const win = contents.hostWebContents ? BrowserWindow.fromWebContents(contents.hostWebContents) : null;
@@ -614,13 +740,15 @@ app.on('window-all-closed', function () {
 });
 
 // IPC handlers for window controls
-ipcMain.on('window-minimize', () => {
-  const win = BrowserWindow.getFocusedWindow();
+ipcMain.on('window-minimize', (event) => {
+  requireTrustedAppSender(event);
+  const win = BrowserWindow.fromWebContents(event.sender);
   if (win) win.minimize();
 });
 
-ipcMain.on('window-maximize', () => {
-  const win = BrowserWindow.getFocusedWindow();
+ipcMain.on('window-maximize', (event) => {
+  requireTrustedAppSender(event);
+  const win = BrowserWindow.fromWebContents(event.sender);
   if (win) {
     if (win.isMaximized()) {
       win.restore();
@@ -630,21 +758,28 @@ ipcMain.on('window-maximize', () => {
   }
 });
 
-ipcMain.on('window-close', () => {
-  const win = BrowserWindow.getFocusedWindow();
+ipcMain.on('window-close', (event) => {
+  requireTrustedAppSender(event);
+  const win = BrowserWindow.fromWebContents(event.sender);
   if (win) win.close();
 });
 
 
 ipcMain.on('open-file', (event, filePath) => {
+  requireTrustedAppSender(event);
+  if (typeof filePath !== 'string' || !path.isAbsolute(filePath)) return;
   shell.openPath(filePath);
 });
 
 ipcMain.on('show-in-folder', (event, filePath) => {
+  requireTrustedAppSender(event);
+  if (typeof filePath !== 'string' || !path.isAbsolute(filePath)) return;
   shell.showItemInFolder(filePath);
 });
 
 ipcMain.on('show-context-menu', (event, params) => {
+  requireTrustedAppSender(event);
+  if (!params || typeof params !== 'object') return;
   const win = BrowserWindow.fromWebContents(event.sender);
   const template = [
     {
@@ -763,6 +898,8 @@ ipcMain.on('show-context-menu', (event, params) => {
 
 
 ipcMain.handle('fetch-pdf', async (event, url) => {
+  requireTrustedAppSender(event);
+  if (typeof url !== 'string') throw new Error('Invalid PDF URL');
   try {
     return await fetchPdfBytes(url);
   } catch (error) {
@@ -772,6 +909,8 @@ ipcMain.handle('fetch-pdf', async (event, url) => {
 });
 
 ipcMain.handle('fetch-suggestions', async (event, query) => {
+  requireTrustedAppSender(event);
+  if (typeof query !== 'string' || query.length > 200) return [];
   try {
     const response = await fetch(`https://duckduckgo.com/ac/?q=${encodeURIComponent(query)}&type=list`);
     if (!response.ok) return [];
