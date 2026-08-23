@@ -1,4 +1,4 @@
-name: Build Probaho Browser
+name: Build and Release
 
 on:
   push:
@@ -15,20 +15,28 @@ jobs:
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
+
       - name: Set up Node.js
         uses: actions/setup-node@v4
         with:
           node-version: 20
-          cache: 'npm'
+          cache: npm
           cache-dependency-path: app/package-lock.json
-      - name: Install dependencies
+
+      - name: Install dependencies from lockfile
         working-directory: app
-        run: npm install
+        run: npm ci --audit=false --fund=false
+
       - name: Build React app
         working-directory: app
         run: npm run build
 
-  build:
+      - name: Check Electron-side JavaScript
+        working-directory: app
+        shell: bash
+        run: for file in electron/*.js; do node --check "$file"; done
+
+  package:
     needs: smoke-test
     strategy:
       fail-fast: false
@@ -38,10 +46,17 @@ jobs:
             build_cmd: npm run dist:win
             artifact_name: probaho-browser-windows
             artifact_path: app/release/*.exe
+          - os: macos-latest
+            build_cmd: npm run dist:mac -- --publish never
+            artifact_name: probaho-browser-macos
+            artifact_path: app/release/*.dmg
           - os: ubuntu-latest
             build_cmd: npm run dist:linux
             artifact_name: probaho-browser-linux
-            artifact_path: app/release/*.AppImage
+            artifact_path: |
+              app/release/*.AppImage
+              app/release/*.deb
+              app/release/*.tar.gz
 
     runs-on: ${{ matrix.os }}
 
@@ -53,32 +68,45 @@ jobs:
         uses: actions/setup-node@v4
         with:
           node-version: 20
-          cache: 'npm'
+          cache: npm
           cache-dependency-path: app/package-lock.json
 
-      - name: Install dependencies
+      - name: Install dependencies from lockfile
         working-directory: app
-        run: npm install
+        run: npm ci --audit=false --fund=false
 
       - name: Build React app
         working-directory: app
         run: npm run build
 
-      - name: Package application (${{ matrix.os }})
+      - name: Package application
         working-directory: app
         run: ${{ matrix.build_cmd }}
 
-      - name: Upload build as Artifact
+      - name: Upload platform artifacts
         uses: actions/upload-artifact@v4
         with:
           name: ${{ matrix.artifact_name }}
           path: ${{ matrix.artifact_path }}
+          if-no-files-found: error
+          retention-days: 14
 
-      - name: Create GitHub Release
-        if: startsWith(github.ref, 'refs/tags/')
+  release:
+    if: startsWith(github.ref, 'refs/tags/')
+    needs: package
+    runs-on: ubuntu-latest
+    steps:
+      - name: Download platform artifacts
+        uses: actions/download-artifact@v4
+        with:
+          pattern: probaho-browser-*
+          merge-multiple: true
+          path: release
+
+      - name: Publish one GitHub release
         uses: softprops/action-gh-release@v2
         with:
-          files: ${{ matrix.artifact_path }}
+          files: release/*
           name: Release ${{ github.ref_name }}
           draft: false
           prerelease: false
