@@ -1116,6 +1116,10 @@ function App() {
           finalUrl = `https://www.bing.com/search?q=${encodeURIComponent(url)}`;
         } else if (settings.defaultSearchEngine === 'DuckDuckGo') {
           finalUrl = `https://duckduckgo.com/?q=${encodeURIComponent(url)}`;
+        } else if (settings.defaultSearchEngine === 'Yahoo') {
+          finalUrl = `https://search.yahoo.com/search?p=${encodeURIComponent(url)}`;
+        } else if (settings.defaultSearchEngine === 'Ecosia') {
+          finalUrl = `https://www.ecosia.org/search?q=${encodeURIComponent(url)}`;
         } else {
           finalUrl = `https://www.google.com/search?q=${encodeURIComponent(url)}`;
         }
@@ -1345,6 +1349,13 @@ function App() {
 
       {/* Titlebar with tabs */}
       <div className="titlebar" style={settings.verticalTabs ? { paddingLeft: '80px', height: '40px' } : {}}>
+
+        {isPrivateWindow && (
+          <div style={{ display: 'flex', alignItems: 'center', padding: '0 8px', color: '#ff5252', fontWeight: 'bold', fontSize: '12px' }}>
+            <Shield size={14} style={{ marginRight: '4px' }} />
+            Private
+          </div>
+        )}
 
         {/* Workspaces Selector */}
         <div style={{ padding: '0 8px', display: 'flex', alignItems: 'center' }}>
@@ -1659,7 +1670,16 @@ function App() {
                        if (controller.signal.aborted) return;
 
                        suggestions.forEach((s: string) => {
-                         const suggestionUrl = settings.defaultSearchEngine === 'Bing' ? `https://www.bing.com/search?q=${encodeURIComponent(s)}` : settings.defaultSearchEngine === 'DuckDuckGo' ? `https://duckduckgo.com/?q=${encodeURIComponent(s)}` : `https://www.google.com/search?q=${encodeURIComponent(s)}`;
+                         let suggestionUrl = `https://www.google.com/search?q=${encodeURIComponent(s)}`;
+                         if (settings.defaultSearchEngine === 'Bing') {
+                           suggestionUrl = `https://www.bing.com/search?q=${encodeURIComponent(s)}`;
+                         } else if (settings.defaultSearchEngine === 'DuckDuckGo') {
+                           suggestionUrl = `https://duckduckgo.com/?q=${encodeURIComponent(s)}`;
+                         } else if (settings.defaultSearchEngine === 'Yahoo') {
+                           suggestionUrl = `https://search.yahoo.com/search?p=${encodeURIComponent(s)}`;
+                         } else if (settings.defaultSearchEngine === 'Ecosia') {
+                           suggestionUrl = `https://www.ecosia.org/search?q=${encodeURIComponent(s)}`;
+                         }
                          if (!seen.has(suggestionUrl)) {
                            matches.push({ title: s, url: suggestionUrl });
                            seen.add(suggestionUrl);
@@ -2159,6 +2179,8 @@ function App() {
                   <option value="Google">Google</option>
                   <option value="Bing">Bing</option>
                   <option value="DuckDuckGo">DuckDuckGo</option>
+                  <option value="Yahoo">Yahoo</option>
+                  <option value="Ecosia">Ecosia</option>
                 </select>
               </div>
               <div style={{marginBottom: '16px'}}>
