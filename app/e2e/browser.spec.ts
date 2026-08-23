@@ -21,6 +21,19 @@ test.describe('browser shell', () => {
     await expect(appPage.getByTestId('address-input')).toBeFocused();
   });
 
+  test('supports keyboard tab navigation and semantic tab controls', async ({ appPage }) => {
+    const firstTab = appPage.getByRole('tab').first();
+    await expect(firstTab).toHaveAttribute('aria-selected', 'true');
+    await firstTab.focus();
+    await expect(firstTab).toBeFocused();
+    await appPage.getByTestId('new-tab-button').click();
+    const newestTab = appPage.getByRole('tab').last();
+    await newestTab.focus();
+    await newestTab.press('Enter');
+    await expect(newestTab).toHaveAttribute('aria-selected', 'true');
+    await expect(newestTab.getByRole('button', { name: /Close/ })).toBeVisible();
+  });
+
   test('creates and closes tabs', async ({ appPage }) => {
     await appPage.getByTestId('new-tab-button').click();
     await expect.poll(() => tabCount(appPage)).toBe(2);

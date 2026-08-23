@@ -53,26 +53,43 @@ body {
 }
 
 .tab {
+  position: relative;
   display: flex;
   align-items: center;
-  background-color: var(--tab-bg);
-  color: #aaa;
-  border-radius: 8px;
-  border: none;
-  margin: 6px 2px 4px 2px;
-  padding: 0 10px;
-  min-width: 140px; /* Fixed min width to prevent shrinking infinitely */
-  max-width: 220px;
-  height: 30px;
+  gap: 2px;
+  background-color: color-mix(in srgb, var(--tab-bg) 92%, #000);
+  color: var(--text-muted, #aaa);
+  border-radius: 9px;
+  border: 1px solid transparent;
+  margin: 5px 2px 4px 2px;
+  padding: 0 8px;
+  min-width: 140px;
+  max-width: 240px;
+  height: 31px;
   cursor: pointer;
-  flex-shrink: 0; /* Important: prevents shrinking below min-width */
-  transition: background-color 0.2s ease, width 0.2s ease;
+  flex-shrink: 0;
+  transition: background-color 0.18s ease, border-color 0.18s ease, box-shadow 0.18s ease, transform 0.18s ease, opacity 0.18s ease;
+}
+
+.tab:hover {
+  background-color: color-mix(in srgb, var(--tab-bg) 78%, #fff);
+  border-color: rgba(255, 255, 255, 0.08);
 }
 
 .tab.active {
   background-color: var(--tab-active-bg);
   color: var(--text-color);
-  box-shadow: 0 2px 6px rgba(0,0,0,0.15);
+  border-color: color-mix(in srgb, var(--primary-color) 28%, var(--border-color));
+  box-shadow: 0 3px 10px rgba(0,0,0,0.2), inset 0 -2px 0 var(--primary-color);
+}
+
+.tab.private {
+  background: color-mix(in srgb, #5b214f 35%, var(--tab-bg));
+}
+
+.tab.private.active {
+  border-color: color-mix(in srgb, #e85aad 45%, var(--border-color));
+  box-shadow: 0 3px 10px rgba(0,0,0,0.2), inset 0 -2px 0 #e85aad;
 }
 
 .tab.pinned {
@@ -101,14 +118,22 @@ body {
   display: flex;
   align-items: center;
   justify-content: center;
-  width: 18px;
-  height: 18px;
-  border-radius: 50%;
-  margin-left: 5px;
+  width: 20px;
+  height: 20px;
+  border-radius: 6px;
+  margin-left: 4px;
+  color: var(--text-muted, #888);
+  transition: background-color 0.16s ease, color 0.16s ease;
 }
 
 .tab-close:hover {
-  background-color: rgba(255, 255, 255, 0.1);
+  background-color: rgba(255, 255, 255, 0.14);
+  color: var(--text-color);
+}
+
+.tab-close:focus-visible {
+  outline: 2px solid var(--primary-color);
+  outline-offset: 1px;
 }
 
 .tab.suspended {
@@ -117,13 +142,15 @@ body {
 
 .tab-suspended-badge {
   flex-shrink: 0;
-  margin-left: 6px;
-  padding: 1px 4px;
-  border-radius: 4px;
-  background: rgba(123, 44, 191, 0.2);
-  color: #aaa;
+  margin-left: 4px;
+  padding: 2px 5px;
+  border-radius: 5px;
+  background: color-mix(in srgb, var(--primary-color) 20%, transparent);
+  color: color-mix(in srgb, var(--text-color) 72%, var(--primary-color));
   font-size: 9px;
-  line-height: 14px;
+  font-weight: 600;
+  line-height: 12px;
+  letter-spacing: 0.02em;
 }
 
 .new-tab-btn {

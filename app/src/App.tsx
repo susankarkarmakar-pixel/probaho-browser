@@ -1621,8 +1621,18 @@ function App() {
             <div
               data-testid={`tab-${tab.id}`}
               className={`tab ${tab.id === activeTabId ? 'active' : ''} ${tab.isPrivate ? 'private' : ''} ${tab.isPinned ? 'pinned' : ''} ${tab.suspended ? 'suspended' : ''}`}
+              role="tab"
+              tabIndex={0}
+              aria-selected={tab.id === activeTabId}
+              aria-label={`${tab.title}${tab.suspended ? ', suspended' : ''}`}
               style={{ borderTop: group ? `3px solid ${group.color}` : undefined }}
               onClick={() => setActiveTabId(tab.id)}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter' || e.key === ' ') {
+                  e.preventDefault();
+                  setActiveTabId(tab.id);
+                }
+              }}
               onContextMenu={(e) => {
                 e.preventDefault();
                 setTabContextMenu({ tabId: tab.id, x: e.clientX, y: e.clientY });
@@ -1671,9 +1681,9 @@ function App() {
               {!tab.isPinned && <span className="tab-title" title={tab.title}>{tab.title}</span>}
               {tab.suspended && <span className="tab-suspended-badge">Suspended</span>}
               {!tab.isPinned && (
-                <div className="tab-close" onClick={(e) => closeTab(e, tab.id)}>
+                <button className="tab-close" type="button" aria-label={`Close ${tab.title}`} onClick={(e) => closeTab(e, tab.id)}>
                   <X size={12} />
-                </div>
+                </button>
               )}
               {tab.isPinned && <span className="tab-title" title={tab.title} style={{display: 'none'}}>{tab.title}</span>}
               {(tab.isAudible || tab.isMuted) && (
@@ -3026,6 +3036,10 @@ function App() {
                   )}
                 <div
                   className={`tab vertical-tab ${tab.id === activeTabId ? 'active' : ''} ${tab.isPrivate ? 'private' : ''} ${tab.isPinned ? 'pinned' : ''} ${tab.suspended ? 'suspended' : ''}`}
+                  role="tab"
+                  tabIndex={0}
+                  aria-selected={tab.id === activeTabId}
+                  aria-label={`${tab.title}${tab.suspended ? ', suspended' : ''}`}
                   style={{
                      display: 'flex',
                      alignItems: 'center',
@@ -3037,6 +3051,12 @@ function App() {
                      userSelect: 'none'
                   }}
                   onClick={() => setActiveTabId(tab.id)}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter' || e.key === ' ') {
+                      e.preventDefault();
+                      setActiveTabId(tab.id);
+                    }
+                  }}
                   onContextMenu={(e) => {
                     e.preventDefault();
                     setTabContextMenu({ tabId: tab.id, x: e.clientX, y: e.clientY });
@@ -3101,9 +3121,9 @@ function App() {
                     </div>
                   )}
 
-                  <div className="tab-close" onClick={(e) => closeTab(e, tab.id)} style={{ padding: '2px', marginLeft: '4px', borderRadius: '4px', cursor: 'pointer' }}>
+                  <button className="tab-close" type="button" aria-label={`Close ${tab.title}`} onClick={(e) => closeTab(e, tab.id)}>
                     <X size={12} />
-                  </div>
+                  </button>
                 </div>
                 </React.Fragment>
               )})}
