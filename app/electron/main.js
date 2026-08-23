@@ -7,6 +7,67 @@ const passwordsStore = require('./passwords-store');
 const fs = require('fs');
 
 let mainWindow;
+const MAX_PDF_BYTES = 50 * 1024 * 1024;
+const PDF_FETCH_TIMEOUT_MS = 30_000;
+
+async function fetchPdfBytes(rawUrl) {
+  let parsedUrl;
+  try {
+    parsedUrl = new URL(rawUrl);
+  } catch {
+    throw new Error('Invalid PDF URL');
+  }
+
+  if (parsedUrl.protocol !== 'https:') {
+    throw new Error('Only HTTPS PDFs are supported');
+  }
+
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), PDF_FETCH_TIMEOUT_MS);
+
+  try {
+    const response = await fetch(parsedUrl, { signal: controller.signal });
+    if (!response.ok) {
+      throw new Error(`HTTP error! status: ${response.status}`);
+    }
+
+    const contentLength = Number(response.headers.get('content-length'));
+    if (Number.isFinite(contentLength) && contentLength > MAX_PDF_BYTES) {
+      throw new Error('PDF exceeds the 50 MB limit');
+    }
+
+    if (!response.body) {
+      const buffer = Buffer.from(await response.arrayBuffer());
+      if (buffer.length > MAX_PDF_BYTES) {
+        throw new Error('PDF exceeds the 50 MB limit');
+      }
+      return buffer;
+    }
+
+    const reader = response.body.getReader();
+    const chunks = [];
+    let totalBytes = 0;
+
+    try {
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+        totalBytes += value.byteLength;
+        if (totalBytes > MAX_PDF_BYTES) {
+          await reader.cancel();
+          throw new Error('PDF exceeds the 50 MB limit');
+        }
+        chunks.push(Buffer.from(value));
+      }
+    } finally {
+      reader.releaseLock();
+    }
+
+    return Buffer.concat(chunks, totalBytes);
+  } finally {
+    clearTimeout(timeout);
+  }
+}
 
 function createWindow(isPrivate = false) {
   mainWindow = new BrowserWindow({
@@ -703,10 +764,7 @@ ipcMain.on('show-context-menu', (event, params) => {
 
 ipcMain.handle('fetch-pdf', async (event, url) => {
   try {
-    const response = await fetch(url);
-    if (!response.ok) throw new Error(`HTTP error! status: ${response.status}`);
-    const arrayBuffer = await response.arrayBuffer();
-    return Buffer.from(arrayBuffer); // Convert ArrayBuffer to Node.js Buffer for IPC
+    return await fetchPdfBytes(url);
   } catch (error) {
     console.error('Error fetching PDF:', error);
     throw error;

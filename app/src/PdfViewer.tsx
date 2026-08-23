@@ -19,6 +19,8 @@ const PdfViewer: React.FC<PdfViewerProps> = ({ url }) => {
 
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const renderTaskRef = useRef<any>(null);
+  const loadingTaskRef = useRef<any>(null);
+  const pdfDocRef = useRef<any>(null);
 
   useEffect(() => {
     let isMounted = true;
@@ -32,10 +34,17 @@ const PdfViewer: React.FC<PdfViewerProps> = ({ url }) => {
         // pdf.js needs a Uint8Array
         const data = new Uint8Array(buffer);
 
-        const loadingTask = pdfjsLib.getDocument({ data });
+        // Never execute JavaScript embedded in untrusted PDFs.
+        const loadingTask = pdfjsLib.getDocument({
+          data,
+          // PDF.js supports this runtime option, but the current type definition omits it.
+          enableScripting: false,
+        } as any);
+        loadingTaskRef.current = loadingTask;
         const doc = await loadingTask.promise;
 
         if (isMounted) {
+          pdfDocRef.current = doc;
           setPdfDoc(doc);
           setNumPages(doc.numPages);
           setPageNum(1);
@@ -53,6 +62,14 @@ const PdfViewer: React.FC<PdfViewerProps> = ({ url }) => {
 
     return () => {
       isMounted = false;
+      const loadingTask = loadingTaskRef.current;
+      loadingTaskRef.current = null;
+      if (loadingTask?.destroy) {
+        Promise.resolve(loadingTask.destroy()).catch(() => {});
+      }
+      const documentToDestroy = pdfDocRef.current;
+      pdfDocRef.current = null;
+      documentToDestroy?.destroy?.();
     };
   }, [url]);
 
@@ -80,9 +97,10 @@ const PdfViewer: React.FC<PdfViewerProps> = ({ url }) => {
           viewport: viewport,
         };
 
-        // Cancel previous render task if any
+        // Cancel the previous render before starting a new one.
         if (renderTaskRef.current) {
-          await renderTaskRef.current.promise.catch(() => {}); // Ignore cancel error
+          renderTaskRef.current.cancel();
+          await renderTaskRef.current.promise.catch(() => {});
         }
 
         const renderTask = page.render(renderContext);
@@ -102,6 +120,7 @@ const PdfViewer: React.FC<PdfViewerProps> = ({ url }) => {
       isMounted = false;
       if (renderTaskRef.current) {
         renderTaskRef.current.cancel();
+        renderTaskRef.current = null;
       }
     };
   }, [pdfDoc, pageNum, zoom]);
