@@ -196,7 +196,7 @@ function App() {
   const [tabs, setTabs] = useState<Tab[]>(() => {
     if (isPrivateWindow) {
       return [{
-        id: Date.now().toString(),
+        id: crypto.randomUUID(),
         url: settingsRef.current?.homepageUrl || 'probaho://newtab',
         title: t('newPrivateTab', settingsRef.current?.language || 'en'),
         loading: false,
@@ -226,7 +226,7 @@ function App() {
     } catch (e) {}
     let initialUrl = settingsRef.current?.homepageUrl || 'https://www.google.com';
     return [{
-      id: Date.now().toString(),
+      id: crypto.randomUUID(),
       url: initialUrl,
       title: t('newTab', settingsRef.current?.language || 'en'),
       loading: false,
@@ -582,7 +582,7 @@ function App() {
 
     const publicTabs = tabs.filter(t => !t.isPrivate);
     localStorage.setItem('savedTabs', JSON.stringify(publicTabs.length > 0 ? publicTabs : [{
-      id: Date.now().toString(),
+      id: crypto.randomUUID(),
       url: settingsRef.current?.homepageUrl || 'probaho://newtab',
       title: t('newTab', settingsRef.current?.language || 'en'),
       loading: false,
@@ -636,7 +636,7 @@ function App() {
   useEffect(() => {
     const handleNewTab = () => {
       const newTab = {
-        id: Date.now().toString(),
+        id: crypto.randomUUID(),
         url: settingsRef.current?.homepageUrl || 'probaho://newtab',
         title: t('newTab', settingsRef.current?.language || 'en'),
         loading: false,
@@ -693,7 +693,7 @@ function App() {
     if (window.electronAPI?.onOpenLinkNewTab) {
       window.electronAPI.onOpenLinkNewTab((url) => {
         const newTab = {
-          id: Date.now().toString(),
+          id: crypto.randomUUID(),
           url: url,
           title: t('newTab', settingsRef.current?.language || 'en'),
           loading: false,
@@ -763,7 +763,7 @@ function App() {
 
   const createTab = (isPrivate = isPrivateWindow) => {
     const newTab: Tab = {
-      id: Date.now().toString(),
+      id: crypto.randomUUID(),
       url: settingsRef.current?.homepageUrl || 'https://www.google.com',
       title: isPrivate ? t('newPrivateTab', settings.language) : t('newTab', settings.language),
       loading: false,
@@ -803,7 +803,7 @@ function App() {
        if (prev.length > 0) {
          const toRestore = prev[0];
          const newTab: Tab = {
-            id: Date.now().toString(),
+            id: crypto.randomUUID(),
             url: toRestore.url,
             title: toRestore.title,
             loading: false,
@@ -1058,7 +1058,7 @@ function App() {
     // Event: new window requested (NEW - Bug 7 fix)
     el.addEventListener('new-window', (e: any) => {
       const newTab: Tab = { // @ts-ignore
-        id: Date.now().toString(),
+        id: crypto.randomUUID(),
         url: e.url,
         title: 'New Tab',
         loading: false,
@@ -1254,7 +1254,7 @@ function App() {
           <div className="menu-item" onClick={() => {
             const tab = tabs.find(t => t.id === tabContextMenu.tabId);
             if (tab) {
-              const newTab = { ...tab, id: Date.now().toString() };
+              const newTab = { ...tab, id: crypto.randomUUID() };
               setTabs(prev => [...prev, newTab]);
               setActiveTabId(newTab.id);
             }
@@ -1285,7 +1285,7 @@ function App() {
           <div className="menu-item" onClick={() => {
             const name = prompt('Group Name:');
             if (name) {
-               const id = Date.now().toString();
+               const id = crypto.randomUUID();
                const colors = ['#ff5252', '#4caf50', '#2196f3', '#ffeb3b', '#9c27b0', '#ff9800', '#00bcd4'];
                const color = colors[Math.floor(Math.random() * colors.length)];
                setTabGroups(prev => [...prev, { id, name, color }]);
@@ -1355,12 +1355,12 @@ function App() {
                if (newWorkspaceId === 'new_workspace') {
                  const name = prompt('Workspace Name:');
                  if (name) {
-                    const id = Date.now().toString();
+                    const id = crypto.randomUUID();
                     setWorkspaces(prev => [...prev, {id, name}]);
                     setActiveWorkspaceId(id);
                     // create first tab in new workspace
                     const newTab: Tab = {
-                      id: Date.now().toString(),
+                      id: crypto.randomUUID(),
                       url: settingsRef.current?.homepageUrl || 'https://www.google.com',
                       title: t('newTab', settings.language),
                       loading: false, canGoBack: false, canGoForward: false, isSecure: true, zoomLevel: 1, blockedCount: 0,
@@ -1377,7 +1377,7 @@ function App() {
                     setActiveTabId(wsTabs[wsTabs.length - 1].id);
                  } else {
                     const newTab: Tab = {
-                      id: Date.now().toString(),
+                      id: crypto.randomUUID(),
                       url: settingsRef.current?.homepageUrl || 'https://www.google.com',
                       title: t('newTab', settings.language),
                       loading: false, canGoBack: false, canGoForward: false, isSecure: true, zoomLevel: 1, blockedCount: 0,
@@ -1547,7 +1547,7 @@ function App() {
               setFocusedPane('main');
             } else {
               const newTab: Tab = {
-                id: Date.now().toString(),
+                id: crypto.randomUUID(),
                 url: settingsRef.current?.homepageUrl || 'https://www.google.com',
                 title: t('newTab', settings.language),
                 loading: false, canGoBack: false, canGoForward: false, isSecure: true, zoomLevel: 1, blockedCount: 0,

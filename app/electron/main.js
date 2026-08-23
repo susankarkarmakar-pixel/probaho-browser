@@ -5,8 +5,9 @@ const blocklist = require('./blocklist');
 const permissionsStore = require('./permissions-store');
 const passwordsStore = require('./passwords-store');
 const fs = require('fs');
+const { randomUUID } = require('crypto');
 
-let mainWindow;
+const browserWindows = new Set();
 const MAX_PDF_BYTES = 50 * 1024 * 1024;
 const PDF_FETCH_TIMEOUT_MS = 30_000;
 
@@ -91,7 +92,7 @@ async function fetchPdfBytes(rawUrl) {
 }
 
 function createWindow(isPrivate = false) {
-  mainWindow = new BrowserWindow({
+  const window = new BrowserWindow({
     width: 1200,
     height: 800,
     frame: false,
@@ -111,65 +112,65 @@ function createWindow(isPrivate = false) {
     // We'd normally use the Vite dev server URL here, but let's assume local build for simplicity, or we can use dist.
     // To make it simple for the user's build scripts, we'll always load from dist when packaged.
     // If we're not packaged, we can load from a dev server or dist. The instructions say `npm run build` then `npm run electron`.
-    mainWindow.loadFile(path.join(__dirname, '../dist/index.html'), loadOptions);
+    window.loadFile(path.join(__dirname, '../dist/index.html'), loadOptions);
   } else {
-    mainWindow.loadFile(path.join(__dirname, '../dist/index.html'), loadOptions);
+    window.loadFile(path.join(__dirname, '../dist/index.html'), loadOptions);
   }
 
   // Handle local shortcuts
-  mainWindow.webContents.on('before-input-event', (event, input) => {
+  window.webContents.on('before-input-event', (event, input) => {
     if (input.key === 'F12') {
-      mainWindow.webContents.toggleDevTools();
+      window.webContents.toggleDevTools();
       event.preventDefault();
     }
     // Handle Ctrl/Cmd+T and Ctrl/Cmd+W
     if ((input.control || input.meta) && input.shift && input.key.toLowerCase() === 'n') {
-      mainWindow.webContents.send('shortcut-new-private-tab');
+      window.webContents.send('shortcut-new-private-tab');
       event.preventDefault();
     } else if ((input.control || input.meta) && !input.shift && input.key.toLowerCase() === 'n') {
-      mainWindow.webContents.send('shortcut-new-window');
+      window.webContents.send('shortcut-new-window');
       event.preventDefault();
     } else if ((input.control || input.meta) && input.key.toLowerCase() === 't') {
-      mainWindow.webContents.send('shortcut-new-tab');
+      window.webContents.send('shortcut-new-tab');
       event.preventDefault();
     }
     if ((input.control || input.meta) && input.key.toLowerCase() === 'w') {
-      mainWindow.webContents.send('shortcut-close-tab');
+      window.webContents.send('shortcut-close-tab');
       event.preventDefault();
     }
 
     if ((input.control || input.meta) && input.key.toLowerCase() === 'f') {
-      mainWindow.webContents.send('shortcut-find');
+      window.webContents.send('shortcut-find');
       event.preventDefault();
     }
 
     // Tab cycling and jumping
     if ((input.control || input.meta) && input.key === 'Tab') {
       if (input.shift) {
-        mainWindow.webContents.send('shortcut-cycle-tab-prev');
+        window.webContents.send('shortcut-cycle-tab-prev');
       } else {
-        mainWindow.webContents.send('shortcut-cycle-tab-next');
+        window.webContents.send('shortcut-cycle-tab-next');
       }
       event.preventDefault();
     }
 
     if ((input.control || input.meta) && /^[1-9]$/.test(input.key)) {
-      mainWindow.webContents.send('shortcut-jump-tab', parseInt(input.key, 10));
+      window.webContents.send('shortcut-jump-tab', parseInt(input.key, 10));
       event.preventDefault();
     }
 
     if ((input.control || input.meta) && input.key.toLowerCase() === 'l') {
-      mainWindow.webContents.send('shortcut-focus-address');
+      window.webContents.send('shortcut-focus-address');
       event.preventDefault();
     }
 
     // New shortcuts
     if (input.key === 'F5' || ((input.control || input.meta) && input.key.toLowerCase() === 'r')) {
-      mainWindow.webContents.send('shortcut-reload');
+      window.webContents.send('shortcut-reload');
       event.preventDefault();
     }
     if (input.key === 'F12' || ((input.control || input.meta) && input.shift && input.key.toLowerCase() === 'i')) {
-      mainWindow.webContents.send('shortcut-devtools');
+      window.webContents.send('shortcut-devtools');
       event.preventDefault();
     }
     if (input.key === 'F11') {
@@ -180,61 +181,65 @@ function createWindow(isPrivate = false) {
       event.preventDefault();
     }
     if ((input.control || input.meta) && input.key.toLowerCase() === 'h') {
-      mainWindow.webContents.send('shortcut-open-history');
+      window.webContents.send('shortcut-open-history');
       event.preventDefault();
     }
     if ((input.control || input.meta) && input.key.toLowerCase() === 'j') {
-      mainWindow.webContents.send('shortcut-open-downloads');
+      window.webContents.send('shortcut-open-downloads');
       event.preventDefault();
     }
     if ((input.control || input.meta) && input.key.toLowerCase() === 'b') {
-      mainWindow.webContents.send('shortcut-open-bookmarks');
+      window.webContents.send('shortcut-open-bookmarks');
       event.preventDefault();
     }
     if ((input.control || input.meta) && (input.key === '=' || input.key === '+')) {
-      mainWindow.webContents.send('shortcut-zoom-in');
+      window.webContents.send('shortcut-zoom-in');
       event.preventDefault();
     }
     if ((input.control || input.meta) && input.key === '-') {
-      mainWindow.webContents.send('shortcut-zoom-out');
+      window.webContents.send('shortcut-zoom-out');
       event.preventDefault();
     }
     if ((input.control || input.meta) && input.key === '0') {
-      mainWindow.webContents.send('shortcut-zoom-reset');
+      window.webContents.send('shortcut-zoom-reset');
       event.preventDefault();
     }
     if ((input.control || input.meta) && input.key.toLowerCase() === 'k') {
-      mainWindow.webContents.send('shortcut-command-palette');
+      window.webContents.send('shortcut-command-palette');
       event.preventDefault();
     }
     if ((input.control || input.meta) && input.shift && input.key.toLowerCase() === 't') {
-      mainWindow.webContents.send('shortcut-restore-tab');
+      window.webContents.send('shortcut-restore-tab');
       event.preventDefault();
     }
     if ((input.control || input.meta) && input.shift && input.key.toLowerCase() === 'b') {
-      mainWindow.webContents.send('shortcut-toggle-bookmarks-bar');
+      window.webContents.send('shortcut-toggle-bookmarks-bar');
       event.preventDefault();
     }
     if ((input.control || input.meta) && input.shift && input.key === 'Delete') {
-      mainWindow.webContents.send('shortcut-open-settings');
+      window.webContents.send('shortcut-open-settings');
       event.preventDefault();
     }
     if ((input.control || input.meta) && input.key.toLowerCase() === 'u') {
-      mainWindow.webContents.send('shortcut-view-source');
+      window.webContents.send('shortcut-view-source');
       event.preventDefault();
     }
     if (input.type === 'keyDown' && (input.key === 'BrowserBack' || input.key === 'BrowserForward' || (input.alt && (input.key === 'ArrowLeft' || input.key === 'ArrowRight')))) {
        // app-command takes care of this on Windows, but this is a fallback for some environments
        const isBack = input.key === 'BrowserBack' || (input.alt && input.key === 'ArrowLeft');
        const cmd = isBack ? 'browser-backward' : 'browser-forward';
-       mainWindow.webContents.send('app-command', cmd);
+       window.webContents.send('app-command', cmd);
        event.preventDefault();
     }
   });
 
-  mainWindow.on('app-command', (e, cmd) => {
-    mainWindow.webContents.send('app-command', cmd);
+  window.on('app-command', (e, cmd) => {
+    window.webContents.send('app-command', cmd);
   });
+
+  browserWindows.add(window);
+  window.on('closed', () => browserWindows.delete(window));
+  return window;
 }
 
 
@@ -553,7 +558,7 @@ app.whenReady().then(() => {
     }
 
     // Generate a unique ID for the download
-    const downloadId = Date.now().toString();
+    const downloadId = randomUUID();
     const fileName = item.getFilename();
     const savePath = path.join(app.getPath('downloads'), fileName);
 
