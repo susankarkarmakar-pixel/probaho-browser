@@ -87,6 +87,10 @@ jobs:
             build_cmd: npm run dist:mac -- --publish never
             artifact_name: probaho-browser-macos
             artifact_path: app/release/*.dmg
+          - os: macos-latest
+            build_cmd: npm run dist:mac -- --x64 --publish never
+            artifact_name: probaho-browser-macos-x64
+            artifact_path: app/release/*x64.dmg
           - os: ubuntu-latest
             build_cmd: npm run dist:linux
             artifact_name: probaho-browser-linux
