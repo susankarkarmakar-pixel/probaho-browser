@@ -93,6 +93,24 @@ test.describe('browser shell', () => {
     await expect(panel.getByText('No history yet', { exact: true })).toBeVisible();
   });
 
+  test('renders the premium bookmark bar and tab context menu', async ({ appPage }) => {
+    await appPage.evaluate(() => {
+      const settings = JSON.parse(localStorage.getItem('probaho-settings') || '{}');
+      localStorage.setItem('probaho-settings', JSON.stringify({ ...settings, showBookmarksBar: true }));
+      localStorage.setItem('bookmarks', JSON.stringify([{ title: 'GitHub', url: 'https://github.com' }]));
+    });
+    await appPage.reload();
+    await appPage.getByTestId('browser-shell').waitFor();
+    await expect(appPage.getByTestId('bookmarks-bar')).toBeVisible();
+    await expect(appPage.getByTestId('bookmark-bar-item')).toHaveAccessibleName('Open bookmark GitHub');
+
+    await appPage.getByRole('tab').first().click({ button: 'right' });
+    const contextMenu = appPage.locator('.tab-context-menu');
+    await expect(contextMenu).toBeVisible();
+    await expect(contextMenu.getByText('Tab actions', { exact: true })).toBeVisible();
+    await expect(contextMenu.getByRole('menuitem').first()).toBeVisible();
+  });
+
   test('shows tracker protection controls for the current site', async ({ appPage }) => {
     const addressInput = appPage.getByTestId('address-input');
     await addressInput.fill('https://example.com');

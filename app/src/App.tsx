@@ -3,7 +3,7 @@ import { t, Language } from './i18n';
 import PdfViewer from './PdfViewer';
 import {
   ArrowLeft, ArrowRight, RotateCw, Home, Plus,
-  Lock, X, Square, Search, Star, Bookmark, Menu, History, ZoomIn, FileCode, Printer, LogOut, Info, Download, Folder, Settings, ChevronUp, ChevronDown, EyeOff, Eye, Shield, BookOpen, Volume2, VolumeX, Globe, BookPlus, PictureInPicture, Share2, MessageSquare, Music, MessageCircle, Library, Columns, PanelRight
+  Lock, X, Square, Search, Star, Bookmark, Menu, History, ZoomIn, FileCode, Printer, LogOut, Info, Download, Folder, Settings, ChevronUp, ChevronDown, EyeOff, Eye, Shield, BookOpen, Volume2, VolumeX, Globe, BookPlus, PictureInPicture, Share2, MessageSquare, Music, MessageCircle, Library, Columns, PanelRight, Copy, Pin, FolderPlus, FolderMinus, Trash2, Moon
 } from 'lucide-react';
 
 interface DownloadItem {
@@ -1425,8 +1425,12 @@ function App() {
   return (
     <div className="browser-container" data-testid="browser-shell">
       {tabContextMenu && (
-        <div className="menu-panel" style={{ position: 'fixed', left: tabContextMenu.x, top: tabContextMenu.y, zIndex: 9999 }}>
-          <div className="menu-item" onClick={() => {
+        <div className="menu-panel tab-context-menu" role="menu" aria-label="Tab actions" style={{ position: 'fixed', left: tabContextMenu.x, top: tabContextMenu.y, zIndex: 9999 }}>
+          <div className="context-menu-header">
+            <span className="context-menu-kicker">Tab actions</span>
+            <span className="context-menu-title">{tabs.find(t => t.id === tabContextMenu.tabId)?.title || 'Current tab'}</span>
+          </div>
+          <div className="menu-item" role="menuitem" tabIndex={0} onClick={() => {
             const tab = tabs.find(t => t.id === tabContextMenu.tabId);
             if (tab) {
               const newTab = { ...tab, id: crypto.randomUUID() };
@@ -1434,13 +1438,13 @@ function App() {
               setActiveTabId(newTab.id);
             }
           }}>
-            <div className="menu-item-text">Duplicate</div>
+            <div className="menu-item-icon"><Copy size={15} /></div><div className="menu-item-text">Duplicate</div><div className="menu-item-shortcut">Ctrl+L</div>
           </div>
           <div className="menu-item" onClick={() => {
             const tab = tabs.find(t => t.id === tabContextMenu.tabId);
             if (tab) updateTab(tab.id, { isPinned: !tab.isPinned });
           }}>
-            <div className="menu-item-text">{tabs.find(t => t.id === tabContextMenu.tabId)?.isPinned ? 'Unpin Tab' : 'Pin Tab'}</div>
+            <div className="menu-item-icon"><Pin size={15} /></div><div className="menu-item-text">{tabs.find(t => t.id === tabContextMenu.tabId)?.isPinned ? 'Unpin Tab' : 'Pin Tab'}</div>
           </div>
           <div className="menu-item" onClick={() => {
             const tab = tabs.find(t => t.id === tabContextMenu.tabId);
@@ -1453,7 +1457,7 @@ function App() {
               }
             }
           }}>
-            <div className="menu-item-text">{tabs.find(t => t.id === tabContextMenu.tabId)?.isMuted ? 'Unmute Site' : 'Mute Site'}</div>
+            <div className="menu-item-icon">{tabs.find(t => t.id === tabContextMenu.tabId)?.isMuted ? <Volume2 size={15} /> : <VolumeX size={15} />}</div><div className="menu-item-text">{tabs.find(t => t.id === tabContextMenu.tabId)?.isMuted ? 'Unmute Site' : 'Mute Site'}</div>
           </div>
           <div className="menu-item" onClick={() => {
             const tab = tabs.find(t => t.id === tabContextMenu.tabId);
@@ -1462,7 +1466,7 @@ function App() {
             }
             setTabContextMenu(null);
           }}>
-            <div className="menu-item-text">{tabs.find(t => t.id === tabContextMenu.tabId)?.suspended ? 'Resume Tab' : 'Suspend Tab'}</div>
+            <div className="menu-item-icon">{tabs.find(t => t.id === tabContextMenu.tabId)?.suspended ? <RotateCw size={15} /> : <Moon size={15} />}</div><div className="menu-item-text">{tabs.find(t => t.id === tabContextMenu.tabId)?.suspended ? 'Resume Tab' : 'Suspend Tab'}</div>
           </div>
           <div className="menu-divider" />
           <div className="menu-divider" />
@@ -1476,20 +1480,21 @@ function App() {
                updateTab(tabContextMenu.tabId, { groupId: id });
             }
           }}>
-            <div className="menu-item-text">Add to New Group</div>
+            <div className="menu-item-icon"><FolderPlus size={15} /></div><div className="menu-item-text">Add to New Group</div>
           </div>
           {tabs.find(t => t.id === tabContextMenu.tabId)?.groupId && (
             <div className="menu-item" onClick={() => {
               updateTab(tabContextMenu.tabId, { groupId: undefined });
             }}>
-              <div className="menu-item-text">Remove from Group</div>
+              <div className="menu-item-icon"><FolderMinus size={15} /></div><div className="menu-item-text">Remove from Group</div>
             </div>
           )}
           <div className="menu-divider" />
           <div className="menu-item" onClick={() => {
              closeTabId(tabContextMenu.tabId);
           }}>
-            <div className="menu-item-text">Close Tab</div>
+                         <div className="menu-item-icon"><Trash2 size={15} /></div><div className="menu-item-text">Close Tab</div>
+
           </div>
         </div>
       )}
@@ -2990,37 +2995,24 @@ function App() {
 
       {/* Bookmarks Bar */}
       {settings.showBookmarksBar && !settings.verticalTabs && bookmarks.length > 0 && (
-        <div className="bookmarks-bar" style={{
-          display: 'flex',
-          alignItems: 'center',
-          padding: '4px 16px',
-          background: 'var(--bg-color)',
-          borderBottom: '1px solid var(--border-color)',
-          gap: '12px',
-          overflowX: 'auto',
-          whiteSpace: 'nowrap'
-        }}>
-          {bookmarks.map((b, i) => (
-            <div
-              key={i}
-              title={b.title + '\n' + b.url}
-              onClick={() => navigate(b.url)}
-              style={{
-                display: 'flex',
-                alignItems: 'center',
-                fontSize: '12px',
-                cursor: 'pointer',
-                padding: '4px 8px',
-                borderRadius: '4px',
-                color: 'var(--text-color)'
-              }}
-              onMouseEnter={(e) => e.currentTarget.style.backgroundColor = 'var(--tab-bg)'}
-              onMouseLeave={(e) => e.currentTarget.style.backgroundColor = 'transparent'}
-            >
-              <Globe size={12} style={{marginRight: '6px', opacity: 0.7}} />
-              <span style={{maxWidth: '120px', overflow: 'hidden', textOverflow: 'ellipsis'}}>{b.title}</span>
-            </div>
-          ))}
+        <div className="bookmarks-bar" data-testid="bookmarks-bar" aria-label="Bookmarks bar">
+          <span className="bookmarks-bar-label"><Bookmark size={13} /> Bookmarks</span>
+          <div className="bookmarks-bar-items">
+            {bookmarks.map((b, i) => (
+              <button
+                key={i}
+                type="button"
+                className="bookmarks-bar-item"
+                data-testid="bookmark-bar-item"
+                title={b.title + '\n' + b.url}
+                aria-label={`Open bookmark ${b.title}`}
+                onClick={() => navigate(b.url)}
+              >
+                <Globe size={13} aria-hidden="true" />
+                <span>{b.title}</span>
+              </button>
+            ))}
+          </div>
         </div>
       )}
 
