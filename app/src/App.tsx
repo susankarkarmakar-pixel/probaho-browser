@@ -15,6 +15,13 @@ interface DownloadItem {
   savePath: string;
 }
 
+type UpdateState = {
+  state: 'idle' | 'checking' | 'available' | 'not-available' | 'downloading' | 'downloaded' | 'error';
+  version?: string | null;
+  percent?: number;
+  error?: string | null;
+};
+
 interface PermissionDecision {
   allowed: boolean;
   updatedAt: number;
@@ -169,6 +176,11 @@ declare global {
       getAllPasswords?: () => Promise<any>;
       savePassword?: (origin: string, creds: any) => void;
       deletePassword?: (origin: string) => void;
+      getUpdateStatus?: () => Promise<UpdateState>;
+      checkForUpdates?: () => Promise<UpdateState>;
+      downloadUpdate?: () => Promise<UpdateState>;
+      installUpdate?: () => Promise<UpdateState>;
+      onUpdateStatus?: (callback: (status: UpdateState) => void) => void;
     };
   }
 }
@@ -393,6 +405,15 @@ function App() {
   const [commandQuery, setCommandQuery] = useState('');
   const [commandSelectionIndex, setCommandSelectionIndex] = useState(0);
   const [recentlyClosed, setRecentlyClosed] = useState<{title: string, url: string}[]>([]);
+  const [updateStatus, setUpdateStatus] = useState<UpdateState>({ state: 'idle', percent: 0, error: null });
+  const [updateActionBusy, setUpdateActionBusy] = useState(false);
+
+  useEffect(() => {
+    if (window.electronAPI?.getUpdateStatus) {
+      window.electronAPI.getUpdateStatus().then(setUpdateStatus).catch(() => {});
+    }
+    window.electronAPI?.onUpdateStatus?.(setUpdateStatus);
+  }, []);
 
   useEffect(() => {
     if (isPrivateWindow) return;
@@ -941,7 +962,8 @@ function App() {
         let changed = false;
         const next = prev.map(tab => {
           const isVisible = tab.id === activeTabId || tab.id === splitTabId;
-          if (isVisible || tab.url === 'probaho://newtab' || tab.isPdf || tab.suspended || !tab.hasLoaded) return tab;
+          const keepAwake = isVisible || tab.url === 'probaho://newtab' || tab.isPdf || tab.isPinned || tab.isAudible || tab.loading || Boolean(tab.loadError) || Boolean(tab.crashed) || tab.suspended || !tab.hasLoaded;
+          if (keepAwake) return tab;
           if (!tab.lastActiveAt || tab.lastActiveAt > cutoff) return tab;
           changed = true;
           return { ...tab, suspended: true, loading: false };
@@ -1433,6 +1455,19 @@ function App() {
     const wv = webviewRefs.current[tab.id];
     if (wv && homeUrl !== 'probaho://newtab') {
       try { wv.loadURL(homeUrl); } catch {}
+    }
+  };
+
+  const runUpdateAction = async (action?: () => Promise<UpdateState>) => {
+    if (!action || updateActionBusy) return;
+    setUpdateActionBusy(true);
+    try {
+      const nextStatus = await action();
+      if (nextStatus) setUpdateStatus(nextStatus);
+    } catch (error: any) {
+      setUpdateStatus({ state: 'error', error: error?.message || 'Update action failed' });
+    } finally {
+      setUpdateActionBusy(false);
     }
   };
 
@@ -2716,6 +2751,24 @@ function App() {
                   <button className="clear-history-btn" onClick={() => setSettings({...settings, accentColor: '#7b2cbf'})} style={{padding: '4px 8px', fontSize: '12px'}}>Reset</button>
                 </div>
               </div>
+              <div className="settings-update-section" data-testid="updates-section">
+                <div className="settings-section-heading-row">
+                  <div>
+                    <span className="settings-field-kicker">Trust & maintenance</span>
+                    <h4>Software updates</h4>
+                  </div>
+                  <span className={`settings-update-status status-${updateStatus.state}`} data-testid="update-status">{updateStatus.state === 'not-available' ? 'Up to date' : updateStatus.state === 'available' ? 'Update ready' : updateStatus.state === 'downloaded' ? 'Ready to restart' : updateStatus.state === 'downloading' ? `${Math.round(updateStatus.percent || 0)}%` : updateStatus.state === 'checking' ? 'Checking…' : updateStatus.state === 'error' ? 'Check failed' : 'Automatic checks on'}</span>
+                </div>
+                <p className="settings-update-copy">Updates are checked over HTTPS and verified by the signed release package before installation.</p>
+                {updateStatus.error && <div className="settings-update-error" role="alert">{updateStatus.error}</div>}
+                {updateStatus.state === 'downloading' && <div className="settings-update-progress" aria-label={`${Math.round(updateStatus.percent || 0)}% downloaded`}><span style={{width: `${Math.max(0, Math.min(100, updateStatus.percent || 0))}%`}} /></div>}
+                <div className="settings-update-actions">
+                  <button type="button" className="settings-secondary-btn" data-testid="check-updates-button" disabled={updateActionBusy || updateStatus.state === 'checking'} onClick={() => runUpdateAction(window.electronAPI?.checkForUpdates)}>Check now</button>
+                  {updateStatus.state === 'available' && <button type="button" className="settings-primary-btn" data-testid="download-update-button" disabled={updateActionBusy} onClick={() => runUpdateAction(window.electronAPI?.downloadUpdate)}>Download update</button>}
+                  {updateStatus.state === 'downloaded' && <button type="button" className="settings-primary-btn" data-testid="install-update-button" disabled={updateActionBusy} onClick={() => runUpdateAction(window.electronAPI?.installUpdate)}>Restart to install</button>}
+                </div>
+              </div>
+
               <div style={{marginBottom: '16px'}}>
                 <button
                   className="clear-history-btn"

@@ -109,6 +109,10 @@ test.describe('browser shell', () => {
     await expect(appPage.getByTestId('performance-settings')).toBeVisible();
     await expect(appPage.getByTestId('lazy-tabs-toggle')).toBeChecked();
     await expect(appPage.getByTestId('suspend-tabs-toggle')).toBeChecked();
+    await expect(appPage.getByTestId('updates-section')).toBeVisible();
+    await expect(appPage.getByTestId('update-status')).toContainText(/Automatic checks on|Up to date/);
+    await appPage.getByTestId('check-updates-button').click();
+    await expect(appPage.getByTestId('update-status')).toHaveText('Up to date');
   });
 
   test('opens the premium Download Manager with search and filters', async ({ appPage }) => {

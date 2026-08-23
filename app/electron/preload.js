@@ -66,5 +66,10 @@ contextBridge.exposeInMainWorld('electronAPI', {
   saveAsPdf: () => ipcRenderer.send('save-as-pdf'),
   onTriggerSaveAsPdf: (callback) => ipcRenderer.on('trigger-save-as-pdf', () => callback()),
   executeSavePdf: (data) => ipcRenderer.send('execute-save-pdf', data),
-  fetchSuggestions: (query) => ipcRenderer.invoke('fetch-suggestions', query)
+  fetchSuggestions: (query) => ipcRenderer.invoke('fetch-suggestions', query),
+  getUpdateStatus: () => ipcRenderer.invoke('get-update-status'),
+  checkForUpdates: () => ipcRenderer.invoke('check-for-updates'),
+  downloadUpdate: () => ipcRenderer.invoke('download-update'),
+  installUpdate: () => ipcRenderer.invoke('install-update'),
+  onUpdateStatus: (callback) => ipcRenderer.on('update-status', (event, status) => callback(status))
 });

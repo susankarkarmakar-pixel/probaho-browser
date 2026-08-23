@@ -8,22 +8,36 @@ const fs = require('fs');
 const { randomUUID } = require('crypto');
 const { ExtensionManager } = require('./extension-manager');
 const { PluginManager, validatePlugin } = require('./plugin-manager');
+const { isAllowedNavigationUrl } = require('./navigation-policy');
 
 const browserWindows = new Set();
 const extensionManager = new ExtensionManager();
 const pluginManager = new PluginManager(path.join(app.getPath('userData'), 'plugins.json'));
 const MAX_PDF_BYTES = 50 * 1024 * 1024;
 const PDF_FETCH_TIMEOUT_MS = 30_000;
+const DEFAULT_DOH_SERVERS = 'https://cloudflare-dns.com/dns-query,https://dns.google/dns-query';
+let updaterState = { state: 'idle', version: null, percent: 0, error: null };
 
-function isAllowedNavigationUrl(rawUrl) {
-  if (rawUrl === 'about:blank') return true;
-  try {
-    const parsedUrl = new URL(rawUrl);
-    return ['http:', 'https:', 'view-source:'].includes(parsedUrl.protocol);
-  } catch {
-    return false;
+function configureDnsPrivacy() {
+  const mode = process.env.PROBAHO_DOH_MODE === 'off' ? 'off' : 'secure';
+  if (mode === 'off') return;
+  const servers = String(process.env.PROBAHO_DOH_SERVERS || DEFAULT_DOH_SERVERS)
+    .split(',')
+    .map(server => server.trim())
+    .filter(Boolean);
+  if (servers.length === 0 || servers.some(server => !/^https:\/\/[^\s]+$/i.test(server))) return;
+  app.commandLine.appendSwitch('dns-over-https-mode', 'secure');
+  app.commandLine.appendSwitch('dns-over-https-servers', servers.join(','));
+}
+
+function broadcastUpdaterStatus(nextState) {
+  updaterState = { ...updaterState, ...nextState };
+  for (const window of browserWindows) {
+    if (!window.isDestroyed()) window.webContents.send('update-status', updaterState);
   }
 }
+
+configureDnsPrivacy();
 
 function isTrustedAppSender(event) {
   const senderUrl = event.senderFrame?.url || event.sender.getURL();
@@ -264,22 +278,73 @@ app.whenReady().then(async () => {
   await extensionManager.restore(session.defaultSession);
   createWindow();
 
-  if (app.isPackaged) {
-    autoUpdater.checkForUpdatesAndNotify();
+  autoUpdater.autoDownload = false;
+  autoUpdater.autoInstallOnAppQuit = false;
+  autoUpdater.allowDowngrade = false;
 
-    autoUpdater.on('update-downloaded', () => {
-      dialog.showMessageBox({
-        type: 'info',
-        title: 'Update Ready',
-        message: 'A new version of Probaho Browser is ready. Restart now to install?',
-        buttons: ['Restart Now', 'Later']
-      }).then((result) => {
-        if (result.response === 0) {
-          autoUpdater.quitAndInstall();
-        }
-      });
+  autoUpdater.on('checking-for-update', () => broadcastUpdaterStatus({ state: 'checking', error: null }));
+  autoUpdater.on('update-available', (info = {}) => broadcastUpdaterStatus({ state: 'available', version: info.version || null, percent: 0, error: null }));
+  autoUpdater.on('update-not-available', () => broadcastUpdaterStatus({ state: 'not-available', percent: 0, error: null }));
+  autoUpdater.on('download-progress', (progress = {}) => broadcastUpdaterStatus({ state: 'downloading', percent: Math.max(0, Math.min(100, Number(progress.percent) || 0)), error: null }));
+  autoUpdater.on('update-downloaded', (info = {}) => {
+    broadcastUpdaterStatus({ state: 'downloaded', version: info.version || null, percent: 100, error: null });
+    dialog.showMessageBox({
+      type: 'info',
+      title: 'Update Ready',
+      message: 'A verified update is ready. Restart now to install it?',
+      buttons: ['Restart Now', 'Later'],
+      defaultId: 1,
+      cancelId: 1
+    }).then((result) => {
+      if (result.response === 0) autoUpdater.quitAndInstall(false, true);
+    }).catch(() => {});
+  });
+  autoUpdater.on('error', (error) => {
+    console.error('Auto-update error:', error);
+    broadcastUpdaterStatus({ state: 'error', error: error?.message || 'Update failed' });
+  });
+
+  if (app.isPackaged) {
+    autoUpdater.checkForUpdates().catch((error) => {
+      console.error('Initial update check failed:', error);
+      broadcastUpdaterStatus({ state: 'error', error: error?.message || 'Update check failed' });
     });
   }
+
+  ipcMain.handle('get-update-status', (event) => {
+    requireTrustedAppSender(event);
+    return updaterState;
+  });
+
+  ipcMain.handle('check-for-updates', async (event) => {
+    requireTrustedAppSender(event);
+    if (!app.isPackaged) return { ...updaterState, state: 'not-available', error: 'Updates are available only in packaged builds.' };
+    try {
+      await autoUpdater.checkForUpdates();
+      return updaterState;
+    } catch (error) {
+      const message = error?.message || 'Update check failed';
+      broadcastUpdaterStatus({ state: 'error', error: message });
+      return updaterState;
+    }
+  });
+
+  ipcMain.handle('download-update', async (event) => {
+    requireTrustedAppSender(event);
+    if (!app.isPackaged || updaterState.state !== 'available') return updaterState;
+    try {
+      await autoUpdater.downloadUpdate();
+    } catch (error) {
+      broadcastUpdaterStatus({ state: 'error', error: error?.message || 'Update download failed' });
+    }
+    return updaterState;
+  });
+
+  ipcMain.handle('install-update', (event) => {
+    requireTrustedAppSender(event);
+    if (app.isPackaged && updaterState.state === 'downloaded') autoUpdater.quitAndInstall(false, true);
+    return updaterState;
+  });
 
   let adBlockerEnabled = true;
   let trackerProtectionEnabled = true;
