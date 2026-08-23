@@ -37,6 +37,9 @@ interface Tab {
   isPrivate?: boolean;
   crashed?: boolean;
   isPdf?: boolean;
+  suspended?: boolean;
+  hasLoaded?: boolean;
+  lastActiveAt?: number;
   isPinned?: boolean;
   isAudible?: boolean;
   isMuted?: boolean;
@@ -135,7 +138,10 @@ function App() {
         showBookmarksBar: false,
         accentColor: '#7b2cbf',
         doNotTrack: false,
-        askDownloadLocation: false
+        askDownloadLocation: false,
+        lazyLoadTabs: true,
+        suspendInactiveTabs: true,
+        suspensionTimeoutMinutes: 5
       };
     }
     try {
@@ -153,7 +159,10 @@ function App() {
           showBookmarksBar: false,
           accentColor: '#7b2cbf',
           doNotTrack: false,
-          askDownloadLocation: false
+          askDownloadLocation: false,
+          lazyLoadTabs: true,
+          suspendInactiveTabs: true,
+          suspensionTimeoutMinutes: 5
         };
         const merged = { ...def, ...parsed };
         settingsRef.current = merged;
@@ -171,7 +180,10 @@ function App() {
       showBookmarksBar: false,
       accentColor: '#7b2cbf',
       doNotTrack: false,
-      askDownloadLocation: false
+      askDownloadLocation: false,
+      lazyLoadTabs: true,
+      suspendInactiveTabs: true,
+      suspensionTimeoutMinutes: 5
     };
     settingsRef.current = def;
     return def;
@@ -216,7 +228,10 @@ function App() {
         isSecure: true,
         zoomLevel: 1,
         blockedCount: 0,
-        isPrivate: true
+        isPrivate: true,
+        suspended: false,
+        hasLoaded: false,
+        lastActiveAt: Date.now()
       }];
     }
 
@@ -230,7 +245,10 @@ function App() {
             loading: false,
             canGoBack: false,
             canGoForward: false,
-            blockedCount: 0
+            blockedCount: 0,
+            suspended: false,
+            hasLoaded: false,
+            lastActiveAt: Number.isFinite(t.lastActiveAt) ? t.lastActiveAt : Date.now()
           }));
         }
       }
@@ -246,7 +264,10 @@ function App() {
       isSecure: true,
       zoomLevel: 1,
       blockedCount: 0,
-      isPrivate: false
+      isPrivate: false,
+      suspended: false,
+      hasLoaded: false,
+      lastActiveAt: Date.now()
     }];
   });
 
@@ -786,6 +807,43 @@ function App() {
 
   const activeTab = tabs.find(t => t.id === activeTabId);
 
+  // Mark the selected tab as recently active and wake it if it was suspended.
+  useEffect(() => {
+    if (!activeTabId) return;
+    const now = Date.now();
+    setTabs(prev => prev.map(tab => tab.id === activeTabId
+      ? { ...tab, suspended: false, lastActiveAt: now }
+      : tab
+    ));
+  }, [activeTabId]);
+
+  // Periodically discard inactive webviews to reduce renderer memory usage.
+  useEffect(() => {
+    if (!settings.suspendInactiveTabs) {
+      setTabs(prev => prev.some(tab => tab.suspended)
+        ? prev.map(tab => tab.suspended ? { ...tab, suspended: false } : tab)
+        : prev
+      );
+      return;
+    }
+    const timeoutMs = Math.max(1, Number(settings.suspensionTimeoutMinutes) || 5) * 60 * 1000;
+    const interval = window.setInterval(() => {
+      const cutoff = Date.now() - timeoutMs;
+      setTabs(prev => {
+        let changed = false;
+        const next = prev.map(tab => {
+          const isVisible = tab.id === activeTabId || tab.id === splitTabId;
+          if (isVisible || tab.url === 'probaho://newtab' || tab.isPdf || tab.suspended || !tab.hasLoaded) return tab;
+          if (!tab.lastActiveAt || tab.lastActiveAt > cutoff) return tab;
+          changed = true;
+          return { ...tab, suspended: true, loading: false };
+        });
+        return changed ? next : prev;
+      });
+    }, 15_000);
+    return () => window.clearInterval(interval);
+  }, [settings.suspendInactiveTabs, settings.suspensionTimeoutMinutes, activeTabId, splitTabId]);
+
   useEffect(() => {
     if (targetedTab) {
       setInputUrl(targetedTab.url === 'probaho://newtab' ? '' : targetedTab.url);
@@ -812,7 +870,10 @@ function App() {
       zoomLevel: 1,
       blockedCount: 0,
       isPrivate: isPrivate,
-      workspaceId: activeWorkspaceId
+      workspaceId: activeWorkspaceId,
+      suspended: false,
+      hasLoaded: false,
+      lastActiveAt: Date.now()
     };
     setTabs(prev => [...prev, newTab]);
     setActiveTabId(newTab.id);
@@ -851,7 +912,10 @@ function App() {
             isSecure: toRestore.url.startsWith('https'),
             zoomLevel: 1,
             blockedCount: 0,
-            isPrivate: isPrivateWindow
+            isPrivate: isPrivateWindow,
+            suspended: false,
+            hasLoaded: false,
+            lastActiveAt: Date.now()
           };
           setTabs(currentTabs => [...currentTabs, newTab]);
           setTimeout(() => setActiveTabId(newTab.id), 0);
@@ -885,6 +949,7 @@ function App() {
       const tryLoad = () => {
         try {
           if (el.getURL() === 'about:blank' || !el.getURL()) {
+            updateTab(id, { hasLoaded: true, suspended: false, lastActiveAt: Date.now() });
             el.loadURL(url);
             const savedZoom = getSavedZoom(url);
             try { el.setZoomFactor(savedZoom); } catch {}
@@ -964,6 +1029,9 @@ function App() {
 
     // Event: main frame navigation
     el.addEventListener('did-navigate', (e: any) => {
+      // Ignore the placeholder navigation emitted before a lazy tab loads its real URL.
+      if (e.url === 'about:blank' && initialUrl !== 'about:blank') return;
+
       // Inject password capture script
       if (e.url && e.url.startsWith('http')) {
         const script = `
@@ -1323,6 +1391,15 @@ function App() {
           }}>
             <div className="menu-item-text">{tabs.find(t => t.id === tabContextMenu.tabId)?.isMuted ? 'Unmute Site' : 'Mute Site'}</div>
           </div>
+          <div className="menu-item" onClick={() => {
+            const tab = tabs.find(t => t.id === tabContextMenu.tabId);
+            if (tab && tab.id !== activeTabId && tab.id !== splitTabId) {
+              updateTab(tab.id, { suspended: !tab.suspended, loading: false });
+            }
+            setTabContextMenu(null);
+          }}>
+            <div className="menu-item-text">{tabs.find(t => t.id === tabContextMenu.tabId)?.suspended ? 'Resume Tab' : 'Suspend Tab'}</div>
+          </div>
           <div className="menu-divider" />
           <div className="menu-divider" />
           <div className="menu-item" onClick={() => {
@@ -1480,7 +1557,7 @@ function App() {
               )}
             <div
               data-testid={`tab-${tab.id}`}
-              className={`tab ${tab.id === activeTabId ? 'active' : ''} ${tab.isPrivate ? 'private' : ''} ${tab.isPinned ? 'pinned' : ''}`}
+              className={`tab ${tab.id === activeTabId ? 'active' : ''} ${tab.isPrivate ? 'private' : ''} ${tab.isPinned ? 'pinned' : ''} ${tab.suspended ? 'suspended' : ''}`}
               style={{ borderTop: group ? `3px solid ${group.color}` : undefined }}
               onClick={() => setActiveTabId(tab.id)}
               onContextMenu={(e) => {
@@ -1529,6 +1606,7 @@ function App() {
               )}
 
               {!tab.isPinned && <span className="tab-title" title={tab.title}>{tab.title}</span>}
+              {tab.suspended && <span className="tab-suspended-badge">Suspended</span>}
               {!tab.isPinned && (
                 <div className="tab-close" onClick={(e) => closeTab(e, tab.id)}>
                   <X size={12} />
@@ -2257,6 +2335,45 @@ function App() {
                 </label>
               </div>
 
+              <div style={{marginBottom: '16px', borderTop: '1px solid var(--border-color)', paddingTop: '16px'}} data-testid="performance-settings">
+                <h4 style={{margin: '0 0 12px 0', fontSize: '14px'}}>Performance</h4>
+                <label style={{display: 'flex', alignItems: 'center', cursor: 'pointer', fontSize: '13px', fontWeight: 'bold', marginBottom: '10px'}}>
+                  <input
+                    type="checkbox"
+                    data-testid="lazy-tabs-toggle"
+                    checked={settings.lazyLoadTabs !== false}
+                    onChange={e => setSettings({...settings, lazyLoadTabs: e.target.checked})}
+                    style={{marginRight: '8px'}}
+                  />
+                  Load tab pages only when opened
+                </label>
+                <label style={{display: 'flex', alignItems: 'center', cursor: 'pointer', fontSize: '13px', fontWeight: 'bold', marginBottom: '10px'}}>
+                  <input
+                    type="checkbox"
+                    data-testid="suspend-tabs-toggle"
+                    checked={settings.suspendInactiveTabs !== false}
+                    onChange={e => setSettings({...settings, suspendInactiveTabs: e.target.checked})}
+                    style={{marginRight: '8px'}}
+                  />
+                  Suspend inactive tabs to save memory
+                </label>
+                <label style={{display: 'flex', alignItems: 'center', justifyContent: 'space-between', fontSize: '13px'}}>
+                  <span>Suspend after</span>
+                  <select
+                    data-testid="suspension-timeout-select"
+                    value={settings.suspensionTimeoutMinutes || 5}
+                    disabled={settings.suspendInactiveTabs === false}
+                    onChange={e => setSettings({...settings, suspensionTimeoutMinutes: Number(e.target.value)})}
+                    style={{padding: '4px', borderRadius: '4px', border: '1px solid var(--border-color)', background: 'var(--bg-color)', color: 'var(--text-color)'}}
+                  >
+                    <option value={1}>1 minute</option>
+                    <option value={5}>5 minutes</option>
+                    <option value={15}>15 minutes</option>
+                    <option value={30}>30 minutes</option>
+                  </select>
+                </label>
+              </div>
+
               <div style={{marginBottom: '16px'}}>
                 <label style={{display: 'flex', alignItems: 'center', cursor: 'pointer', fontSize: '13px', fontWeight: 'bold'}}>
                   <input
@@ -2751,7 +2868,7 @@ function App() {
                      </div>
                   )}
                 <div
-                  className={`tab vertical-tab ${tab.id === activeTabId ? 'active' : ''} ${tab.isPrivate ? 'private' : ''} ${tab.isPinned ? 'pinned' : ''}`}
+                  className={`tab vertical-tab ${tab.id === activeTabId ? 'active' : ''} ${tab.isPrivate ? 'private' : ''} ${tab.isPinned ? 'pinned' : ''} ${tab.suspended ? 'suspended' : ''}`}
                   style={{
                      display: 'flex',
                      alignItems: 'center',
@@ -2807,6 +2924,7 @@ function App() {
                   <span className="tab-title" title={tab.title} style={{ flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', fontSize: '13px', color: tab.id === activeTabId ? 'var(--text-color)' : 'var(--text-muted)' }}>
                     {tab.title}
                   </span>
+                  {tab.suspended && <span className="tab-suspended-badge">Suspended</span>}
 
                   {(tab.isAudible || tab.isMuted) && (
                     <div
@@ -2867,7 +2985,7 @@ function App() {
           </div>
         )}
         <div style={{ display: 'flex', flexDirection: 'row', flex: 1, width: '100%', height: '100%' }}>
-        {tabs.map(tab => tab.url !== 'probaho://newtab' && !tab.isPdf && (tab.id === activeTabId || tab.id === splitTabId) && (
+        {tabs.map(tab => tab.url !== 'probaho://newtab' && !tab.isPdf && !tab.suspended && (!settings.lazyLoadTabs || tab.id === activeTabId || tab.id === splitTabId) && (
           <div key={`container-${tab.id}`} style={{
               flex: 1, display: 'flex', position: 'relative',
               borderRight: tab.id === activeTabId && splitTabId ? '2px solid var(--border-color)' : 'none',

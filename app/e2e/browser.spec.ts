@@ -22,6 +22,25 @@ test.describe('browser shell', () => {
     await expect(appPage.locator('.new-tab-page')).toBeVisible();
   });
 
+  test('lazy-loads inactive tabs and wakes a suspended tab', async ({ appPage }) => {
+    const addressInput = appPage.getByTestId('address-input');
+    await addressInput.fill('https://example.com');
+    await addressInput.press('Enter');
+    await expect(addressInput).toHaveValue(/^https:\/\/example\.com\/?$/);
+    await expect(appPage.locator('webview')).toHaveCount(1);
+
+    await appPage.getByTestId('new-tab-button').click();
+    await expect(appPage.locator('webview')).toHaveCount(0);
+    const loadedTab = appPage.locator('.tab').first();
+    await loadedTab.click({ button: 'right' });
+    await appPage.getByText('Suspend Tab', { exact: true }).click();
+    await expect(loadedTab).toHaveClass(/suspended/);
+
+    await loadedTab.click();
+    await expect(loadedTab).not.toHaveClass(/suspended/);
+    await expect(appPage.locator('webview')).toHaveCount(1);
+  });
+
   test('normalizes an address-bar submission', async ({ appPage }) => {
     const addressInput = appPage.getByTestId('address-input');
     await addressInput.fill('example.com');

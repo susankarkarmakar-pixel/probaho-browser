@@ -111,6 +111,21 @@ body {
   background-color: rgba(255, 255, 255, 0.1);
 }
 
+.tab.suspended {
+  opacity: 0.72;
+}
+
+.tab-suspended-badge {
+  flex-shrink: 0;
+  margin-left: 6px;
+  padding: 1px 4px;
+  border-radius: 4px;
+  background: rgba(123, 44, 191, 0.2);
+  color: #aaa;
+  font-size: 9px;
+  line-height: 14px;
+}
+
 .new-tab-btn {
   display: flex;
   align-items: center;
