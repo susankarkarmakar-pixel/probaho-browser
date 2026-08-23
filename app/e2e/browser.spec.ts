@@ -11,6 +11,21 @@ test.describe('browser shell', () => {
     await expect(appPage.locator('.new-tab-page')).toBeVisible();
   });
 
+  test('renders the premium home dashboard and quick actions', async ({ appPage }) => {
+    const home = appPage.getByTestId('new-tab-page');
+    await expect(home).toBeVisible();
+    await expect(home.getByTestId('ntp-content')).toBeVisible();
+    await expect(home.getByTestId('ntp-privacy-card')).toContainText('Shields active');
+    await expect(home.getByTestId('ntp-search-input')).toBeVisible();
+    await expect(home.getByTestId('ntp-quick-actions')).toBeVisible();
+    await expect(home.getByTestId('ntp-top-sites-empty')).toContainText('Your shortcuts will appear here');
+    await expect(home.getByTestId('ntp-bookmarks-preview')).toContainText('Bookmarks');
+    await home.getByTestId('ntp-downloads-action').click();
+    await expect(appPage.getByTestId('downloads-popout')).toBeVisible();
+    await appPage.getByRole('button', { name: 'Close downloads' }).click();
+    await expect(appPage.getByTestId('downloads-popout')).not.toBeVisible();
+  });
+
   test('renders an accessible toolbar and address bar', async ({ appPage }) => {
     await expect(appPage.getByTestId('browser-toolbar')).toBeVisible();
     await expect(appPage.getByRole('button', { name: 'Go back' })).toBeDisabled();

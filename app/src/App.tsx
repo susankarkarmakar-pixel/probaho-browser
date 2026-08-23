@@ -3401,71 +3401,107 @@ function App() {
               flexDirection: 'column',
               alignItems: 'center'
             }}>
-              <div className="ntp-content" style={{ marginTop: '100px' }}>
-                <div className="ntp-logo" style={settings.newTabBackgroundUrl ? { color: '#fff' } : {}}>
-                  <span className="ntp-logo-mark" aria-hidden="true">🌐</span>
-                  <h1>PROBAHO</h1>
-                  <p className="ntp-tagline">A calmer, faster space for the web</p>
+              <div className="ntp-content" data-testid="ntp-content">
+                <div className="ntp-header-row">
+                  <div className="ntp-logo" style={settings.newTabBackgroundUrl ? { color: '#fff' } : {}}>
+                    <span className="ntp-eyebrow"><span className="ntp-eyebrow-dot" /> Personal workspace</span>
+                    <div className="ntp-brand-row">
+                      <span className="ntp-logo-mark" aria-hidden="true">🌐</span>
+                      <h1>PROBAHO</h1>
+                    </div>
+                    <p className="ntp-tagline">A calmer, faster space for the web</p>
+                  </div>
+                  <div className="ntp-protection-card" data-testid="ntp-privacy-card">
+                    <div className="ntp-protection-icon"><ShieldCheck size={17} /></div>
+                    <div>
+                      <strong>Shields active</strong>
+                      <span>{tab.blockedCount || 0} trackers blocked on this tab</span>
+                    </div>
+                  </div>
                 </div>
-              <div className="ntp-search" role="search">
-                <label className="sr-only" htmlFor={`ntp-search-${tab.id}`}>Search the web</label>
-                <Search size={18} color="#888" style={{marginLeft: '16px', position: 'absolute'}} />
-                <input
-                  id={`ntp-search-${tab.id}`}
-                  type="text"
-                  className="ntp-search-input"
-                  data-testid="ntp-search-input"
-                  aria-label="Search the web"
-                  placeholder={t('searchPlaceholder', settings.language, { engine: settings.defaultSearchEngine })}
-                  onKeyDown={(e) => {
-                    if (e.key === 'Enter') {
-                      navigate(e.currentTarget.value);
-                    }
-                  }}
-                  autoFocus
-                />
+
+                <form className="ntp-search" role="search" onSubmit={(e) => {
+                  e.preventDefault();
+                  const query = (e.currentTarget.elements.namedItem('ntp-query') as HTMLInputElement)?.value || '';
+                  navigate(query);
+                }}>
+                  <div className="ntp-search-heading"><span>Explore the web</span><kbd>Enter</kbd></div>
+                  <label className="sr-only" htmlFor={`ntp-search-${tab.id}`}>Search the web</label>
+                  <Search className="ntp-search-icon" size={18} aria-hidden="true" />
+                  <input
+                    id={`ntp-search-${tab.id}`}
+                    name="ntp-query"
+                    type="text"
+                    className="ntp-search-input"
+                    data-testid="ntp-search-input"
+                    aria-label="Search the web"
+                    placeholder={t('searchPlaceholder', settings.language, { engine: settings.defaultSearchEngine })}
+                    autoFocus
+                  />
+                  <span className="ntp-search-engine">{settings.defaultSearchEngine}</span>
+                </form>
+
+                <div className="ntp-quick-actions" data-testid="ntp-quick-actions">
+                  <button type="button" className="ntp-quick-action" data-testid="ntp-history-action" onClick={() => setShowHistory(true)}><History size={15} /><span>History</span></button>
+                  <button type="button" className="ntp-quick-action" data-testid="ntp-bookmarks-action" onClick={() => setShowBookmarks(true)}><Bookmark size={15} /><span>Bookmarks</span></button>
+                  <button type="button" className="ntp-quick-action" data-testid="ntp-downloads-action" onClick={() => setShowDownloads(true)}><Download size={15} /><span>Downloads</span></button>
+                  <button type="button" className="ntp-quick-action" data-testid="ntp-settings-action" onClick={() => setShowSettings(true)}><Settings size={15} /><span>Settings</span></button>
+                </div>
+
+                <div className="ntp-dashboard">
+                  <section className="ntp-section ntp-top-sites-section" aria-labelledby={`ntp-top-sites-title-${tab.id}`}>
+                    <div className="ntp-section-heading">
+                      <div><span className="ntp-section-kicker">Your rhythm</span><h2 id={`ntp-top-sites-title-${tab.id}`}>Top sites</h2></div>
+                      <span className="ntp-section-count">{history.length ? `${Math.min(8, new Set(history.map(h => { try { return new URL(h.url).hostname; } catch { return h.url; } })).size)} saved` : 'Ready when you are'}</span>
+                    </div>
+                    <div className="ntp-top-sites">
+                      {(() => {
+                        const siteCounts: Record<string, {count: number, title: string, url: string}> = {};
+                        history.forEach(h => {
+                          try {
+                            const domain = new URL(h.url).hostname;
+                            if (!siteCounts[domain]) siteCounts[domain] = { count: 0, title: h.title || domain, url: h.url };
+                            siteCounts[domain].count++;
+                          } catch (e) {}
+                        });
+                        const topSites = Object.values(siteCounts).sort((a, b) => b.count - a.count).slice(0, 8);
+                        if (topSites.length === 0) {
+                          return <div className="ntp-empty-state" data-testid="ntp-top-sites-empty"><div className="ntp-empty-icon"><Globe size={18} /></div><div><strong>Your shortcuts will appear here</strong><span>Visit a few sites to build your personal launchpad.</span></div></div>;
+                        }
+                        return topSites.map((site, i) => (
+                          <button key={i} type="button" data-testid="ntp-top-site" className="ntp-tile" onClick={() => navigate(site.url)}>
+                            <span className="ntp-tile-icon">{site.title.charAt(0).toUpperCase()}</span>
+                            <span className="ntp-tile-title">{site.title || site.url}</span>
+                            <span className="ntp-tile-domain">{site.count} visit{site.count === 1 ? '' : 's'}</span>
+                          </button>
+                        ));
+                      })()}
+                    </div>
+                  </section>
+
+                  <section className="ntp-section ntp-bookmarks-preview" data-testid="ntp-bookmarks-preview" aria-labelledby={`ntp-bookmarks-title-${tab.id}`}>
+                    <div className="ntp-section-heading">
+                      <div><span className="ntp-section-kicker">Saved for later</span><h2 id={`ntp-bookmarks-title-${tab.id}`}>Bookmarks</h2></div>
+                      <button type="button" className="ntp-section-link" onClick={() => setShowBookmarks(true)}>View all <ChevronUp size={13} /></button>
+                    </div>
+                    {bookmarks.length === 0 ? (
+                      <button type="button" className="ntp-empty-state ntp-empty-action" onClick={() => setShowBookmarks(true)}><div className="ntp-empty-icon"><Bookmark size={18} /></div><div><strong>Keep something close</strong><span>Open your bookmarks panel to add and manage saved pages.</span></div></button>
+                    ) : (
+                      <div className="ntp-bookmark-list">
+                        {bookmarks.slice(0, 4).map((bookmark, index) => (
+                          <button key={`${bookmark.url}-${index}`} type="button" className="ntp-bookmark-row" onClick={() => navigate(bookmark.url)}>
+                            <span className="ntp-bookmark-row-icon"><Globe size={14} /></span>
+                            <span className="ntp-bookmark-row-copy"><strong>{bookmark.title}</strong><span>{bookmark.url}</span></span>
+                            <ChevronUp className="ntp-bookmark-row-arrow" size={13} />
+                          </button>
+                        ))}
+                      </div>
+                    )}
+                  </section>
+                </div>
+
+                <div className="ntp-footer-note"><ShieldCheck size={14} /><span>Private by default. Your shortcuts and preferences stay on this device.</span><button type="button" onClick={() => setShowSettings(true)}>Manage settings</button></div>
               </div>
-
-              <div className="ntp-quick-actions" data-testid="ntp-quick-actions">
-                <button type="button" className="ntp-quick-action" onClick={() => setShowHistory(true)}><History size={15} /><span>History</span></button>
-                <button type="button" className="ntp-quick-action" onClick={() => setShowBookmarks(true)}><Bookmark size={15} /><span>Bookmarks</span></button>
-                <button type="button" className="ntp-quick-action" onClick={() => setShowDownloads(true)}><Download size={15} /><span>Downloads</span></button>
-                <button type="button" className="ntp-quick-action" onClick={() => setShowSettings(true)}><Settings size={15} /><span>Settings</span></button>
-              </div>
-
-              <div className="ntp-top-sites">
-                {(() => {
-                  // Compute top 8 sites from history
-                  const siteCounts: Record<string, {count: number, title: string, url: string}> = {};
-                  history.forEach(h => {
-                    try {
-                      const domain = new URL(h.url).hostname;
-                      if (!siteCounts[domain]) {
-                        siteCounts[domain] = { count: 0, title: h.title, url: `https://${domain}` };
-                      }
-                      siteCounts[domain].count++;
-                    } catch(e) {}
-                  });
-
-                  const topSites = Object.values(siteCounts)
-                    .sort((a, b) => b.count - a.count)
-                    .slice(0, 8);
-
-                  if (topSites.length === 0) {
-                     return <div style={{color: '#666'}}>{t('noHistory', settings.language)}</div>;
-                  }
-
-                  return topSites.map((site, i) => (
-                    <button key={i} type="button" data-testid="ntp-top-site" className="ntp-tile" onClick={() => navigate(site.url)} style={settings.newTabBackgroundUrl ? { backgroundColor: 'rgba(255,255,255,0.1)', backdropFilter: 'blur(10px)', border: '1px solid rgba(255,255,255,0.2)' } : {}}>
-                      <span className="ntp-tile-icon">
-                        {site.title.charAt(0).toUpperCase()}
-                      </span>
-                      <span className="ntp-tile-title" style={settings.newTabBackgroundUrl ? { color: '#fff' } : {}}>{site.title || site.url}</span>
-                    </button>
-                  ));
-                })()}
-              </div>
-            </div>
             </div>
           </div>
         ))}
