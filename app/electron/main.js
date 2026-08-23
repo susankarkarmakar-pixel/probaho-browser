@@ -1,7 +1,7 @@
 const { app, BrowserWindow, ipcMain, session, shell, Menu, dialog, clipboard } = require('electron');
 const { autoUpdater } = require('electron-updater');
 const path = require('path');
-const blocklist = require('./blocklist');
+const { getOrigin, matchTracker, normalizeExceptions } = require('./tracker-protection');
 const permissionsStore = require('./permissions-store');
 const passwordsStore = require('./passwords-store');
 const fs = require('fs');
@@ -277,6 +277,8 @@ app.whenReady().then(() => {
   }
 
   let adBlockerEnabled = true;
+  let trackerProtectionEnabled = true;
+  let trackerExceptions = new Set();
   let currentSettings = {};
   const activeDownloadsMap = new Map();
   const configuredPrivateSessions = new WeakSet();
@@ -316,14 +318,14 @@ app.whenReady().then(() => {
     });
 
     privateSession.webRequest.onBeforeRequest({ urls: ['*://*/*'] }, (details, callback) => {
-      if (!adBlockerEnabled) return callback({ cancel: false });
-      const url = details.url.toLowerCase();
-      if (!blocklist.some(domain => url.includes(domain))) return callback({ cancel: false });
-
       const wc = details.webContentsId ? require('electron').webContents.fromId(details.webContentsId) : null;
+      const pageOrigin = getOrigin(wc?.getURL?.() || '');
+      const match = trackerProtectionEnabled ? matchTracker(details.url, pageOrigin, trackerExceptions) : null;
+      if (!match) return callback({ cancel: false });
+
       const hostContents = wc?.hostWebContents || wc;
       if (hostContents && !hostContents.isDestroyed()) {
-        hostContents.send('ad-blocked', details.webContentsId);
+        hostContents.send('ad-blocked', details.webContentsId, match.category);
       }
       callback({ cancel: true });
     });
@@ -337,6 +339,8 @@ app.whenReady().then(() => {
   ipcMain.on('update-settings', (event, settings) => {
     requireTrustedAppSender(event);
     if (settings && typeof settings === 'object' && !Array.isArray(settings)) {
+      trackerProtectionEnabled = settings.adBlockerEnabled !== false && settings.trackerProtectionEnabled !== false;
+      trackerExceptions = normalizeExceptions(settings.trackerExceptions);
       currentSettings = {
         doNotTrack: settings.doNotTrack === true,
         askDownloadLocation: settings.askDownloadLocation === true
@@ -532,22 +536,16 @@ app.whenReady().then(() => {
   });
 
   session.defaultSession.webRequest.onBeforeRequest({ urls: ['*://*/*'] }, (details, callback) => {
-    if (adBlockerEnabled) {
-      const url = details.url.toLowerCase();
-      const isBlocked = blocklist.some(domain => url.includes(domain));
-      if (isBlocked) {
-        const wc = details.webContentsId ? require('electron').webContents.fromId(details.webContentsId) : null;
-        const win = wc && wc.hostWebContents ? BrowserWindow.fromWebContents(wc.hostWebContents) : (wc ? BrowserWindow.fromWebContents(wc) : null);
-        if (win) {
-          win.webContents.send('ad-blocked', details.webContentsId);
-        } else {
-          // Fallback if window not found directly
-          BrowserWindow.getAllWindows().forEach(w => w.webContents.send('ad-blocked', details.webContentsId));
-        }
-        return callback({ cancel: true });
-      }
+    const wc = details.webContentsId ? require('electron').webContents.fromId(details.webContentsId) : null;
+    const pageOrigin = getOrigin(wc?.getURL?.() || '');
+    const match = trackerProtectionEnabled ? matchTracker(details.url, pageOrigin, trackerExceptions) : null;
+    if (!match) return callback({ cancel: false });
+
+    const hostContents = wc?.hostWebContents || wc;
+    if (hostContents && !hostContents.isDestroyed()) {
+      hostContents.send('ad-blocked', details.webContentsId, match.category);
     }
-    callback({ cancel: false });
+    callback({ cancel: true });
   });
 
 

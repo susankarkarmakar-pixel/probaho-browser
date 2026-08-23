@@ -34,6 +34,7 @@ interface Tab {
   zoomLevel: number;
   webContentsId?: number;
   blockedCount: number;
+  blockedByCategory?: Record<string, number>;
   isPrivate?: boolean;
   crashed?: boolean;
   isPdf?: boolean;
@@ -93,7 +94,7 @@ declare global {
       fetchSuggestions?: (query: string) => Promise<string[]>;
       setAdBlocker: (enabled: boolean) => void;
       updateSettings?: (settings: any) => void;
-      onAdBlocked: (callback: (webContentsId: number) => void) => void;
+      onAdBlocked: (callback: (webContentsId: number, category?: string) => void) => void;
       onTabCrashed: (callback: (webContentsId: number, reason: string) => void) => void;
       onOpenPdfViewer: (callback: (url: string, webContentsId?: number) => void) => void;
       clearCache?: () => void;
@@ -141,7 +142,9 @@ function App() {
         askDownloadLocation: false,
         lazyLoadTabs: true,
         suspendInactiveTabs: true,
-        suspensionTimeoutMinutes: 5
+        suspensionTimeoutMinutes: 5,
+        trackerProtectionEnabled: true,
+        trackerExceptions: []
       };
     }
     try {
@@ -366,10 +369,17 @@ function App() {
 
   useEffect(() => {
     if (window.electronAPI?.onAdBlocked) {
-      window.electronAPI.onAdBlocked((webContentsId) => {
+      window.electronAPI.onAdBlocked((webContentsId, category = 'other') => {
         setTabs(prev => prev.map(t => {
           if (t.webContentsId === webContentsId) {
-            return { ...t, blockedCount: t.blockedCount + 1 };
+            return {
+              ...t,
+              blockedCount: t.blockedCount + 1,
+              blockedByCategory: {
+                ...(t.blockedByCategory || {}),
+                [category]: (t.blockedByCategory?.[category] || 0) + 1
+              }
+            };
           }
           return t;
         }));
@@ -1289,6 +1299,15 @@ function App() {
 
   const targetedTab = tabs.find(t => t.id === targetedTabId);
   const isCurrentBookmarked = targetedTab ? bookmarks.some(b => b.url === targetedTab.url) : false;
+  const currentSiteOrigin = (() => {
+    try {
+      const origin = new URL(targetedTab?.url || '').origin;
+      return origin === 'null' ? null : origin;
+    } catch {
+      return null;
+    }
+  })();
+  const isCurrentSiteExcepted = Boolean(currentSiteOrigin && (settings.trackerExceptions || []).includes(currentSiteOrigin));
 
   const getDomainFromUrl = (url: string) => {
     try {
@@ -1928,31 +1947,54 @@ function App() {
           </button>
         </form>
         <div style={{ position: 'relative' }}>
-          <div className="shield-container" title={t('blockedAds', settings.language, { count: targetedTab?.blockedCount || 0 })} onClick={(e) => { e.stopPropagation(); setShowBookmarks(false); setShowHistory(false); setShowMenu(false); setShowReadingList(false); setShowDownloads(false); setShowShields(!showShields); }} style={{ cursor: 'pointer' }}>
-            <Shield size={16} color={!settings.adBlockerEnabled ? '#d32f2f' : (targetedTab && targetedTab.blockedCount > 0 ? '#4caf50' : '#888')} />
-            {settings.adBlockerEnabled && targetedTab && targetedTab.blockedCount > 0 && <span className="shield-count">{targetedTab.blockedCount}</span>}
+          <div className="shield-container" data-testid="shields-button" title={t('blockedAds', settings.language, { count: targetedTab?.blockedCount || 0 })} onClick={(e) => { e.stopPropagation(); setShowBookmarks(false); setShowHistory(false); setShowMenu(false); setShowReadingList(false); setShowDownloads(false); setShowShields(!showShields); }} style={{ cursor: 'pointer' }}>
+            <Shield size={16} color={!settings.adBlockerEnabled || settings.trackerProtectionEnabled === false ? '#d32f2f' : isCurrentSiteExcepted ? '#f0a000' : (targetedTab && targetedTab.blockedCount > 0 ? '#4caf50' : '#888')} />
+            {settings.adBlockerEnabled !== false && settings.trackerProtectionEnabled !== false && targetedTab && targetedTab.blockedCount > 0 && <span className="shield-count">{targetedTab.blockedCount}</span>}
           </div>
 
           {showShields && (
-            <div className="downloads-popout" onClick={(e) => e.stopPropagation()} style={{
-              position: 'absolute', top: '100%', right: 0, width: '280px',
+            <div className="downloads-popout" data-testid="shields-popup" onClick={(e) => e.stopPropagation()} style={{
+              position: 'absolute', top: '100%', right: 0, width: '300px',
               background: 'var(--bg-color)', border: '1px solid var(--border-color)',
               borderRadius: '8px', zIndex: 150, boxShadow: '0 8px 24px rgba(0,0,0,0.2)',
               marginTop: '8px', padding: '16px'
             }}>
               <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '8px', borderBottom: '1px solid var(--border-color)', paddingBottom: '16px', marginBottom: '16px' }}>
-                <Shield size={32} color={!settings.adBlockerEnabled ? '#d32f2f' : '#4caf50'} />
+                <Shield size={32} color={!settings.adBlockerEnabled || settings.trackerProtectionEnabled === false ? '#d32f2f' : isCurrentSiteExcepted ? '#f0a000' : '#4caf50'} />
                 <h3 style={{ margin: 0, fontSize: '16px' }}>{targetedTab?.blockedCount || 0}</h3>
                 <span style={{ fontSize: '12px', color: 'var(--text-color)', opacity: 0.8 }}>Trackers & ads blocked on this site</span>
+                {targetedTab?.blockedByCategory && Object.keys(targetedTab.blockedByCategory).length > 0 && (
+                  <div style={{ width: '100%', display: 'flex', justifyContent: 'center', gap: '8px', flexWrap: 'wrap', fontSize: '10px', color: '#999' }}>
+                    {Object.entries(targetedTab.blockedByCategory).map(([category, count]) => <span key={category}>{category}: {count}</span>)}
+                  </div>
+                )}
               </div>
-              <label style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', cursor: 'pointer', fontSize: '13px', fontWeight: 'bold' }}>
+              <label style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', cursor: 'pointer', fontSize: '13px', fontWeight: 'bold', marginBottom: '12px' }}>
                 <span>Shields (Global)</span>
                 <input
                   type="checkbox"
-                  checked={settings.adBlockerEnabled !== false}
-                  onChange={e => setSettings({...settings, adBlockerEnabled: e.target.checked})}
+                  data-testid="global-shields-toggle"
+                  checked={settings.adBlockerEnabled !== false && settings.trackerProtectionEnabled !== false}
+                  onChange={e => setSettings({...settings, adBlockerEnabled: e.target.checked, trackerProtectionEnabled: e.target.checked})}
                 />
               </label>
+              <label style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', cursor: currentSiteOrigin ? 'pointer' : 'not-allowed', fontSize: '13px', opacity: currentSiteOrigin ? 1 : 0.55 }}>
+                <span>Pause for this site</span>
+                <input
+                  type="checkbox"
+                  data-testid="site-shields-toggle"
+                  disabled={!currentSiteOrigin}
+                  checked={isCurrentSiteExcepted}
+                  onChange={e => {
+                    if (!currentSiteOrigin) return;
+                    const exceptions = new Set(settings.trackerExceptions || []);
+                    if (e.target.checked) exceptions.add(currentSiteOrigin);
+                    else exceptions.delete(currentSiteOrigin);
+                    setSettings({...settings, trackerExceptions: Array.from(exceptions)});
+                  }}
+                />
+              </label>
+              {currentSiteOrigin && <div style={{ marginTop: '8px', fontSize: '10px', color: '#888', wordBreak: 'break-all' }}>{currentSiteOrigin}</div>}
             </div>
           )}
         </div>

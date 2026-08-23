@@ -31,6 +31,10 @@ jobs:
         working-directory: app
         run: npm run build
 
+      - name: Test tracker matching rules
+        working-directory: app
+        run: npm run test:tracker
+
       - name: Check Electron-side JavaScript
         working-directory: app
         shell: bash

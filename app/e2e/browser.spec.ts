@@ -55,6 +55,24 @@ test.describe('browser shell', () => {
     await expect(appPage.getByText('Homepage URL', { exact: true })).toBeVisible();
   });
 
+  test('shows tracker protection controls for the current site', async ({ appPage }) => {
+    const addressInput = appPage.getByTestId('address-input');
+    await addressInput.fill('https://example.com');
+    await addressInput.press('Enter');
+    await expect(addressInput).toHaveValue(/^https:\/\/example\.com\/?$/);
+
+    await appPage.getByTestId('shields-button').click();
+    await expect(appPage.getByTestId('shields-popup')).toBeVisible();
+    await expect(appPage.getByTestId('global-shields-toggle')).toBeChecked();
+    const siteToggle = appPage.getByTestId('site-shields-toggle');
+    await expect(siteToggle).toBeEnabled();
+    await expect(siteToggle).not.toBeChecked();
+    await siteToggle.check();
+    await expect(siteToggle).toBeChecked();
+    await siteToggle.uncheck();
+    await expect(siteToggle).not.toBeChecked();
+  });
+
   test('shows the per-site permission manager for a fresh profile', async ({ appPage }) => {
     await appPage.getByTestId('menu-button').click();
     await appPage.getByText('Settings', { exact: true }).click();
