@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
 import * as pdfjsLib from 'pdfjs-dist';
+import AnnotationLayer from './AnnotationLayer';
 // The workerSrc is needed for pdf.js to run in the background
 // @ts-ignore
 import workerUrl from 'pdfjs-dist/build/pdf.worker.mjs?url';
@@ -7,15 +8,18 @@ pdfjsLib.GlobalWorkerOptions.workerSrc = workerUrl;
 
 interface PdfViewerProps {
   url: string;
+  privateMode?: boolean;
+  annotationMode?: boolean;
 }
 
-const PdfViewer: React.FC<PdfViewerProps> = ({ url }) => {
+const PdfViewer: React.FC<PdfViewerProps> = ({ url, privateMode = false, annotationMode = false }) => {
   const [pdfDoc, setPdfDoc] = useState<any>(null);
   const [pageNum, setPageNum] = useState(1);
   const [numPages, setNumPages] = useState(0);
   const [zoom, setZoom] = useState(1.0);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [renderedSize, setRenderedSize] = useState({ width: 0, height: 0 });
 
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const renderTaskRef = useRef<any>(null);
@@ -91,6 +95,7 @@ const PdfViewer: React.FC<PdfViewerProps> = ({ url }) => {
 
         canvas.height = viewport.height;
         canvas.width = viewport.width;
+        setRenderedSize({ width: viewport.width, height: viewport.height });
 
         const renderContext = {
           canvasContext: context,
@@ -175,8 +180,19 @@ const PdfViewer: React.FC<PdfViewerProps> = ({ url }) => {
       </div>
 
       {/* PDF Canvas Container */}
-      <div style={{ flex: 1, overflow: 'auto', display: 'flex', justifyContent: 'center', padding: '20px' }}>
-        <canvas ref={canvasRef} style={{ border: '1px solid var(--border-color)', boxShadow: '0 4px 6px rgba(0,0,0,0.1)' }} />
+      <div className="pdf-viewer-scroll" style={{ flex: 1, overflow: 'auto', display: 'flex', justifyContent: 'center', padding: '20px' }}>
+        <div className="pdf-page-shell" style={{ width: renderedSize.width || 'auto', height: renderedSize.height || 'auto' }}>
+          <canvas ref={canvasRef} className="pdf-page-canvas" style={{ border: '1px solid var(--border-color)', boxShadow: '0 4px 6px rgba(0,0,0,0.1)' }} />
+          {annotationMode && renderedSize.width > 0 && renderedSize.height > 0 && (
+            <AnnotationLayer
+              documentKey={`${url}#page=${pageNum}`}
+              width={renderedSize.width}
+              height={renderedSize.height}
+              privateMode={privateMode}
+              className="pdf-annotation-layer"
+            />
+          )}
+        </div>
       </div>
     </div>
   );

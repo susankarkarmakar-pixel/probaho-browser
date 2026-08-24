@@ -5,7 +5,7 @@ import TabCard from './TabCard';
 import WebPane from './WebPane';
 import {
   ArrowLeft, ArrowRight, RotateCw, Home, Plus,
-  Lock, X, Square, Minus, Maximize2, Search, Star, Bookmark, Menu, History, ZoomIn, FileCode, Printer, LogOut, Info, Download, Folder, Settings, ChevronUp, ChevronDown, EyeOff, Eye, Shield, BookOpen, Volume2, VolumeX, Globe, BookPlus, PictureInPicture, Share2, MessageSquare, Music, MessageCircle, Library, Columns, PanelRight, Copy, Pin, FolderPlus, FolderMinus, Trash2, Moon, Sun, Puzzle, Power, Pause, Play, CheckCircle2, AlertCircle, FileText, SlidersHorizontal, ShieldCheck, ShieldAlert
+  Lock, X, Square, Minus, Maximize2, Search, Star, Bookmark, Menu, History, ZoomIn, FileCode, Printer, LogOut, Info, Download, Folder, Settings, ChevronUp, ChevronDown, EyeOff, Eye, Shield, BookOpen, Volume2, VolumeX, Globe, BookPlus, PictureInPicture, Share2, MessageSquare, Music, MessageCircle, Library, Columns, PanelRight, Copy, Pin, FolderPlus, FolderMinus, Trash2, Moon, Sun, Puzzle, Power, Pause, Play, CheckCircle2, AlertCircle, FileText, SlidersHorizontal, ShieldCheck, ShieldAlert, PenLine
 } from 'lucide-react';
 
 interface DownloadItem {
@@ -495,6 +495,7 @@ function App() {
   const [showMenu, setShowMenu] = useState(false);
   const [showExtensions, setShowExtensions] = useState(false);
   const [showAbout, setShowAbout] = useState(false);
+  const [annotationMode, setAnnotationMode] = useState(false);
   const [showAutocomplete, setShowAutocomplete] = useState(false);
   const [showShields, setShowShields] = useState(false);
   const [showMediaControls, setShowMediaControls] = useState(false);
@@ -2432,6 +2433,9 @@ function App() {
             </section>
           )}
         </div>
+        <button className={`nav-btn annotation-toggle ${annotationMode ? 'active' : ''}`} type="button" data-testid="annotation-button" aria-label={annotationMode ? 'Close annotation tools' : 'Open annotation tools'} aria-pressed={annotationMode} title={annotationMode ? 'Close annotation tools' : 'Annotate page'} disabled={!targetedTab || targetedTab.url.startsWith('probaho://')} onClick={() => setAnnotationMode(prev => !prev)}>
+          <PenLine size={16} />
+        </button>
         <button className="nav-btn" type="button" aria-label="Add to reading list" title="Add to reading list" onClick={() => {
           const wv = webviewRefs.current[targetedTabId];
           if(wv) {
@@ -3703,6 +3707,7 @@ function App() {
             focusedPane={focusedPane}
             onFocusPane={setFocusedPane}
             onWebviewRef={handleWebviewRef}
+            annotationMode={annotationMode}
             onRetry={() => retryTab(tab)}
             onHome={() => recoverTabHome(tab)}
           />
@@ -3715,7 +3720,7 @@ function App() {
               borderRight: tab.id === activeTabId && splitTabId ? '2px solid var(--border-color)' : 'none',
               boxShadow: focusedPane === 'main' && tab.id === activeTabId && splitTabId ? 'inset 0 0 0 2px var(--primary-color)' : (focusedPane === 'split' && tab.id === splitTabId ? 'inset 0 0 0 2px var(--primary-color)' : 'none')
            }} onClick={() => { if (splitTabId) setFocusedPane(tab.id === activeTabId ? 'main' : 'split'); }}>
-              <PdfViewer url={tab.url} />
+              <PdfViewer url={tab.url} privateMode={Boolean(tab.isPrivate)} annotationMode={annotationMode} />
            </div>
         ))}
 

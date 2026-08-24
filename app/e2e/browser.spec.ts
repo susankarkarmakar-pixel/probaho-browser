@@ -41,6 +41,22 @@ test.describe('browser shell', () => {
     await expect(controls).toHaveCSS('top', '0px');
   });
 
+  test('opens annotation tools for a web page', async ({ appPage }) => {
+    const addressInput = appPage.getByTestId('address-input');
+    await addressInput.fill('https://example.com');
+    await addressInput.press('Enter');
+    const annotationButton = appPage.getByTestId('annotation-button');
+    await expect(annotationButton).toBeEnabled();
+    await annotationButton.click();
+    await expect(appPage.getByTestId('annotation-layer')).toBeVisible();
+    await expect(appPage.getByTestId('annotation-toolbar')).toBeVisible();
+    await expect(appPage.getByRole('button', { name: 'Highlight' })).toBeVisible();
+    await expect(appPage.getByRole('button', { name: 'Draw mark' })).toBeVisible();
+    await expect(appPage.getByRole('button', { name: 'Add text note' })).toBeVisible();
+    await annotationButton.click();
+    await expect(appPage.getByTestId('annotation-layer')).not.toBeVisible();
+  });
+
   test('opens the Chrome-style Extensions manager from the toolbar', async ({ appPage }) => {
     const extensionsButton = appPage.getByTestId('extensions-button');
     await expect(extensionsButton).toBeVisible();

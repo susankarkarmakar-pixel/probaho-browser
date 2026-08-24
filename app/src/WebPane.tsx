@@ -1,5 +1,6 @@
 import React from 'react';
 import { AlertCircle, Home, RotateCw } from 'lucide-react';
+import AnnotationLayer from './AnnotationLayer';
 
 export type WebPaneModel = {
   id: string;
@@ -17,6 +18,7 @@ type WebPaneProps = {
   focusedPane: 'main' | 'split';
   onFocusPane: (pane: 'main' | 'split') => void;
   onWebviewRef: (id: string, element: any, initialUrl: string) => void;
+  annotationMode?: boolean;
   onRetry: (tab: WebPaneModel) => void;
   onHome: (tab: WebPaneModel) => void;
 };
@@ -28,6 +30,7 @@ const WebPane = React.memo(function WebPane({
   focusedPane,
   onFocusPane,
   onWebviewRef,
+  annotationMode = false,
   onRetry,
   onHome
 }: WebPaneProps) {
@@ -55,6 +58,13 @@ const WebPane = React.memo(function WebPane({
         partition={tab.isPrivate ? `private-${tab.id}` : undefined}
         style={{ flex: 1, border: 'none', width: '100%', height: '100%' }}
       />
+      {annotationMode && (
+        <AnnotationLayer
+          documentKey={`${tab.url}#web`}
+          privateMode={Boolean(tab.isPrivate)}
+          className="web-annotation-layer"
+        />
+      )}
       {tab.loading && !tab.loadError && (isActive || isSplit) && (
         <div className="page-loading-overlay" data-testid={`loading-overlay-${tab.id}`} role="status" aria-live="polite">
           <div className="page-loading-card">

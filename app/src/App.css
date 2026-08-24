@@ -5302,3 +5302,150 @@ body.theme-light .vertical-tabs-list .vertical-tab.active {
     transition: none;
   }
 }
+
+
+/* Shared PDF/web annotation surfaces */
+.pdf-page-shell {
+  position: relative;
+  flex: 0 0 auto;
+  line-height: 0;
+}
+
+.pdf-page-canvas {
+  display: block;
+}
+
+.annotation-layer {
+  position: absolute;
+  inset: 0;
+  z-index: 30;
+  pointer-events: none;
+}
+
+.annotation-canvas {
+  position: absolute;
+  inset: 0;
+  display: block;
+  pointer-events: none;
+}
+
+.annotation-canvas.is-active {
+  cursor: crosshair;
+}
+
+.annotation-toolbar {
+  position: absolute;
+  top: 12px;
+  left: 50%;
+  z-index: 40;
+  display: flex;
+  align-items: center;
+  gap: 3px;
+  min-height: 38px;
+  padding: 4px;
+  border: 1px solid var(--border-color);
+  border-radius: 9px;
+  background: color-mix(in srgb, var(--surface-raised) 92%, transparent);
+  box-shadow: var(--shadow-elevated);
+  -webkit-backdrop-filter: blur(18px) saturate(145%);
+  backdrop-filter: blur(18px) saturate(145%);
+  pointer-events: auto;
+  transform: translateX(-50%);
+}
+
+.annotation-toolbar button,
+.annotation-color {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  box-sizing: border-box;
+  border: 1px solid transparent;
+  border-radius: 5px;
+  background: transparent;
+  color: var(--text-muted);
+  cursor: pointer;
+}
+
+.annotation-toolbar button:hover:not(:disabled),
+.annotation-toolbar button:focus-visible,
+.annotation-toolbar button.is-active,
+.annotation-color:hover,
+.annotation-color:focus-within {
+  border-color: color-mix(in srgb, var(--primary-color) 40%, var(--border-color));
+  background: color-mix(in srgb, var(--primary-color) 14%, var(--surface-color));
+  color: var(--primary-hover);
+  outline: none;
+}
+
+.annotation-toolbar button:disabled {
+  cursor: not-allowed;
+  opacity: 0.38;
+}
+
+.annotation-color {
+  position: relative;
+  overflow: hidden;
+  padding: 4px;
+}
+
+.annotation-color::after {
+  position: absolute;
+  inset: 5px;
+  border-radius: 3px;
+  background: var(--annotation-color, #facc15);
+  content: '';
+  pointer-events: none;
+}
+
+.annotation-color input {
+  width: 100%;
+  height: 100%;
+  opacity: 0;
+  cursor: pointer;
+}
+
+.annotation-toolbar-divider {
+  width: 1px;
+  height: 20px;
+  margin: 0 3px;
+  background: var(--border-subtle);
+}
+
+.web-annotation-layer {
+  inset: 0;
+}
+
+.web-annotation-layer .annotation-toolbar {
+  top: 14px;
+}
+
+body.theme-light .annotation-toolbar {
+  background: rgba(255, 255, 255, 0.90);
+  border-color: #d1d5db;
+  box-shadow: 0 16px 36px rgba(15, 23, 42, 0.16);
+}
+
+@media (max-width: 760px) {
+  .annotation-toolbar {
+    max-width: calc(100% - 20px);
+    overflow-x: auto;
+    transform: none;
+    left: 10px;
+  }
+}
+
+@media (prefers-reduced-transparency: reduce) {
+  .annotation-toolbar {
+    -webkit-backdrop-filter: none;
+    backdrop-filter: none;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .annotation-toolbar button,
+  .annotation-color {
+    transition: none;
+  }
+}
