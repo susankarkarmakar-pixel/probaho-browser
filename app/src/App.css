@@ -4738,3 +4738,152 @@ body.theme-light .bookmarks-panel {
 .download-manager {
   z-index: 1400;
 }
+
+
+/* Windows 11-inspired Mica backdrop treatment with graceful fallback */
+:root {
+  --mica-tint: rgba(255, 255, 255, 0.72);
+  --mica-surface: rgba(255, 255, 255, 0.62);
+  --mica-surface-strong: rgba(255, 255, 255, 0.84);
+  --mica-border: rgba(148, 163, 184, 0.30);
+  --mica-shadow: 0 18px 46px rgba(15, 23, 42, 0.13);
+}
+
+.windows-titlebar,
+.windows-toolbar,
+.window-controls,
+.utility-rail {
+  background-color: var(--mica-surface);
+  background-image: linear-gradient(135deg, var(--mica-tint), rgba(224, 231, 255, 0.28) 52%, rgba(207, 250, 254, 0.22));
+  -webkit-backdrop-filter: blur(24px) saturate(145%);
+  backdrop-filter: blur(24px) saturate(145%);
+}
+
+.windows-titlebar,
+.windows-toolbar {
+  border-color: var(--mica-border);
+}
+
+.windows-titlebar {
+  box-shadow: inset 0 -1px 0 rgba(255, 255, 255, 0.42);
+}
+
+.windows-toolbar {
+  box-shadow: inset 0 -1px 0 rgba(255, 255, 255, 0.38), 0 4px 18px rgba(15, 23, 42, 0.045);
+}
+
+.windows-titlebar .tab.active {
+  background: var(--mica-surface-strong);
+  -webkit-backdrop-filter: blur(18px) saturate(135%);
+  backdrop-filter: blur(18px) saturate(135%);
+}
+
+.windows-toolbar .address-bar-container,
+.windows-toolbar .nav-buttons {
+  background: rgba(255, 255, 255, 0.42);
+  -webkit-backdrop-filter: blur(16px) saturate(135%);
+  backdrop-filter: blur(16px) saturate(135%);
+}
+
+.menu-panel,
+.overflow-menu,
+.extensions-popout,
+.downloads-popout,
+.bookmarks-panel,
+.settings-modal,
+.shields-popup,
+.command-palette {
+  -webkit-backdrop-filter: blur(28px) saturate(150%);
+  backdrop-filter: blur(28px) saturate(150%);
+  box-shadow: var(--mica-shadow);
+}
+
+body:not(.theme-light) {
+  --mica-tint: rgba(15, 23, 42, 0.72);
+  --mica-surface: rgba(15, 23, 42, 0.70);
+  --mica-surface-strong: rgba(30, 41, 59, 0.86);
+  --mica-border: rgba(148, 163, 184, 0.19);
+  --mica-shadow: 0 18px 46px rgba(0, 0, 0, 0.38);
+}
+
+body:not(.theme-light) .windows-titlebar,
+body:not(.theme-light) .windows-toolbar,
+body:not(.theme-light) .window-controls,
+body:not(.theme-light) .utility-rail {
+  background-image: linear-gradient(135deg, rgba(30, 27, 75, 0.72), rgba(15, 23, 42, 0.82) 52%, rgba(8, 47, 73, 0.48));
+}
+
+body:not(.theme-light) .windows-toolbar .address-bar-container,
+body:not(.theme-light) .windows-toolbar .nav-buttons {
+  background: rgba(15, 23, 42, 0.52);
+}
+
+body.theme-light .windows-titlebar,
+body.theme-light .windows-toolbar,
+body.theme-light .window-controls,
+body.theme-light .utility-rail {
+  background-color: rgba(255, 255, 255, 0.68);
+}
+
+@supports not ((backdrop-filter: blur(1px))) {
+  .windows-titlebar,
+  .windows-toolbar,
+  .window-controls,
+  .utility-rail,
+  .windows-titlebar .tab.active,
+  .windows-toolbar .address-bar-container,
+  .windows-toolbar .nav-buttons,
+  .menu-panel,
+  .overflow-menu,
+  .extensions-popout,
+  .downloads-popout,
+  .bookmarks-panel,
+  .settings-modal,
+  .shields-popup,
+  .command-palette {
+    -webkit-backdrop-filter: none;
+    backdrop-filter: none;
+  }
+
+  body.theme-light .windows-titlebar,
+  body.theme-light .windows-toolbar,
+  body.theme-light .window-controls,
+  body.theme-light .utility-rail {
+    background: #ffffff;
+  }
+
+  body:not(.theme-light) .windows-titlebar,
+  body:not(.theme-light) .windows-toolbar,
+  body:not(.theme-light) .window-controls,
+  body:not(.theme-light) .utility-rail {
+    background: #141923;
+  }
+}
+
+@media (prefers-reduced-transparency: reduce) {
+  .windows-titlebar,
+  .windows-toolbar,
+  .window-controls,
+  .utility-rail,
+  .windows-titlebar .tab.active,
+  .windows-toolbar .address-bar-container,
+  .windows-toolbar .nav-buttons,
+  .menu-panel,
+  .overflow-menu,
+  .extensions-popout,
+  .downloads-popout,
+  .bookmarks-panel,
+  .settings-modal,
+  .shields-popup,
+  .command-palette {
+    -webkit-backdrop-filter: none;
+    backdrop-filter: none;
+  }
+}
+
+
+/* Preserve toolbar popover interactivity when backdrop-filter creates a stacking context */
+.windows-toolbar {
+  position: relative;
+  z-index: 1200;
+}
