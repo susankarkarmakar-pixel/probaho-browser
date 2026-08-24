@@ -440,8 +440,8 @@ app.whenReady().then(async () => {
 
   ipcMain.handle('allow-unsafe-navigation', (event, url) => {
     requireTrustedAppSender(event);
-    if (typeof rawUrl !== 'string' || !isAllowedNavigationUrl(rawUrl)) return false;
-    const key = `${event.sender.id}:${rawUrl}`;
+    if (typeof url !== 'string' || !isAllowedNavigationUrl(url)) return false;
+    const key = `${event.sender.id}:${url}`;
     unsafeNavigationOverrides.add(key);
     return true;
   });
