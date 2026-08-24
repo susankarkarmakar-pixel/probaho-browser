@@ -84,18 +84,24 @@ jobs:
             artifact_name: probaho-browser-windows
             artifact_path: |
               app/release/*.exe
+              app/release/*.yml
+              app/release/*.blockmap
               app/release/SHA256SUMS-*.txt
           - os: macos-latest
             build_cmd: npm run dist:mac -- --publish never
             artifact_name: probaho-browser-macos
             artifact_path: |
               app/release/*.dmg
+              app/release/*.yml
+              app/release/*.blockmap
               app/release/SHA256SUMS-*.txt
           - os: macos-latest
             build_cmd: npm run dist:mac -- --x64 --publish never
             artifact_name: probaho-browser-macos-x64
             artifact_path: |
               app/release/*.dmg
+              app/release/*.yml
+              app/release/*.blockmap
               app/release/SHA256SUMS-*.txt
           - os: ubuntu-latest
             build_cmd: npm run dist:linux
@@ -104,6 +110,8 @@ jobs:
               app/release/*.AppImage
               app/release/*.deb
               app/release/*.tar.gz
+              app/release/*.yml
+              app/release/*.blockmap
               app/release/SHA256SUMS-*.txt
 
     runs-on: ${{ matrix.os }}
