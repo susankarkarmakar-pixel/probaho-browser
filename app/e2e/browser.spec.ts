@@ -11,6 +11,22 @@ test.describe('browser shell', () => {
     await expect(appPage.locator('.new-tab-page')).toBeVisible();
   });
 
+  test('keeps the core toolbar discoverable and accessible', async ({ appPage }) => {
+    const toolbar = appPage.getByTestId('browser-toolbar');
+    await expect(toolbar).toBeVisible();
+    await expect(toolbar.getByTestId('address-input')).toBeVisible();
+    await expect(toolbar.getByRole('button', { name: 'Go back' })).toBeVisible();
+    await expect(toolbar.getByRole('button', { name: 'Go forward' })).toBeVisible();
+    await expect(toolbar.getByRole('button', { name: 'Go home' })).toBeVisible();
+    await expect(toolbar.getByRole('button', { name: 'Open split view' })).toHaveAttribute('aria-pressed', 'false');
+    await expect(toolbar.getByRole('button', { name: 'Picture in picture' })).toBeVisible();
+    await expect(toolbar.getByRole('button', { name: 'Add to reading list' })).toBeVisible();
+    await expect(toolbar.getByRole('button', { name: 'Share current page' })).toBeVisible();
+    await expect(toolbar.getByTestId('shields-button')).toBeVisible();
+    await expect(toolbar.getByTestId('downloads-button')).toBeVisible();
+    await expect(toolbar.getByTestId('menu-button')).toBeVisible();
+  });
+
   test('exposes a sanitized performance snapshot', async ({ appPage }) => {
     const snapshot = await appPage.evaluate(() => window.electronAPI.getPerformanceSnapshot?.());
     expect(snapshot).toBeTruthy();

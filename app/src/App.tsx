@@ -1895,7 +1895,7 @@ function App() {
           <button className="nav-btn" aria-label="Go home" title="Go home" onClick={goHome}>
             <Home size={16} />
           </button>
-          <button className="nav-btn" title="Split View" onClick={() => {
+          <button className="nav-btn" type="button" aria-label={splitTabId ? 'Close split view' : 'Open split view'} aria-pressed={Boolean(splitTabId)} title={splitTabId ? 'Close split view' : 'Open split view'} onClick={() => {
             if (splitTabId) {
               setSplitTabId(null);
               setFocusedPane('main');
@@ -1914,7 +1914,7 @@ function App() {
           }}>
             {splitTabId ? <PanelRight size={16} /> : <Columns size={16} />}
           </button>
-          <button className="nav-btn" title="Picture in Picture" onClick={() => {
+          <button className="nav-btn" type="button" aria-label="Picture in picture" title="Picture in picture" onClick={() => {
             const wv = webviewRefs.current[targetedTabId];
             if(wv) {
               wv.executeJavaScript("const v = document.querySelector('video'); if (v) { v.requestPictureInPicture(); } else { alert('No video found on this page.'); }", true);
@@ -2148,7 +2148,7 @@ function App() {
           }}>
             <BookOpen size={16} color="currentColor" />
           </button>
-          <button className="bookmark-toggle-btn" type="button" onClick={toggleBookmark}>
+          <button className="bookmark-toggle-btn" type="button" aria-label={isCurrentBookmarked ? 'Remove bookmark' : 'Add bookmark'} title={isCurrentBookmarked ? 'Remove bookmark' : 'Add bookmark'} onClick={toggleBookmark}>
             <Star size={16} fill={isCurrentBookmarked ? "#f5d44f" : "none"} color={isCurrentBookmarked ? "#f5d44f" : "currentColor"} />
           </button>
         </form>
@@ -2208,7 +2208,7 @@ function App() {
             </section>
           )}
         </div>
-        <button className="nav-btn" title="Add to Reading List" onClick={() => {
+        <button className="nav-btn" type="button" aria-label="Add to reading list" title="Add to reading list" onClick={() => {
           const wv = webviewRefs.current[targetedTabId];
           if(wv) {
             wv.executeJavaScript("document.body.innerText").then((content: string) => {
@@ -2219,10 +2219,10 @@ function App() {
         }}>
           <BookPlus size={16} />
         </button>
-        <button className="nav-btn" onClick={() => { setShowMenu(false); setShowHistory(false); setShowDownloads(false); setShowReadingList(false); setShowBookmarks(!showBookmarks); }}>
+        <button className="nav-btn" type="button" aria-label={showBookmarks ? 'Close bookmarks' : 'Open bookmarks'} aria-pressed={showBookmarks} title={showBookmarks ? 'Close bookmarks' : 'Open bookmarks'} onClick={() => { setShowMenu(false); setShowHistory(false); setShowDownloads(false); setShowReadingList(false); setShowBookmarks(!showBookmarks); }}>
           <Bookmark size={16} />
         </button>
-        <button className="nav-btn" title="Share" onClick={() => {
+        <button className="nav-btn" type="button" aria-label="Share current page" title="Share current page" onClick={() => {
             const urlToShare = targetedTab?.url || 'probaho://newtab';
             if (urlToShare !== 'probaho://newtab' && urlToShare !== 'about:blank') {
                navigator.clipboard.writeText(urlToShare).then(() => {
@@ -2234,7 +2234,7 @@ function App() {
         </button>
 
         <div style={{ position: 'relative' }}>
-          <button className="nav-btn" title="Global Media Controls" onClick={(e) => { e.stopPropagation(); setShowBookmarks(false); setShowHistory(false); setShowMenu(false); setShowReadingList(false); setShowDownloads(false); setShowShields(false); setShowMediaControls(!showMediaControls); }}>
+          <button className="nav-btn" type="button" aria-label="Global media controls" title="Global media controls" aria-pressed={showMediaControls} onClick={(e) => { e.stopPropagation(); setShowBookmarks(false); setShowHistory(false); setShowMenu(false); setShowReadingList(false); setShowDownloads(false); setShowShields(false); setShowMediaControls(!showMediaControls); }}>
             <Music size={16} />
           </button>
           {showMediaControls && (
