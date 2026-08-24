@@ -5,7 +5,7 @@ import TabCard from './TabCard';
 import WebPane from './WebPane';
 import {
   ArrowLeft, ArrowRight, RotateCw, Home, Plus,
-  Lock, X, Square, Search, Star, Bookmark, Menu, History, ZoomIn, FileCode, Printer, LogOut, Info, Download, Folder, Settings, ChevronUp, ChevronDown, EyeOff, Eye, Shield, BookOpen, Volume2, VolumeX, Globe, BookPlus, PictureInPicture, Share2, MessageSquare, Music, MessageCircle, Library, Columns, PanelRight, Copy, Pin, FolderPlus, FolderMinus, Trash2, Moon, Sun, Puzzle, Power, Pause, Play, CheckCircle2, AlertCircle, FileText, SlidersHorizontal, ShieldCheck, ShieldAlert
+  Lock, X, Square, Minus, Maximize2, Search, Star, Bookmark, Menu, History, ZoomIn, FileCode, Printer, LogOut, Info, Download, Folder, Settings, ChevronUp, ChevronDown, EyeOff, Eye, Shield, BookOpen, Volume2, VolumeX, Globe, BookPlus, PictureInPicture, Share2, MessageSquare, Music, MessageCircle, Library, Columns, PanelRight, Copy, Pin, FolderPlus, FolderMinus, Trash2, Moon, Sun, Puzzle, Power, Pause, Play, CheckCircle2, AlertCircle, FileText, SlidersHorizontal, ShieldCheck, ShieldAlert
 } from 'lucide-react';
 
 interface DownloadItem {
@@ -1981,10 +1981,16 @@ function App() {
       </div>
 
       {/* Window controls */}
-      <div className="window-controls" style={{ position: 'absolute', top: 0, right: 0, zIndex: 100 }}>
-        <button className="control-btn" onClick={() => window.electronAPI?.minimize()} />
-        <button className="control-btn" onClick={() => window.electronAPI?.maximize()} />
-        <button className="control-btn close" onClick={() => window.electronAPI?.close()} />
+      <div className="window-controls" aria-label="Window controls">
+        <button className="control-btn minimize" data-testid="minimize-window-button" type="button" aria-label="Minimize window" title="Minimize window" onClick={() => window.electronAPI?.minimize()}>
+          <Minus size={15} strokeWidth={2.2} />
+        </button>
+        <button className="control-btn maximize" data-testid="maximize-window-button" type="button" aria-label="Maximize or restore window" title="Maximize or restore window" onClick={() => window.electronAPI?.maximize()}>
+          <Maximize2 size={14} strokeWidth={2} />
+        </button>
+        <button className="control-btn close" data-testid="close-window-button" type="button" aria-label="Close window" title="Close window" onClick={() => window.electronAPI?.close()}>
+          <X size={15} strokeWidth={2.1} />
+        </button>
       </div>
 
       {/* Toolbar */}

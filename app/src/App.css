@@ -4375,3 +4375,99 @@ body.theme-light .extensions-empty-icon {
     transition: none;
   }
 }
+
+
+/* Accessible Chrome/Windows-style window controls */
+.titlebar {
+  padding-right: 148px;
+}
+
+.window-controls {
+  display: flex;
+  align-items: stretch;
+  height: 42px;
+  margin-right: 0;
+  gap: 0;
+  -webkit-app-region: no-drag;
+}
+
+.window-controls .control-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 46px;
+  height: 42px;
+  min-width: 46px;
+  padding: 0;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  color: var(--text-muted);
+  cursor: pointer;
+  transition: background-color 0.16s ease, color 0.16s ease;
+}
+
+.window-controls .control-btn:hover {
+  opacity: 1;
+  background: color-mix(in srgb, var(--text-color) 9%, transparent);
+  color: var(--text-color);
+}
+
+.window-controls .control-btn.minimize:hover,
+.window-controls .control-btn.maximize:hover {
+  background: color-mix(in srgb, var(--primary-color) 16%, transparent);
+  color: var(--primary-hover);
+}
+
+.window-controls .control-btn.close:hover {
+  background: #dc2626;
+  color: #fff;
+}
+
+.window-controls .control-btn:focus-visible {
+  z-index: 1;
+  outline: 2px solid var(--accent-cyan);
+  outline-offset: -4px;
+}
+
+body.theme-light .window-controls .control-btn {
+  color: #64748b;
+}
+
+body.theme-light .window-controls .control-btn:hover {
+  background: #eef2f7;
+  color: #172033;
+}
+
+body.theme-light .window-controls .control-btn.minimize:hover,
+body.theme-light .window-controls .control-btn.maximize:hover {
+  background: #ede9fe;
+  color: #6d28d9;
+}
+
+body.theme-light .window-controls .control-btn.close:hover {
+  background: #ef4444;
+  color: #fff;
+}
+
+@media (max-width: 900px) {
+  .titlebar {
+    padding-right: 120px;
+  }
+
+  .window-controls,
+  .window-controls .control-btn {
+    height: 38px;
+  }
+
+  .window-controls .control-btn {
+    width: 40px;
+    min-width: 40px;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .window-controls .control-btn {
+    transition: none;
+  }
+}

@@ -27,6 +27,17 @@ test.describe('browser shell', () => {
     await expect(toolbar.getByTestId('menu-button')).toBeVisible();
   });
 
+  test('shows accessible minimize maximize and close window controls', async ({ appPage }) => {
+    const controls = appPage.locator('.window-controls');
+    await expect(controls).toBeVisible();
+    await expect(appPage.getByTestId('minimize-window-button')).toHaveAccessibleName('Minimize window');
+    await expect(appPage.getByTestId('maximize-window-button')).toHaveAccessibleName('Maximize or restore window');
+    await expect(appPage.getByTestId('close-window-button')).toHaveAccessibleName('Close window');
+    await expect(appPage.getByTestId('minimize-window-button')).toHaveAttribute('title', 'Minimize window');
+    await expect(appPage.getByTestId('maximize-window-button')).toHaveAttribute('title', 'Maximize or restore window');
+    await expect(appPage.getByTestId('close-window-button')).toHaveAttribute('title', 'Close window');
+  });
+
   test('opens the Chrome-style Extensions manager from the toolbar', async ({ appPage }) => {
     const extensionsButton = appPage.getByTestId('extensions-button');
     await expect(extensionsButton).toBeVisible();
