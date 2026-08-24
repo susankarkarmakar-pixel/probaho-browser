@@ -62,6 +62,12 @@ type ExtensionRecord = {
   loaded: boolean;
 };
 
+type OmniboxSuggestion = {
+  title: string;
+  url: string;
+  kind: 'bookmark' | 'history' | 'search';
+};
+
 type PluginRecord = {
   id: string;
   type: 'command' | 'panel';
@@ -103,6 +109,54 @@ interface Tab {
 }
 
 const DEFAULT_URL = 'https://www.google.com';
+
+type AddressClassification =
+  | { kind: 'empty' }
+  | { kind: 'url'; url: string }
+  | { kind: 'search'; query: string }
+  | { kind: 'unsupported'; reason: string };
+
+function classifyAddressInput(rawValue: string): AddressClassification {
+  const value = rawValue.trim();
+  if (!value) return { kind: 'empty' };
+
+  if (/^localhost(?::\d+)?(?:[/?#].*)?$/i.test(value)) {
+    return { kind: 'url', url: `https://${value}` };
+  }
+
+  const protocolMatch = value.match(/^([a-z][a-z0-9+.-]*):/i);
+  if (protocolMatch) {
+    const protocol = protocolMatch[1].toLowerCase();
+    if (protocol === 'http' || protocol === 'https' || protocol === 'file' || protocol === 'view-source') {
+      return { kind: 'url', url: value };
+    }
+    if (protocol === 'about' && value.toLowerCase() === 'about:blank') {
+      return { kind: 'url', url: 'about:blank' };
+    }
+    return { kind: 'unsupported', reason: `${protocol}: links are blocked for your safety. Use an HTTP or HTTPS URL instead.` };
+  }
+
+  if (value.startsWith('//')) return { kind: 'url', url: `https:${value}` };
+
+  const looksLikeHost = !/[\s]/.test(value) && (
+    value.toLowerCase().startsWith('localhost') ||
+    /^\d{1,3}(?:\.\d{1,3}){3}(?::\d+)?(?:[/?#].*)?$/.test(value) ||
+    /^\[[0-9a-f:]+\](?::\d+)?(?:[/?#].*)?$/i.test(value) ||
+    /^(?:www\.)?[^/?#]+\.[^/?#]+(?:[/?#].*)?$/i.test(value)
+  );
+  if (looksLikeHost) return { kind: 'url', url: `https://${value}` };
+
+  return { kind: 'search', query: value };
+}
+
+function buildSearchUrl(query: string, engine: string): string {
+  const encodedQuery = encodeURIComponent(query.trim());
+  if (engine === 'Bing') return `https://www.bing.com/search?q=${encodedQuery}`;
+  if (engine === 'DuckDuckGo') return `https://duckduckgo.com/?q=${encodedQuery}`;
+  if (engine === 'Yahoo') return `https://search.yahoo.com/search?p=${encodedQuery}`;
+  if (engine === 'Ecosia') return `https://www.ecosia.org/search?q=${encodedQuery}`;
+  return `https://www.google.com/search?q=${encodedQuery}`;
+}
 
 function formatDownloadBytes(bytes: number): string {
   if (!Number.isFinite(bytes) || bytes <= 0) return '0 B';
@@ -440,7 +494,9 @@ function App() {
   const [showShields, setShowShields] = useState(false);
   const [showMediaControls, setShowMediaControls] = useState(false);
   const [showSiteInfo, setShowSiteInfo] = useState(false);
-  const [autocompleteSuggestions, setAutocompleteSuggestions] = useState<{title: string, url: string}[]>([]);
+  const [autocompleteSuggestions, setAutocompleteSuggestions] = useState<OmniboxSuggestion[]>([]);
+  const [omniboxSelectedIndex, setOmniboxSelectedIndex] = useState(0);
+  const [omniboxMessage, setOmniboxMessage] = useState<string | null>(null);
   const fetchTimeoutRef = useRef<NodeJS.Timeout | null>(null);
   const fetchAbortControllerRef = useRef<AbortController | null>(null);
   const [showCommandPalette, setShowCommandPalette] = useState(false);
@@ -1462,31 +1518,23 @@ function App() {
     }
   };
 
-  const navigate = (url: string) => {
-    if (!url) return;
-    console.log('navigate called with', url);
-    let finalUrl = url;
-    if (!url.startsWith('http://') && !url.startsWith('https://') && !url.startsWith('file://') && !url.startsWith('view-source:')) {
-      if (url.includes('.') && !url.includes(' ') && !url.startsWith('localhost')) {
-        finalUrl = `https://${url}`;
-      } else {
-        if (settings.defaultSearchEngine === 'Bing') {
-          finalUrl = `https://www.bing.com/search?q=${encodeURIComponent(url)}`;
-        } else if (settings.defaultSearchEngine === 'DuckDuckGo') {
-          finalUrl = `https://duckduckgo.com/?q=${encodeURIComponent(url)}`;
-        } else if (settings.defaultSearchEngine === 'Yahoo') {
-          finalUrl = `https://search.yahoo.com/search?p=${encodeURIComponent(url)}`;
-        } else if (settings.defaultSearchEngine === 'Ecosia') {
-          finalUrl = `https://www.ecosia.org/search?q=${encodeURIComponent(url)}`;
-        } else {
-          finalUrl = `https://www.google.com/search?q=${encodeURIComponent(url)}`;
-        }
-      }
+  const navigate = (rawUrl: string) => {
+    const classification = classifyAddressInput(rawUrl);
+    setShowAutocomplete(false);
+    setOmniboxSelectedIndex(0);
+    if (classification.kind === 'empty') return;
+    if (classification.kind === 'unsupported') {
+      setOmniboxMessage(classification.reason);
+      return;
     }
+    setOmniboxMessage(null);
+    const finalUrl = classification.kind === 'search'
+      ? buildSearchUrl(classification.query, settings.defaultSearchEngine)
+      : classification.url;
 
     updateTab(targetedTabId, { url: finalUrl, isPdf: false, loading: true, crashed: false, loadError: undefined });
 
-    if (finalUrl.toLowerCase().endsWith('.pdf')) {
+    if (finalUrl.toLowerCase().split('?')[0].split('#')[0].endsWith('.pdf')) {
       updateTab(targetedTabId, { url: finalUrl, isPdf: true, title: finalUrl.split('/').pop() || 'PDF Document' });
       setInputUrl(finalUrl);
       return;
@@ -1509,6 +1557,10 @@ function App() {
 
   const onSubmit = (e: React.FormEvent) => {
     e.preventDefault();
+    if (showAutocomplete && autocompleteSuggestions[omniboxSelectedIndex]) {
+      navigate(autocompleteSuggestions[omniboxSelectedIndex].url);
+      return;
+    }
     navigate(inputUrl);
   };
 
@@ -2089,87 +2141,94 @@ function App() {
             data-testid="address-input"
             type="text"
             value={inputUrl}
-            onChange={async (e) => {
-               const val = e.target.value;
-               setInputUrl(val);
+            placeholder="Search or enter web address"
+            enterKeyHint="go"
+            aria-label="Search or enter web address"
+            aria-autocomplete="list"
+            aria-controls="omnibox-suggestions"
+            aria-expanded={showAutocomplete}
+            onChange={(e) => {
+              const value = e.target.value;
+              setInputUrl(value);
+              setOmniboxMessage(null);
+              setOmniboxSelectedIndex(0);
+              if (fetchTimeoutRef.current) clearTimeout(fetchTimeoutRef.current);
+              if (fetchAbortControllerRef.current) fetchAbortControllerRef.current.abort();
 
-               if (val.trim().length > 0) {
-                 const lowerVal = val.toLowerCase();
-                 const matches: {title: string, url: string}[] = [];
-                 const seen = new Set();
+              const classification = classifyAddressInput(value);
+              if (classification.kind !== 'search') {
+                setAutocompleteSuggestions([]);
+                setShowAutocomplete(false);
+                if (classification.kind === 'unsupported') setOmniboxMessage(classification.reason);
+                return;
+              }
 
-                 // Search bookmarks
-                 bookmarks.forEach(b => {
-                   if (b.title.toLowerCase().includes(lowerVal) || b.url.toLowerCase().includes(lowerVal)) {
-                     if (!seen.has(b.url)) {
-                       matches.push(b);
-                       seen.add(b.url);
-                     }
-                   }
-                 });
-                 // Search history
-                 history.forEach(h => {
-                   if (h.title.toLowerCase().includes(lowerVal) || h.url.toLowerCase().includes(lowerVal)) {
-                     if (!seen.has(h.url)) {
-                       matches.push({ title: h.title, url: h.url });
-                       seen.add(h.url);
-                     }
-                   }
-                 });
+              const query = classification.query.toLowerCase();
+              const matches: OmniboxSuggestion[] = [];
+              const seen = new Set<string>();
+              bookmarks.forEach(bookmark => {
+                if (bookmark.title.toLowerCase().includes(query) || bookmark.url.toLowerCase().includes(query)) {
+                  if (!seen.has(bookmark.url)) {
+                    matches.push({ ...bookmark, kind: 'bookmark' });
+                    seen.add(bookmark.url);
+                  }
+                }
+              });
+              history.forEach(entry => {
+                if (entry.title.toLowerCase().includes(query) || entry.url.toLowerCase().includes(query)) {
+                  if (!seen.has(entry.url)) {
+                    matches.push({ title: entry.title, url: entry.url, kind: 'history' });
+                    seen.add(entry.url);
+                  }
+                }
+              });
 
-                 // Debounce and fetch live suggestions
-                 if (fetchTimeoutRef.current) clearTimeout(fetchTimeoutRef.current);
-                 if (fetchAbortControllerRef.current) fetchAbortControllerRef.current.abort();
+              setAutocompleteSuggestions(matches.slice(0, 8));
+              setShowAutocomplete(matches.length > 0);
+              if (query.length < 2 || !window.electronAPI?.fetchSuggestions) return;
 
-                 fetchTimeoutRef.current = setTimeout(async () => {
-                   if (window.electronAPI?.fetchSuggestions && !val.includes('://')) {
-                     try {
-                       const controller = new AbortController();
-                       fetchAbortControllerRef.current = controller;
-
-                       // Set initial matches (local only) so it appears fast
-                       setAutocompleteSuggestions(matches.slice(0, 8));
-                       setShowAutocomplete(matches.length > 0);
-
-                       const suggestions = await window.electronAPI.fetchSuggestions(val);
-
-                       if (controller.signal.aborted) return;
-
-                       suggestions.forEach((s: string) => {
-                         let suggestionUrl = `https://www.google.com/search?q=${encodeURIComponent(s)}`;
-                         if (settings.defaultSearchEngine === 'Bing') {
-                           suggestionUrl = `https://www.bing.com/search?q=${encodeURIComponent(s)}`;
-                         } else if (settings.defaultSearchEngine === 'DuckDuckGo') {
-                           suggestionUrl = `https://duckduckgo.com/?q=${encodeURIComponent(s)}`;
-                         } else if (settings.defaultSearchEngine === 'Yahoo') {
-                           suggestionUrl = `https://search.yahoo.com/search?p=${encodeURIComponent(s)}`;
-                         } else if (settings.defaultSearchEngine === 'Ecosia') {
-                           suggestionUrl = `https://www.ecosia.org/search?q=${encodeURIComponent(s)}`;
-                         }
-                         if (!seen.has(suggestionUrl)) {
-                           matches.push({ title: s, url: suggestionUrl });
-                           seen.add(suggestionUrl);
-                         }
-                       });
-
-                       setAutocompleteSuggestions(matches.slice(0, 8));
-                     } catch (err) {
-                       console.error('Failed to fetch suggestions', err);
-                     }
-                   }
-                 }, 150);
-
-                 // Immediately show local matches
-                 setAutocompleteSuggestions(matches.slice(0, 8)); // max 8 suggestions
-                 setShowAutocomplete(matches.length > 0);
-               } else {
-                 setShowAutocomplete(false);
-               }
+              fetchTimeoutRef.current = setTimeout(async () => {
+                try {
+                  const controller = new AbortController();
+                  fetchAbortControllerRef.current = controller;
+                  const suggestions = await window.electronAPI.fetchSuggestions!(classification.query);
+                  if (controller.signal.aborted) return;
+                  suggestions.forEach(suggestion => {
+                    const suggestionUrl = buildSearchUrl(suggestion, settings.defaultSearchEngine);
+                    const key = `search:${suggestionUrl}`;
+                    if (!seen.has(key)) {
+                      matches.push({ title: suggestion, url: suggestionUrl, kind: 'search' });
+                      seen.add(key);
+                    }
+                  });
+                  setAutocompleteSuggestions(matches.slice(0, 8));
+                  setShowAutocomplete(matches.length > 0);
+                  setOmniboxSelectedIndex(0);
+                } catch (error) {
+                  console.debug('Omnibox suggestions unavailable', error);
+                }
+              }, 180);
             }}
-            onFocus={(e) => e.target.select()}
+            onKeyDown={(e) => {
+              if (e.key === 'ArrowDown' && autocompleteSuggestions.length > 0) {
+                e.preventDefault();
+                setShowAutocomplete(true);
+                setOmniboxSelectedIndex(index => (index + 1) % autocompleteSuggestions.length);
+              } else if (e.key === 'ArrowUp' && autocompleteSuggestions.length > 0) {
+                e.preventDefault();
+                setShowAutocomplete(true);
+                setOmniboxSelectedIndex(index => (index - 1 + autocompleteSuggestions.length) % autocompleteSuggestions.length);
+              } else if (e.key === 'Escape') {
+                setShowAutocomplete(false);
+                setOmniboxMessage(null);
+              }
+            }}
+            onFocus={(e) => {
+              e.target.select();
+              if (autocompleteSuggestions.length > 0) setShowAutocomplete(true);
+            }}
             onBlur={() => {
-               // timeout so clicks on suggestions register before hiding
-               setTimeout(() => setShowAutocomplete(false), 200);
+              setTimeout(() => setShowAutocomplete(false), 180);
             }}
           />
 
@@ -2202,31 +2261,39 @@ function App() {
             </button>
           )}
 
-          {showAutocomplete && (
-             <div style={{
-                position: 'absolute', top: '100%', left: 0, right: 0,
-                background: 'var(--bg-color)', border: '1px solid var(--border-color)',
-                borderRadius: '0 0 8px 8px', zIndex: 100, boxShadow: '0 4px 12px rgba(0,0,0,0.1)',
-                maxHeight: '300px', overflowY: 'auto'
-             }}>
-                {autocompleteSuggestions.map((s, i) => (
-                   <div key={i} style={{
-                      padding: '8px 12px', cursor: 'pointer', display: 'flex', flexDirection: 'column',
-                      borderBottom: i < autocompleteSuggestions.length - 1 ? '1px solid var(--border-color)' : 'none'
-                   }}
-                   onMouseDown={(e) => {
-                      e.preventDefault(); // prevent input blur
-                      navigate(s.url);
-                      setShowAutocomplete(false);
-                   }}
-                   onMouseEnter={(e) => e.currentTarget.style.backgroundColor = 'var(--tab-bg)'}
-                   onMouseLeave={(e) => e.currentTarget.style.backgroundColor = 'transparent'}
-                   >
-                      <div style={{fontSize: '13px', fontWeight: 'bold', color: 'var(--text-color)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis'}}>{s.title}</div>
-                      <div style={{fontSize: '11px', color: '#888', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis'}}>{s.url}</div>
-                   </div>
-                ))}
-             </div>
+          {omniboxMessage && (
+            <div className="omnibox-feedback" data-testid="omnibox-feedback" role="status">
+              <ShieldAlert size={13} />
+              <span>{omniboxMessage}</span>
+            </div>
+          )}
+
+          {showAutocomplete && autocompleteSuggestions.length > 0 && (
+            <div className="omnibox-suggestions" id="omnibox-suggestions" data-testid="omnibox-suggestions" role="listbox" aria-label="Address suggestions">
+              {autocompleteSuggestions.map((suggestion, index) => (
+                <button
+                  key={`${suggestion.kind}-${suggestion.url}-${index}`}
+                  className={`omnibox-suggestion ${index === omniboxSelectedIndex ? 'is-selected' : ''}`}
+                  type="button"
+                  role="option"
+                  aria-selected={index === omniboxSelectedIndex}
+                  onMouseDown={(e) => {
+                    e.preventDefault();
+                    navigate(suggestion.url);
+                  }}
+                  onMouseEnter={() => setOmniboxSelectedIndex(index)}
+                >
+                  <span className="omnibox-suggestion-icon" aria-hidden="true">
+                    {suggestion.kind === 'bookmark' ? <Bookmark size={14} /> : suggestion.kind === 'history' ? <History size={14} /> : <Search size={14} />}
+                  </span>
+                  <span className="omnibox-suggestion-copy">
+                    <strong>{suggestion.title}</strong>
+                    <span>{suggestion.kind === 'search' ? `Search with ${settings.defaultSearchEngine}` : suggestion.url}</span>
+                  </span>
+                  <span className="omnibox-suggestion-kind">{suggestion.kind === 'bookmark' ? 'Saved' : suggestion.kind === 'history' ? 'History' : 'Search'}</span>
+                </button>
+              ))}
+            </div>
           )}
 
           <button className="bookmark-toggle-btn" type="button" title="Reader Mode" onClick={() => {

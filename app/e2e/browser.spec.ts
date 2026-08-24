@@ -166,6 +166,41 @@ test.describe('browser shell', () => {
     await expect(addressInput).toHaveValue(/^https:\/\/example\.com\/?$/);
   });
 
+  test('supports common web URL forms and search fallback', async ({ appPage }) => {
+    const addressInput = appPage.getByTestId('address-input');
+    await addressInput.fill('localhost:3000/dashboard');
+    await addressInput.press('Enter');
+    await expect(addressInput).toHaveValue('https://localhost:3000/dashboard');
+
+    await addressInput.fill('//example.com/docs?q=probaho#intro');
+    await addressInput.press('Enter');
+    await expect(addressInput).toHaveValue('https://example.com/docs?q=probaho#intro');
+
+    await addressInput.fill('probaho browser privacy');
+    await addressInput.press('Enter');
+    await expect(addressInput).toHaveValue('https://www.google.com/search?q=probaho%20browser%20privacy');
+  });
+
+  test('shows local omnibox suggestions and blocks unsafe schemes', async ({ appPage }) => {
+    await appPage.evaluate(() => {
+      localStorage.setItem('bookmarks', JSON.stringify([{ title: 'Probaho GitHub', url: 'https://github.com/probaho' }]));
+    });
+    await appPage.reload();
+    await appPage.getByTestId('browser-shell').waitFor();
+    const addressInput = appPage.getByTestId('address-input');
+    await addressInput.fill('github');
+    const suggestions = appPage.getByTestId('omnibox-suggestions');
+    await expect(suggestions).toBeVisible();
+    await expect(suggestions.getByRole('option').first()).toContainText('Probaho GitHub');
+    await addressInput.press('ArrowDown');
+    await expect(suggestions.getByRole('option').first()).toHaveAttribute('aria-selected', 'true');
+
+    await addressInput.fill('javascript:alert(1)');
+    await expect(appPage.getByTestId('omnibox-feedback')).toContainText('javascript: links are blocked');
+    await addressInput.press('Enter');
+    await expect(addressInput).toHaveValue('javascript:alert(1)');
+  });
+
   test('supports keyboard navigation in the Chrome-style overflow menu', async ({ appPage }) => {
     const menuButton = appPage.getByTestId('menu-button');
     await menuButton.click();
