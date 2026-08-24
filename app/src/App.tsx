@@ -225,7 +225,7 @@ function App() {
       return {
         defaultSearchEngine: 'Google',
         homepageUrl: 'probaho://newtab',
-        theme: 'dark',
+        theme: 'light',
         adBlockerEnabled: true,
         language: 'en' as Language,
         newTabBackgroundUrl: '',
@@ -250,7 +250,7 @@ function App() {
         const def = {
           defaultSearchEngine: 'Google',
           homepageUrl: 'probaho://newtab',
-          theme: 'dark',
+          theme: 'light',
           adBlockerEnabled: true,
           language: 'en' as Language,
           newTabBackgroundUrl: '',
@@ -273,7 +273,7 @@ function App() {
     const def = {
       defaultSearchEngine: 'Google',
       homepageUrl: 'probaho://newtab',
-      theme: 'dark',
+      theme: 'light',
       adBlockerEnabled: true,
       language: 'en' as Language,
       newTabBackgroundUrl: '',
