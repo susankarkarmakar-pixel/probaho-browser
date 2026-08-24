@@ -122,6 +122,26 @@ test.describe('browser shell', () => {
     await expect(addressInput).toHaveValue(/^https:\/\/example\.com\/?$/);
   });
 
+  test('supports keyboard navigation in the Chrome-style overflow menu', async ({ appPage }) => {
+    const menuButton = appPage.getByTestId('menu-button');
+    await menuButton.click();
+    const menu = appPage.getByTestId('overflow-menu');
+    await expect(menu).toBeVisible();
+    await expect(menu).toHaveAttribute('role', 'menu');
+    const items = menu.locator('.menu-item');
+    await expect(items.first()).toHaveAttribute('role', 'menuitem');
+    await expect(items.first()).toBeFocused();
+    await menu.press('ArrowDown');
+    await expect(items.nth(1)).toBeFocused();
+    await menu.press('End');
+    await expect(items.last()).toBeFocused();
+    await menu.press('Home');
+    await expect(items.first()).toBeFocused();
+    await menu.press('Escape');
+    await expect(menu).not.toBeVisible();
+    await expect(menuButton).toBeFocused();
+  });
+
   test('opens the settings dialog from the application menu', async ({ appPage }) => {
     await appPage.getByTestId('menu-button').click();
     await appPage.locator('.menu-panel').getByText('Settings', { exact: true }).click();

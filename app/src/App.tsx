@@ -1622,6 +1622,46 @@ function App() {
     return () => document.removeEventListener('click', handleGlobalClick);
   }, [tabContextMenu, showShields, showMediaControls, showSiteInfo]);
 
+  useEffect(() => {
+    if (!showMenu) return;
+    const menu = document.querySelector('[data-testid="overflow-menu"]');
+    if (!(menu instanceof HTMLElement)) return;
+    const items = Array.from(menu.querySelectorAll<HTMLElement>('.menu-item'));
+    items.forEach(item => {
+      item.setAttribute('role', 'menuitem');
+      item.tabIndex = 0;
+    });
+    items[0]?.focus();
+
+    const handleMenuKeyDown = (event: KeyboardEvent) => {
+      const currentIndex = items.indexOf(document.activeElement as HTMLElement);
+      if (event.key === 'ArrowDown' || event.key === 'ArrowUp') {
+        event.preventDefault();
+        const direction = event.key === 'ArrowDown' ? 1 : -1;
+        const nextIndex = currentIndex < 0 ? 0 : (currentIndex + direction + items.length) % items.length;
+        items[nextIndex]?.focus();
+      } else if (event.key === 'Home') {
+        event.preventDefault();
+        items[0]?.focus();
+      } else if (event.key === 'End') {
+        event.preventDefault();
+        items[items.length - 1]?.focus();
+      } else if (event.key === 'Enter' || event.key === ' ') {
+        if (document.activeElement && menu.contains(document.activeElement)) {
+          event.preventDefault();
+          (document.activeElement as HTMLElement).click();
+        }
+      } else if (event.key === 'Escape') {
+        event.preventDefault();
+        setShowMenu(false);
+        document.querySelector<HTMLElement>('[data-testid="menu-button"]')?.focus();
+      }
+    };
+
+    menu.addEventListener('keydown', handleMenuKeyDown);
+    return () => menu.removeEventListener('keydown', handleMenuKeyDown);
+  }, [showMenu]);
+
   return (
     <div className="browser-container" data-testid="browser-shell">
       {tabContextMenu && (
@@ -2364,7 +2404,10 @@ function App() {
 
       {/* Menu Panel */}
       {showMenu && (
-        <div className="menu-panel">
+        <div className="menu-panel overflow-menu" data-testid="overflow-menu" role="menu" aria-label="Browser menu" onClick={(event) => {
+          const target = event.target as HTMLElement;
+          if (target.closest('.menu-item') && !target.closest('.zoom-controls')) setShowMenu(false);
+        }}>
           <div className="menu-item" onClick={() => { createTab(); setShowMenu(false); }}>
             <div className="menu-item-icon"><Plus size={16} /></div>
             <div className="menu-item-text">{t('newTab', settings.language)}</div>
