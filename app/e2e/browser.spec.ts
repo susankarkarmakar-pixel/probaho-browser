@@ -201,6 +201,14 @@ test.describe('browser shell', () => {
     await addressInput.fill('example.com');
     await addressInput.press('Enter');
     await expect(addressInput).toHaveValue(/^https:\/\/example\.com\/?$/);
+
+    // Keep the assertion focused while preventing external navigation from delaying teardown.
+    const webview = appPage.locator('webview');
+    if (await webview.count()) {
+      await webview.evaluate((element: any) => {
+        if (typeof element.stop === 'function') element.stop();
+      });
+    }
   });
 
   test('supports common web URL forms and search fallback', async ({ appPage }) => {
