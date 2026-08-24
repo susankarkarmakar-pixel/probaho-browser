@@ -82,15 +82,21 @@ jobs:
           - os: windows-latest
             build_cmd: npm run dist:win
             artifact_name: probaho-browser-windows
-            artifact_path: app/release/*.exe
+            artifact_path: |
+              app/release/*.exe
+              app/release/SHA256SUMS-*.txt
           - os: macos-latest
             build_cmd: npm run dist:mac -- --publish never
             artifact_name: probaho-browser-macos
-            artifact_path: app/release/*.dmg
+            artifact_path: |
+              app/release/*.dmg
+              app/release/SHA256SUMS-*.txt
           - os: macos-latest
             build_cmd: npm run dist:mac -- --x64 --publish never
             artifact_name: probaho-browser-macos-x64
-            artifact_path: app/release/*.dmg
+            artifact_path: |
+              app/release/*.dmg
+              app/release/SHA256SUMS-*.txt
           - os: ubuntu-latest
             build_cmd: npm run dist:linux
             artifact_name: probaho-browser-linux
@@ -98,6 +104,7 @@ jobs:
               app/release/*.AppImage
               app/release/*.deb
               app/release/*.tar.gz
+              app/release/SHA256SUMS-*.txt
 
     runs-on: ${{ matrix.os }}
 
@@ -120,9 +127,37 @@ jobs:
         working-directory: app
         run: npm run build
 
+      - name: Verify signing configuration for tagged releases
+        if: startsWith(github.ref, 'refs/tags/') && runner.os != 'Linux'
+        shell: bash
+        env:
+          WIN_CSC_LINK: ${{ secrets.WIN_CSC_LINK }}
+          WIN_CSC_KEY_PASSWORD: ${{ secrets.WIN_CSC_KEY_PASSWORD }}
+          MAC_CSC_LINK: ${{ secrets.MAC_CSC_LINK }}
+          MAC_CSC_KEY_PASSWORD: ${{ secrets.MAC_CSC_KEY_PASSWORD }}
+          APPLE_ID: ${{ secrets.APPLE_ID }}
+          APPLE_APP_SPECIFIC_PASSWORD: ${{ secrets.APPLE_APP_SPECIFIC_PASSWORD }}
+          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+        run: |
+          if [[ "$RUNNER_OS" == "Windows" ]]; then
+            [[ -n "$WIN_CSC_LINK" && -n "$WIN_CSC_KEY_PASSWORD" ]] || { echo "Windows signing secrets are required for tagged releases."; exit 1; }
+          elif [[ "$RUNNER_OS" == "macOS" ]]; then
+            [[ -n "$MAC_CSC_LINK" && -n "$MAC_CSC_KEY_PASSWORD" && -n "$APPLE_ID" && -n "$APPLE_APP_SPECIFIC_PASSWORD" && -n "$APPLE_TEAM_ID" ]] || { echo "macOS signing and notarization secrets are required for tagged releases."; exit 1; }
+          fi
+
       - name: Package application
         working-directory: app
+        env:
+          CSC_LINK: ${{ runner.os == 'Windows' && secrets.WIN_CSC_LINK || runner.os == 'macOS' && secrets.MAC_CSC_LINK || '' }}
+          CSC_KEY_PASSWORD: ${{ runner.os == 'Windows' && secrets.WIN_CSC_KEY_PASSWORD || runner.os == 'macOS' && secrets.MAC_CSC_KEY_PASSWORD || '' }}
+          APPLE_ID: ${{ secrets.APPLE_ID }}
+          APPLE_APP_SPECIFIC_PASSWORD: ${{ secrets.APPLE_APP_SPECIFIC_PASSWORD }}
+          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
         run: ${{ matrix.build_cmd }}
+
+      - name: Create SHA-256 checksums
+        working-directory: app
+        run: npm run checksums -- "release/SHA256SUMS-${{ matrix.artifact_name }}.txt"
 
       - name: Upload platform artifacts
         uses: actions/upload-artifact@v4
@@ -143,6 +178,14 @@ jobs:
           pattern: probaho-browser-*
           merge-multiple: true
           path: release
+
+      - name: Verify SHA-256 checksums
+        working-directory: release
+        shell: bash
+        run: |
+          for checksum_file in SHA256SUMS-*.txt; do
+            sha256sum -c "$checksum_file"
+          done
 
       - name: Publish one GitHub release
         uses: softprops/action-gh-release@v2
