@@ -36,6 +36,9 @@ test.describe('browser shell', () => {
     await expect(appPage.getByTestId('minimize-window-button')).toHaveAttribute('title', 'Minimize window');
     await expect(appPage.getByTestId('maximize-window-button')).toHaveAttribute('title', 'Maximize or restore window');
     await expect(appPage.getByTestId('close-window-button')).toHaveAttribute('title', 'Close window');
+    await expect(controls).toHaveCSS('position', 'absolute');
+    await expect(controls).toHaveCSS('right', '0px');
+    await expect(controls).toHaveCSS('top', '0px');
   });
 
   test('opens the Chrome-style Extensions manager from the toolbar', async ({ appPage }) => {

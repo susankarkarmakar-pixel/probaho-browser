@@ -4471,3 +4471,270 @@ body.theme-light .window-controls .control-btn.close:hover {
     transition: none;
   }
 }
+
+
+/* Frameless Windows layout: keep native-feeling controls at the top-right */
+.titlebar {
+  position: relative;
+  padding-right: 148px;
+  overflow: hidden;
+}
+
+.window-controls {
+  position: absolute;
+  top: 0;
+  right: 0;
+  z-index: 100;
+}
+
+body.theme-light .titlebar {
+  background: linear-gradient(180deg, #ffffff 0%, #f7f9fc 100%);
+}
+
+body.theme-light .window-controls {
+  background: rgba(255, 255, 255, 0.78);
+  border-left: 1px solid #e2e8f0;
+}
+
+body:not(.theme-light) .window-controls {
+  background: rgba(20, 25, 35, 0.76);
+  border-left: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+
+/* Windows-style Fluent shell refinement */
+.windows-titlebar {
+  min-height: 38px;
+  height: 38px;
+  box-sizing: border-box;
+  padding-left: 8px;
+  gap: 0;
+  background: var(--surface-color);
+  border-bottom: 1px solid var(--border-subtle);
+}
+
+.windows-titlebar .workspace-switcher {
+  height: 38px;
+  box-sizing: border-box;
+  padding: 0 8px !important;
+}
+
+.windows-titlebar .workspace-switcher select {
+  height: 26px;
+  min-width: 98px;
+  box-sizing: border-box;
+  padding: 0 26px 0 9px !important;
+  border: 1px solid var(--border-color) !important;
+  border-radius: 5px !important;
+  background: var(--surface-raised) !important;
+  color: var(--text-color) !important;
+  font-size: 11px !important;
+  font-weight: 600;
+}
+
+.windows-titlebar .workspace-switcher select:hover,
+.windows-titlebar .workspace-switcher select:focus {
+  border-color: color-mix(in srgb, var(--primary-color) 48%, var(--border-color)) !important;
+  outline: none;
+}
+
+.windows-titlebar .tabs {
+  height: 38px;
+  align-items: flex-end;
+  gap: 0;
+  padding: 0 4px 0 2px;
+}
+
+.windows-titlebar .tab {
+  height: 31px;
+  min-width: 148px;
+  margin: 0 2px 0 0;
+  padding: 0 10px;
+  border-radius: 7px 7px 0 0;
+  border-color: transparent;
+  background: transparent;
+  box-shadow: none;
+}
+
+.windows-titlebar .tab:hover {
+  background: color-mix(in srgb, var(--text-color) 7%, transparent);
+  border-color: transparent;
+}
+
+.windows-titlebar .tab.active {
+  background: var(--surface-raised);
+  border-color: var(--border-color);
+  border-bottom-color: var(--surface-raised);
+  box-shadow: inset 0 -2px 0 var(--primary-color);
+}
+
+.windows-titlebar .tab-close {
+  width: 22px;
+  height: 22px;
+  border-radius: 4px;
+}
+
+.windows-titlebar .new-tab-btn {
+  align-self: center;
+  width: 28px;
+  height: 28px;
+  margin: 0 0 0 4px;
+  border-radius: 5px;
+}
+
+.windows-toolbar {
+  min-height: 52px;
+  height: 52px;
+  box-sizing: border-box;
+  gap: 6px;
+  padding: 7px 10px;
+  background: var(--surface-color);
+  border-bottom: 1px solid var(--border-subtle);
+}
+
+.windows-toolbar .nav-buttons {
+  gap: 1px;
+  padding: 2px;
+  border-radius: 7px;
+  background: var(--surface-raised);
+  border-color: var(--border-color);
+}
+
+.windows-toolbar .nav-btn,
+.windows-toolbar .extensions-trigger,
+.windows-toolbar .theme-toggle-btn,
+.windows-toolbar .shield-container,
+.windows-toolbar .downloads-trigger {
+  width: 30px;
+  height: 30px;
+  min-width: 30px;
+  flex-basis: 30px;
+  border-radius: 5px;
+}
+
+.windows-toolbar .address-bar-container {
+  height: 36px;
+  border-radius: 7px;
+  padding: 0 10px;
+  background: var(--bg-color);
+  box-shadow: none;
+}
+
+.windows-toolbar .address-bar-container:focus-within {
+  box-shadow: 0 0 0 1px var(--primary-color);
+}
+
+.windows-toolbar .security-icon {
+  width: 23px;
+  height: 24px;
+  border-radius: 4px;
+}
+
+.windows-toolbar .bookmark-toggle-btn {
+  border-radius: 4px;
+}
+
+.windows-toolbar > .nav-btn:hover:not(:disabled),
+.windows-toolbar .nav-buttons .nav-btn:hover:not(:disabled),
+.windows-toolbar .shield-container:hover,
+.windows-toolbar .downloads-trigger:hover {
+  transform: none;
+  background: color-mix(in srgb, var(--primary-color) 12%, var(--surface-raised));
+}
+
+.menu-panel,
+.overflow-menu,
+.extensions-popout,
+.downloads-popout,
+.bookmarks-panel {
+  border-radius: 10px;
+  box-shadow: 0 18px 42px rgba(15, 23, 42, 0.22), 0 2px 8px rgba(15, 23, 42, 0.10);
+}
+
+.overflow-menu .menu-item,
+.menu-panel .menu-item {
+  min-height: 36px;
+  border-radius: 5px;
+}
+
+.overflow-menu .menu-item:hover,
+.overflow-menu .menu-item:focus-visible,
+.menu-panel .menu-item:hover,
+.menu-panel .menu-item:focus-visible {
+  background: color-mix(in srgb, var(--primary-color) 10%, var(--surface-raised));
+}
+
+body.theme-light .windows-titlebar,
+body.theme-light .windows-toolbar {
+  background: #ffffff;
+  border-color: #e5e7eb;
+}
+
+body.theme-light .windows-titlebar .tab.active {
+  background: #f3f4f6;
+  border-color: #d1d5db;
+  border-bottom-color: #f3f4f6;
+}
+
+body.theme-light .windows-titlebar .tab:hover {
+  background: #f3f4f6;
+}
+
+body.theme-light .windows-toolbar .nav-buttons {
+  background: #f3f4f6;
+  border-color: #e5e7eb;
+}
+
+body.theme-light .windows-toolbar .address-bar-container {
+  background: #f9fafb;
+  border-color: #d1d5db;
+}
+
+body.theme-light .windows-toolbar .address-bar-container:focus-within {
+  background: #ffffff;
+}
+
+body.theme-light .menu-panel,
+body.theme-light .overflow-menu,
+body.theme-light .extensions-popout,
+body.theme-light .downloads-popout,
+body.theme-light .bookmarks-panel {
+  border-color: #d1d5db;
+  box-shadow: 0 18px 42px rgba(15, 23, 42, 0.16), 0 2px 8px rgba(15, 23, 42, 0.08);
+}
+
+@media (max-width: 900px) {
+  .windows-titlebar {
+    padding-right: 120px;
+  }
+
+  .windows-titlebar .tab {
+    min-width: 124px;
+  }
+
+  .windows-toolbar {
+    height: 50px;
+    min-height: 50px;
+    padding: 6px 8px;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .windows-titlebar .tab,
+  .windows-titlebar .new-tab-btn,
+  .windows-toolbar .nav-btn {
+    transition: none;
+  }
+}
+
+
+/* Keep the download surface anchored to its toolbar trigger in the frameless layout */
+.download-manager {
+  position: absolute;
+}
+
+
+/* Toolbar popouts must sit above the New Tab content surface */
+.download-manager {
+  z-index: 1400;
+}

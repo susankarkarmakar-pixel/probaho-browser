@@ -1862,7 +1862,7 @@ function App() {
       <div style={{ flex: 1, display: 'flex', flexDirection: 'column', marginRight: '52px' }}>
 
       {/* Titlebar with tabs */}
-      <div className="titlebar" style={settings.verticalTabs ? { paddingLeft: '80px', height: '40px' } : {}}>
+      <div className="titlebar windows-titlebar" style={settings.verticalTabs ? { paddingLeft: '80px', height: '40px' } : {}}>
 
         {isPrivateWindow && (
           <div style={{ display: 'flex', alignItems: 'center', padding: '0 8px', color: '#ff5252', fontWeight: 'bold', fontSize: '12px' }}>
@@ -1872,7 +1872,7 @@ function App() {
         )}
 
         {/* Workspaces Selector */}
-        <div style={{ padding: '0 8px', display: 'flex', alignItems: 'center' }}>
+        <div className="workspace-switcher" style={{ padding: '0 8px', display: 'flex', alignItems: 'center' }}>
           <select
             value={activeWorkspaceId}
             onChange={(e) => {
@@ -1994,7 +1994,7 @@ function App() {
       </div>
 
       {/* Toolbar */}
-      <div className="toolbar" data-testid="browser-toolbar">
+      <div className="toolbar windows-toolbar" data-testid="browser-toolbar">
         <div className="nav-buttons" aria-label="Page navigation">
           <button className="nav-btn" aria-label="Go back" title="Go back" onClick={goBack} disabled={!targetedTab?.canGoBack}>
             <ArrowLeft size={16} />
