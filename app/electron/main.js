@@ -266,6 +266,23 @@ function createWindow(isPrivate = false) {
       window.webContents.send('shortcut-view-source');
       event.preventDefault();
     }
+
+    if ((input.control || input.meta) && input.key.toLowerCase() === 's') {
+      window.webContents.send('shortcut-save-page');
+      event.preventDefault();
+    }
+    if ((input.control || input.meta) && input.shift && input.key.toLowerCase() === 'r') {
+      window.webContents.send('shortcut-hard-reload');
+      event.preventDefault();
+    }
+    if (input.key === 'F5' && input.shift) {
+      window.webContents.send('shortcut-hard-reload');
+      event.preventDefault();
+    }
+    if (input.alt && input.key === 'Home') {
+      window.webContents.send('shortcut-home');
+      event.preventDefault();
+    }
     if ((input.control || input.meta) && input.key.toLowerCase() === 'p') {
       mainWindow.webContents.send('shortcut-print');
       event.preventDefault();
@@ -571,6 +588,23 @@ app.whenReady().then(async () => {
     return pluginManager.remove(id);
   });
 
+
+  ipcMain.on('save-page', (event, webContentsId, title) => {
+    requireTrustedAppSender(event);
+    const win = BrowserWindow.fromWebContents(event.sender);
+    dialog.showSaveDialog(win, {
+      title: 'Save Page As',
+      defaultPath: title ? `${title}.html` : 'page.html',
+      filters: [{ name: 'Webpage, Complete', extensions: ['html', 'htm'] }]
+    }).then(result => {
+      if (!result.canceled && result.filePath) {
+        const wc = require('electron').webContents.fromId(webContentsId);
+        if (wc) {
+          wc.savePage(result.filePath, 'HTMLComplete').catch(err => console.error('Failed to save page:', err));
+        }
+      }
+    }).catch(err => console.error(err));
+  });
   ipcMain.on('clear-cache', (event) => {
     requireTrustedAppSender(event);
     session.defaultSession.clearCache().then(() => {

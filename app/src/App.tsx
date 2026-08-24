@@ -162,6 +162,11 @@ declare global {
       onToggleBookmarksBar?: (callback: () => void) => void;
       onOpenSettings?: (callback: () => void) => void;
       onViewSource?: (callback: () => void) => void;
+
+      onSavePage?: (callback: () => void) => void;
+      savePage?: (webContentsId: number, title: string) => void;
+      onHardReload?: (callback: () => void) => void;
+      onHome?: (callback: () => void) => void;
       onPrint?: (callback: () => void) => void;
       onAddBookmark?: (callback: () => void) => void;
       onAppCommand?: (callback: (cmd: string) => void) => void;
@@ -384,6 +389,12 @@ function App() {
     } catch (e) {}
     return ''; // Will be fixed by useEffect
   });
+
+  const tabsRef = useRef<Tab[]>(tabs);
+  useEffect(() => {
+    tabsRef.current = tabs;
+  }, [tabs]);
+
 
   // Ensure valid activeTabId
   useEffect(() => {
@@ -713,12 +724,47 @@ function App() {
         if (wv) {
            const currentUrl = wv.getURL();
            if (currentUrl && currentUrl !== 'about:blank' && !currentUrl.startsWith('probaho://')) {
-              navigate('view-source:' + currentUrl);
+              const vsUrl = 'view-source:' + currentUrl;
+              updateTab(activeTabIdRef.current, { url: vsUrl, isPdf: false, loading: true, crashed: false, loadError: undefined });
+              try { wv.loadURL(vsUrl); } catch {}
            }
         }
       });
     }
 
+
+    if (window.electronAPI?.onSavePage) {
+      window.electronAPI.onSavePage(() => {
+        const wv = webviewRefs.current[activeTabIdRef.current];
+        if (wv) {
+           const activeTab = tabsRef.current.find(t => t.id === activeTabIdRef.current);
+           if (activeTab) {
+             try {
+               const wcId = wv.getWebContentsId();
+               window.electronAPI?.savePage?.(wcId, activeTab.title);
+             } catch (e) { console.error(e); }
+           }
+        }
+      });
+    }
+
+    if (window.electronAPI?.onHardReload) {
+      window.electronAPI.onHardReload(() => {
+        const wv = webviewRefs.current[activeTabIdRef.current];
+        if (wv) wv.reloadIgnoringCache();
+      });
+    }
+
+    if (window.electronAPI?.onHome) {
+      window.electronAPI.onHome(() => {
+        const homeUrl = settingsRef.current?.homepageUrl || 'probaho://newtab';
+        updateTab(activeTabIdRef.current, { url: homeUrl, title: t('newTab', settingsRef.current?.language || 'en'), loading: true, crashed: false, loadError: undefined });
+        const wv = webviewRefs.current[activeTabIdRef.current];
+        if (wv && homeUrl !== 'probaho://newtab') {
+          try { wv.loadURL(homeUrl); } catch {}
+        }
+      });
+    }
     if (window.electronAPI?.onPrint) {
       window.electronAPI.onPrint(() => {
         const wv = webviewRefs.current[activeTabIdRef.current];
@@ -2424,6 +2470,25 @@ function App() {
           }}>
             <div className="menu-item-icon"><FileCode size={16} /></div>
             <div className="menu-item-text">Save as PDF</div>
+          </div>
+          <div className="menu-item" onClick={() => {
+              setShowMenu(false);
+              const wv = webviewRefs.current[activeTabIdRef.current];
+              if (wv) {
+                 const activeTab = tabs.find(t => t.id === activeTabIdRef.current);
+                 if (activeTab) {
+                   try {
+                     const wcId = wv.getWebContentsId();
+                     window.electronAPI?.savePage?.(wcId, activeTab.title);
+                   } catch (e) { console.error(e); }
+                 }
+              }
+          }}>
+            <div className="menu-item-icon"><FileCode size={16} /></div>
+            <div className="menu-item-text">Save Page As...</div>
+            <div className="menu-item-shortcut">Ctrl+S</div>
+
+
           </div>
           <div className="menu-divider" />
           <div className="menu-item" onClick={() => {
