@@ -34,6 +34,16 @@ type SafeBrowsingStatus = {
   reason?: string | null;
 };
 
+type CertificateWarning = {
+  requestId: string;
+  url: string;
+  error: string;
+  subjectName: string;
+  issuerName: string;
+  validStart: number;
+  validExpiry: number;
+};
+
 type PerformanceSnapshot = {
   capturedAt: string;
   windowCount: number;
@@ -147,6 +157,72 @@ function classifyAddressInput(rawValue: string): AddressClassification {
   if (looksLikeHost) return { kind: 'url', url: `https://${value}` };
 
   return { kind: 'search', query: value };
+}
+
+type ImportedBrowserData = {
+  bookmarks: { title: string; url: string }[];
+  history: { title: string; url: string; time: string }[];
+  settings?: Record<string, unknown>;
+};
+
+function safeImportedUrl(rawUrl: unknown): string | null {
+  if (typeof rawUrl !== 'string' || rawUrl.length > 2048) return null;
+  try {
+    const parsed = new URL(rawUrl.trim());
+    if ((parsed.protocol !== 'http:' && parsed.protocol !== 'https:') || parsed.username || parsed.password) return null;
+    return parsed.toString();
+  } catch {
+    return null;
+  }
+}
+
+function normalizeImportedBookmarks(entries: unknown[]): { title: string; url: string }[] {
+  const result: { title: string; url: string }[] = [];
+  const seen = new Set<string>();
+  const add = (title: unknown, url: unknown) => {
+    const normalizedUrl = safeImportedUrl(url);
+    if (!normalizedUrl || seen.has(normalizedUrl)) return;
+    seen.add(normalizedUrl);
+    result.push({ title: typeof title === 'string' && title.trim() ? title.trim().slice(0, 300) : normalizedUrl, url: normalizedUrl });
+  };
+  const walk = (entry: any) => {
+    if (!entry || typeof entry !== 'object') return;
+    add(entry.title ?? entry.name, entry.url ?? entry.uri);
+    if (Array.isArray(entry.children)) entry.children.forEach(walk);
+  };
+  entries.forEach(walk);
+  return result.slice(0, 5000);
+}
+
+function parseBrowserExport(text: string, fileName: string): ImportedBrowserData {
+  const trimmed = text.trim();
+  const bookmarks: { title: string; url: string }[] = [];
+  const history: { title: string; url: string; time: string }[] = [];
+  if (fileName.toLowerCase().endsWith('.json') || trimmed.startsWith('{') || trimmed.startsWith('[')) {
+    const parsed = JSON.parse(trimmed);
+    const source = Array.isArray(parsed) ? { bookmarks: parsed } : parsed;
+    const bookmarkSource = Array.isArray(source.bookmarks) ? source.bookmarks : source.roots ? Object.values(source.roots) : [];
+    bookmarks.push(...normalizeImportedBookmarks(bookmarkSource));
+    if (Array.isArray(source.history)) {
+      const seen = new Set<string>();
+      source.history.forEach((entry: any) => {
+        const normalizedUrl = safeImportedUrl(entry?.url ?? entry?.urlString);
+        if (!normalizedUrl || seen.has(normalizedUrl)) return;
+        seen.add(normalizedUrl);
+        history.push({ title: typeof entry.title === 'string' ? entry.title.slice(0, 300) : normalizedUrl, url: normalizedUrl, time: entry.time || entry.lastVisitTime ? new Date(Number(entry.time || entry.lastVisitTime)).toLocaleString() : new Date().toLocaleString() });
+      });
+    }
+    return { bookmarks, history: history.slice(0, 5000), settings: source.settings && typeof source.settings === 'object' ? source.settings : undefined };
+  }
+  const document = new DOMParser().parseFromString(text, 'text/html');
+  const seen = new Set<string>();
+  document.querySelectorAll('a[href]').forEach(anchor => {
+    const normalizedUrl = safeImportedUrl(anchor.getAttribute('href'));
+    if (!normalizedUrl || seen.has(normalizedUrl)) return;
+    seen.add(normalizedUrl);
+    bookmarks.push({ title: (anchor.textContent || normalizedUrl).trim().slice(0, 300), url: normalizedUrl });
+  });
+  return { bookmarks: bookmarks.slice(0, 5000), history: [] };
 }
 
 function buildSearchUrl(query: string, engine: string): string {
@@ -263,6 +339,8 @@ declare global {
       allowUnsafeNavigation?: (url: string) => Promise<boolean>;
       onSafeBrowsingWarning?: (callback: (warning: SafeBrowsingWarning) => void) => void;
       onSafeBrowsingStatus?: (callback: (status: SafeBrowsingStatus) => void) => void;
+      onCertificateError?: (callback: (warning: CertificateWarning) => void) => void;
+      allowCertificateError?: (requestId: string, allow: boolean) => Promise<boolean>;
       getPerformanceSnapshot?: () => Promise<PerformanceSnapshot>;
     };
   }
@@ -500,6 +578,15 @@ function App() {
   const [showShields, setShowShields] = useState(false);
   const [showMediaControls, setShowMediaControls] = useState(false);
   const [showSiteInfo, setShowSiteInfo] = useState(false);
+  const [utilityRailPinned, setUtilityRailPinned] = useState(() => {
+    try { return localStorage.getItem('probaho-utility-rail-pinned') === 'true'; } catch { return false; }
+  });
+  const [utilityRailRevealed, setUtilityRailRevealed] = useState(false);
+  const [showImportOnboarding, setShowImportOnboarding] = useState(() => {
+    if (isPrivateWindow) return false;
+    try { return localStorage.getItem('probaho-import-onboarding-dismissed') !== 'true'; } catch { return true; }
+  });
+  const [importStatus, setImportStatus] = useState<string | null>(null);
   const [autocompleteSuggestions, setAutocompleteSuggestions] = useState<OmniboxSuggestion[]>([]);
   const [omniboxSelectedIndex, setOmniboxSelectedIndex] = useState(0);
   const [omniboxMessage, setOmniboxMessage] = useState<string | null>(null);
@@ -512,7 +599,12 @@ function App() {
   const [updateStatus, setUpdateStatus] = useState<UpdateState>({ state: 'idle', percent: 0, error: null });
   const [updateActionBusy, setUpdateActionBusy] = useState(false);
   const [safeBrowsingWarning, setSafeBrowsingWarning] = useState<SafeBrowsingWarning | null>(null);
+  const [certificateWarning, setCertificateWarning] = useState<CertificateWarning | null>(null);
   const [safeBrowsingStatus, setSafeBrowsingStatus] = useState<SafeBrowsingStatus>({ status: 'unavailable', reason: 'api-key-not-configured' });
+
+  useEffect(() => {
+    try { localStorage.setItem('probaho-utility-rail-pinned', String(utilityRailPinned)); } catch {}
+  }, [utilityRailPinned]);
 
   useEffect(() => {
     if (window.electronAPI?.getUpdateStatus) {
@@ -521,6 +613,7 @@ function App() {
     window.electronAPI?.onUpdateStatus?.(setUpdateStatus);
     window.electronAPI?.onSafeBrowsingWarning?.(setSafeBrowsingWarning);
     window.electronAPI?.onSafeBrowsingStatus?.(setSafeBrowsingStatus);
+    window.electronAPI?.onCertificateError?.(setCertificateWarning);
   }, []);
 
   useEffect(() => {
@@ -1810,6 +1903,47 @@ function App() {
     return () => menu.removeEventListener('keydown', handleMenuKeyDown);
   }, [showMenu]);
 
+  const utilityRailOpen = utilityRailPinned || utilityRailRevealed || Boolean(activePanelId || showHistory || showDownloads || showBookmarks || showSettings || showReadingList);
+
+  const resolveCertificateWarning = async (allow: boolean) => {
+    const warning = certificateWarning;
+    setCertificateWarning(null);
+    if (!warning || !window.electronAPI?.allowCertificateError) return;
+    try {
+      await window.electronAPI.allowCertificateError(warning.requestId, allow);
+    } catch {
+      // The main process denies unresolved certificate requests by timeout.
+    }
+  };
+
+  const dismissImportOnboarding = () => {
+    setShowImportOnboarding(false);
+    if (!isPrivateWindow) {
+      try { localStorage.setItem('probaho-import-onboarding-dismissed', 'true'); } catch {}
+    }
+  };
+
+  const handleBrowserDataImport = async (file: File) => {
+    try {
+      const imported = parseBrowserExport(await file.text(), file.name);
+      const importedBookmarks = imported.bookmarks.filter(item => !bookmarks.some(existing => existing.url === item.url));
+      const importedHistory = imported.history.filter(item => !history.some(existing => existing.url === item.url && existing.time === item.time));
+      setBookmarks(previous => [...previous, ...importedBookmarks]);
+      setHistory(previous => [...previous, ...importedHistory].slice(-5000));
+      if (imported.settings) {
+        const allowedSettings = ['defaultSearchEngine', 'homepageUrl', 'theme', 'showBookmarksBar', 'verticalTabs', 'accentColor'] as const;
+        setSettings((previous: typeof settings) => {
+          const safeSettings = Object.fromEntries(allowedSettings.filter(key => typeof imported.settings?.[key] === 'string' || typeof imported.settings?.[key] === 'boolean').map(key => [key, imported.settings?.[key]]));
+          return { ...previous, ...safeSettings };
+        });
+      }
+      dismissImportOnboarding();
+      setImportStatus(`Imported ${importedBookmarks.length} bookmarks${importedHistory.length ? ` and ${importedHistory.length} history entries` : ''}. Saved passwords were not imported.`);
+    } catch {
+      setImportStatus('Could not read that export. Choose a Chromium/Edge/Firefox HTML export or a valid Probaho JSON profile.');
+    }
+  };
+
   return (
     <div className="browser-container" data-testid="browser-shell">
       {tabContextMenu && (
@@ -1903,8 +2037,17 @@ function App() {
         </div>
       )}
       {/* Utility Rail */}
-      <aside className="web-panels-sidebar utility-rail" data-testid="utility-rail" aria-label="Browser utilities" style={{ position: 'absolute', right: 0, top: 0, bottom: 0, zIndex: 150 }}>
-         <div className="utility-rail-brand" aria-hidden="true"><span>Ｐ</span></div>
+      <aside
+        className={`web-panels-sidebar utility-rail ${utilityRailOpen ? 'is-open' : 'is-collapsed'}`}
+        data-testid="utility-rail"
+        aria-label="Browser utilities"
+        onMouseEnter={() => setUtilityRailRevealed(true)}
+        onMouseLeave={() => setUtilityRailRevealed(false)}
+        onFocusCapture={() => setUtilityRailRevealed(true)}
+        onBlurCapture={(event) => { if (!event.currentTarget.contains(event.relatedTarget as Node)) setUtilityRailRevealed(false); }}
+        style={{ position: 'absolute', right: 0, top: 0, bottom: 0, zIndex: 150 }}
+      >
+         <div className="utility-rail-brand"><span aria-hidden="true">Ｐ</span><button type="button" className="utility-rail-pin" data-testid="utility-rail-pin" aria-label={utilityRailPinned ? 'Auto-hide utility rail' : 'Keep utility rail open'} aria-pressed={utilityRailPinned} title={utilityRailPinned ? 'Auto-hide utility rail' : 'Keep utility rail open'} onClick={() => { setUtilityRailPinned(prev => !prev); setUtilityRailRevealed(true); }}><Pin size={13} /></button></div>
          <div className="web-panels-icons utility-rail-actions">
            <button type="button" className={`web-panel-btn utility-rail-btn ${showHistory ? 'active' : ''}`} data-testid="utility-history" aria-label="Open history" aria-pressed={showHistory} title="History" onClick={() => { setShowMenu(false); setShowBookmarks(false); setShowDownloads(false); setShowReadingList(false); setShowHistory(prev => !prev); }}><History size={17} /></button>
            <button type="button" className={`web-panel-btn utility-rail-btn ${showDownloads ? 'active' : ''}`} data-testid="utility-downloads" aria-label="Open downloads" aria-pressed={showDownloads} title="Downloads" onClick={() => { setShowMenu(false); setShowHistory(false); setShowBookmarks(false); setShowReadingList(false); setShowDownloads(prev => !prev); }}><Download size={17} /></button>
@@ -1947,7 +2090,7 @@ function App() {
       )}
 
       {/* Wrap main browser in a div that respects the right sidebar */}
-      <div style={{ flex: 1, display: 'flex', flexDirection: 'column', marginRight: '52px' }}>
+      <div style={{ flex: 1, display: 'flex', flexDirection: 'column', marginRight: utilityRailOpen ? '52px' : '0px' }}>
 
       {/* Titlebar with tabs */}
       <div className="titlebar windows-titlebar" style={settings.verticalTabs ? { paddingLeft: '80px', height: '40px' } : {}}>
@@ -3561,6 +3704,27 @@ function App() {
         </div>
       )}
 
+      {certificateWarning && (
+        <div className="certificate-error-overlay" data-testid="certificate-error-warning" role="alertdialog" aria-modal="true" aria-labelledby="certificate-error-title" aria-describedby="certificate-error-copy">
+          <div className="certificate-error-card">
+            <div className="certificate-error-icon"><ShieldAlert size={25} /></div>
+            <span className="certificate-error-kicker">Connection warning</span>
+            <h2 id="certificate-error-title">This site’s certificate is not trusted</h2>
+            <p id="certificate-error-copy">The website presented a certificate that Probaho could not verify. Do not continue unless you trust this site and understand the risk.</p>
+            <div className="certificate-error-origin" title={certificateWarning.url}>{certificateWarning.url}</div>
+            <dl className="certificate-error-details">
+              <div><dt>Certificate</dt><dd>{certificateWarning.error.replace(/^net::/i, '')}</dd></div>
+              {certificateWarning.subjectName && <div><dt>Issued to</dt><dd>{certificateWarning.subjectName}</dd></div>}
+              {certificateWarning.issuerName && <div><dt>Issued by</dt><dd>{certificateWarning.issuerName}</dd></div>}
+            </dl>
+            <div className="certificate-error-actions">
+              <button type="button" className="certificate-error-back" data-testid="certificate-error-go-back" onClick={() => void resolveCertificateWarning(false)}>Go back</button>
+              <button type="button" className="certificate-error-proceed" data-testid="certificate-error-proceed" onClick={() => void resolveCertificateWarning(true)}>Proceed anyway</button>
+            </div>
+          </div>
+        </div>
+      )}
+
       {safeBrowsingWarning && (
         <div className="safe-browsing-overlay" data-testid="safe-browsing-warning" role="alertdialog" aria-labelledby="safe-browsing-warning-title" aria-describedby="safe-browsing-warning-copy">
           <div className="safe-browsing-card">
@@ -3794,6 +3958,22 @@ function App() {
                   <button type="button" className="ntp-quick-action" data-testid="ntp-downloads-action" onClick={() => setShowDownloads(true)}><Download size={15} /><span>Downloads</span></button>
                   <button type="button" className="ntp-quick-action" data-testid="ntp-settings-action" onClick={() => setShowSettings(true)}><Settings size={15} /><span>Settings</span></button>
                 </div>
+
+                {showImportOnboarding && (
+                  <section className="ntp-import-card" data-testid="first-run-import-card" aria-labelledby={`import-browser-title-${tab.id}`}>
+                    <div className="ntp-import-icon"><Folder size={17} /></div>
+                    <div className="ntp-import-copy">
+                      <strong id={`import-browser-title-${tab.id}`}>Bring your browser data</strong>
+                      <span>Import bookmarks and history from Chrome, Edge or Firefox. Passwords stay protected and are not copied automatically.</span>
+                    </div>
+                    <label className="ntp-import-primary">
+                      Import data
+                      <input data-testid="first-run-import-input" type="file" accept=".html,.htm,.json" onChange={(event) => { const file = event.target.files?.[0]; if (file) void handleBrowserDataImport(file); event.currentTarget.value = ''; }} />
+                    </label>
+                    <button type="button" className="ntp-import-dismiss" aria-label="Dismiss browser data import" onClick={dismissImportOnboarding}>Not now</button>
+                  </section>
+                )}
+                {importStatus && <div className="ntp-import-status" data-testid="import-status" role="status">{importStatus}</div>}
 
                 <div className="ntp-dashboard">
                   <section className="ntp-section ntp-top-sites-section" aria-labelledby={`ntp-top-sites-title-${tab.id}`}>

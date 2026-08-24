@@ -365,9 +365,25 @@ test.describe('browser shell', () => {
     await expect(popup).not.toBeVisible();
   });
 
+  test('imports Chromium-style bookmarks from the first-run card', async ({ appPage }) => {
+    const importCard = appPage.getByTestId('first-run-import-card');
+    await expect(importCard).toBeVisible();
+    await expect(importCard).toContainText('Chrome, Edge or Firefox');
+    const importInput = appPage.getByTestId('first-run-import-input');
+    await expect(importInput).toHaveAttribute('accept', '.html,.htm,.json');
+    await importInput.setInputFiles({
+      name: 'bookmarks.html',
+      mimeType: 'text/html',
+      buffer: Buffer.from('<!DOCTYPE NETSCAPE-Bookmark-file-1><DL><DT><A HREF="https://example.com/">Example</A><DT><A HREF="https://developer.mozilla.org/">MDN</A></DL>')
+    });
+    await expect(appPage.getByTestId('import-status')).toContainText('Imported 2 bookmarks');
+    await expect(appPage.getByTestId('first-run-import-card')).not.toBeVisible();
+  });
+
   test('switches panels from the right-side utility rail', async ({ appPage }) => {
     const rail = appPage.getByTestId('utility-rail');
     await expect(rail).toBeVisible();
+    await rail.hover();
     await expect(rail.getByTestId('utility-history')).toBeVisible();
     await rail.getByTestId('utility-downloads').click();
     await expect(appPage.getByTestId('downloads-popout')).toBeVisible();

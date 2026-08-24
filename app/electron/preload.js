@@ -81,5 +81,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
   allowUnsafeNavigation: (url) => ipcRenderer.invoke('allow-unsafe-navigation', url),
   onSafeBrowsingWarning: (callback) => ipcRenderer.on('safe-browsing-warning', (event, warning) => callback(warning)),
   onSafeBrowsingStatus: (callback) => ipcRenderer.on('safe-browsing-status', (event, status) => callback(status)),
+  onCertificateError: (callback) => ipcRenderer.on('certificate-error', (event, warning) => callback(warning)),
+  allowCertificateError: (requestId, allow) => ipcRenderer.invoke('allow-certificate-error', requestId, allow),
   getPerformanceSnapshot: () => ipcRenderer.invoke('get-performance-snapshot')
 });

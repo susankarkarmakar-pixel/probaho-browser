@@ -13,6 +13,7 @@ const { lookupUrl: lookupSafeBrowsingUrl } = require('./safe-browsing');
 
 const browserWindows = new Set();
 const unsafeNavigationOverrides = new Set();
+const pendingCertificateErrors = new Map();
 const extensionManager = new ExtensionManager();
 const pluginManager = new PluginManager(path.join(app.getPath('userData'), 'plugins.json'));
 const MAX_PDF_BYTES = 50 * 1024 * 1024;
@@ -72,6 +73,44 @@ function requireTrustedAppSender(event) {
   if (!isTrustedAppSender(event)) {
     throw new Error('Untrusted IPC sender');
   }
+}
+
+function findOwnerWindow(contents) {
+  const hostContents = contents.hostWebContents;
+  return BrowserWindow.fromWebContents(hostContents || contents) || [...browserWindows].find(window => window.webContents.id === contents.id) || null;
+}
+
+function attachCertificateErrorHandler(contents) {
+  if (!contents || contents.__probahoCertificateHandlerAttached) return;
+  contents.__probahoCertificateHandlerAttached = true;
+  contents.on('certificate-error', (event, url, error, certificate, callback) => {
+    event.preventDefault();
+    const ownerWindow = findOwnerWindow(contents);
+    if (!ownerWindow || ownerWindow.isDestroyed()) {
+      callback(false);
+      return;
+    }
+    const requestId = randomUUID();
+    pendingCertificateErrors.set(requestId, {
+      callback,
+      senderId: ownerWindow.webContents.id,
+      timer: setTimeout(() => {
+        const pending = pendingCertificateErrors.get(requestId);
+        if (!pending) return;
+        pendingCertificateErrors.delete(requestId);
+        pending.callback(false);
+      }, 45_000)
+    });
+    ownerWindow.webContents.send('certificate-error', {
+      requestId,
+      url,
+      error: String(error || 'certificate-error'),
+      subjectName: certificate?.subjectName || '',
+      issuerName: certificate?.issuerName || '',
+      validStart: certificate?.validStart || 0,
+      validExpiry: certificate?.validExpiry || 0
+    });
+  });
 }
 
 async function fetchPdfBytes(rawUrl) {
@@ -305,6 +344,7 @@ function createWindow(isPrivate = false) {
   });
 
   browserWindows.add(window);
+  attachCertificateErrorHandler(window.webContents);
   window.on('closed', () => browserWindows.delete(window));
   return window;
 }
@@ -313,6 +353,7 @@ function createWindow(isPrivate = false) {
 
 
 app.whenReady().then(async () => {
+  app.on('web-contents-created', (_event, contents) => attachCertificateErrorHandler(contents));
   if (typeof session.defaultSession.setWebRTCIPHandlingPolicy === 'function') {
     session.defaultSession.setWebRTCIPHandlingPolicy('disable-non-proxied-udp');
   }
@@ -387,7 +428,17 @@ app.whenReady().then(async () => {
     return updaterState;
   });
 
-  ipcMain.handle('allow-unsafe-navigation', (event, rawUrl) => {
+  ipcMain.handle('allow-certificate-error', (event, requestId, allow) => {
+    requireTrustedAppSender(event);
+    const pending = pendingCertificateErrors.get(requestId);
+    if (!pending || pending.senderId !== event.sender.id) return false;
+    pendingCertificateErrors.delete(requestId);
+    clearTimeout(pending.timer);
+    pending.callback(Boolean(allow));
+    return true;
+  });
+
+  ipcMain.handle('allow-unsafe-navigation', (event, url) => {
     requireTrustedAppSender(event);
     if (typeof rawUrl !== 'string' || !isAllowedNavigationUrl(rawUrl)) return false;
     const key = `${event.sender.id}:${rawUrl}`;
