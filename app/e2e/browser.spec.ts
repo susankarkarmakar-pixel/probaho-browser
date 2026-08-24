@@ -11,6 +11,20 @@ test.describe('browser shell', () => {
     await expect(appPage.locator('.new-tab-page')).toBeVisible();
   });
 
+  test('recovers from malformed persisted profile data', async ({ appPage }) => {
+    await appPage.evaluate(() => {
+      localStorage.setItem('workspaces', '{broken');
+      localStorage.setItem('tabGroups', '[]oops');
+      localStorage.setItem('collapsedTabGroups', 'not-an-object');
+      localStorage.setItem('bookmarks', '{broken');
+      localStorage.setItem('readingList', 'null');
+      localStorage.setItem('history', '[');
+    });
+    await appPage.reload();
+    await expect(appPage.getByTestId('browser-shell')).toBeVisible();
+    await expect(appPage.getByTestId('address-input')).toBeVisible();
+  });
+
   test('keeps the core toolbar discoverable and accessible', async ({ appPage }) => {
     const toolbar = appPage.getByTestId('browser-toolbar');
     await expect(toolbar).toBeVisible();

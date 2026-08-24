@@ -234,6 +234,24 @@ function buildSearchUrl(query: string, engine: string): string {
   return `https://www.google.com/search?q=${encodedQuery}`;
 }
 
+function readStoredJson<T>(key: string, fallback: T, isValid: (value: unknown) => value is T): T {
+  try {
+    const stored = localStorage.getItem(key);
+    if (!stored) return fallback;
+    const parsed: unknown = JSON.parse(stored);
+    return isValid(parsed) ? parsed : fallback;
+  } catch {
+    return fallback;
+  }
+}
+
+const isWorkspaceList = (value: unknown): value is { id: string; name: string }[] => Array.isArray(value) && value.every(item => item && typeof item === 'object' && typeof (item as any).id === 'string' && typeof (item as any).name === 'string');
+const isTabGroupList = (value: unknown): value is { id: string; name: string; color: string }[] => Array.isArray(value) && value.every(item => item && typeof item === 'object' && typeof (item as any).id === 'string' && typeof (item as any).name === 'string' && typeof (item as any).color === 'string');
+const isCollapsedGroupMap = (value: unknown): value is Record<string, boolean> => Boolean(value && typeof value === 'object' && !Array.isArray(value) && Object.values(value as Record<string, unknown>).every(item => typeof item === 'boolean'));
+const isBookmarkList = (value: unknown): value is { title: string; url: string }[] => Array.isArray(value) && value.every(item => item && typeof item === 'object' && typeof (item as any).title === 'string' && typeof (item as any).url === 'string');
+const isReadingList = (value: unknown): value is { title: string; url: string; content: string; savedAt: string }[] => Array.isArray(value) && value.every(item => item && typeof item === 'object' && typeof (item as any).title === 'string' && typeof (item as any).url === 'string' && typeof (item as any).content === 'string' && typeof (item as any).savedAt === 'string');
+const isHistoryList = (value: unknown): value is { title: string; url: string; time: string }[] => Array.isArray(value) && value.every(item => item && typeof item === 'object' && typeof (item as any).title === 'string' && typeof (item as any).url === 'string' && typeof (item as any).time === 'string');
+
 function formatDownloadBytes(bytes: number): string {
   if (!Number.isFinite(bytes) || bytes <= 0) return '0 B';
   const units = ['B', 'KB', 'MB', 'GB'];
@@ -439,8 +457,7 @@ function App() {
 
   const [workspaces, setWorkspaces] = useState<{id: string, name: string}[]>(() => {
     if (isPrivateWindow) return [{id: 'default', name: 'Private'}];
-    const saved = localStorage.getItem('workspaces');
-    return saved ? JSON.parse(saved) : [{id: 'default', name: 'Personal'}];
+    return readStoredJson('workspaces', [{id: 'default', name: 'Personal'}], isWorkspaceList);
   });
   const [activeWorkspaceId, setActiveWorkspaceId] = useState<string>(() => {
     if (isPrivateWindow) return 'default';
@@ -449,13 +466,11 @@ function App() {
 
   const [tabGroups, setTabGroups] = useState<{id: string, name: string, color: string}[]>(() => {
     if (isPrivateWindow) return [];
-    const saved = localStorage.getItem('tabGroups');
-    return saved ? JSON.parse(saved) : [];
+    return readStoredJson('tabGroups', [], isTabGroupList);
   });
   const [collapsedTabGroups, setCollapsedTabGroups] = useState<Record<string, boolean>>(() => {
     if (isPrivateWindow) return {};
-    const saved = localStorage.getItem('collapsedTabGroups');
-    return saved ? JSON.parse(saved) : {};
+    return readStoredJson('collapsedTabGroups', {}, isCollapsedGroupMap);
   });
 
   const [splitTabId, setSplitTabId] = useState<string | null>(null);
@@ -542,20 +557,17 @@ function App() {
   const [inputUrl, setInputUrl] = useState(DEFAULT_URL);
   const [bookmarks, setBookmarks] = useState<{title: string, url: string}[]>(() => {
     if (isPrivateWindow) return [];
-    const saved = localStorage.getItem('bookmarks');
-    return saved ? JSON.parse(saved) : [];
+    return readStoredJson('bookmarks', [], isBookmarkList);
   });
   const [showBookmarks, setShowBookmarks] = useState(false);
   const [readingList, setReadingList] = useState<{title: string, url: string, content: string, savedAt: string}[]>(() => {
     if (isPrivateWindow) return [];
-    const saved = localStorage.getItem('readingList');
-    return saved ? JSON.parse(saved) : [];
+    return readStoredJson('readingList', [], isReadingList);
   });
   const [showReadingList, setShowReadingList] = useState(false);
   const [history, setHistory] = useState<{title: string, url: string, time: string}[]>(() => {
     if (isPrivateWindow) return [];
-    const saved = localStorage.getItem('history');
-    return saved ? JSON.parse(saved) : [];
+    return readStoredJson('history', [], isHistoryList);
   });
   const [showHistory, setShowHistory] = useState(false);
   const [historyQuery, setHistoryQuery] = useState('');
