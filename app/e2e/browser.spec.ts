@@ -25,6 +25,13 @@ test.describe('browser shell', () => {
     await expect(toolbar.getByTestId('shields-button')).toBeVisible();
     await expect(toolbar.getByTestId('downloads-button')).toBeVisible();
     await expect(toolbar.getByTestId('menu-button')).toBeVisible();
+    const geometry = await toolbar.evaluate((element) => {
+      const address = element.querySelector('[data-testid="address-bar"]')?.getBoundingClientRect();
+      const navigation = element.querySelector('.nav-buttons')?.getBoundingClientRect();
+      return { addressWidth: address?.width || 0, navigationWidth: navigation?.width || 0 };
+    });
+    expect(geometry.addressWidth).toBeGreaterThan(300);
+    expect(geometry.addressWidth).toBeGreaterThan(geometry.navigationWidth);
   });
 
   test('shows accessible minimize maximize and close window controls', async ({ appPage }) => {

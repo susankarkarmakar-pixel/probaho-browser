@@ -5464,3 +5464,89 @@ body.theme-light .annotation-toolbar {
 body.theme-light .annotation-export-status {
   color: #475569;
 }
+
+
+/* Standard browser-sized omnibox layout */
+.windows-toolbar {
+  display: flex;
+  align-items: center;
+  flex-wrap: nowrap;
+  min-width: 0;
+}
+
+.windows-toolbar .nav-buttons {
+  flex: 0 0 auto;
+  min-width: max-content;
+}
+
+.windows-toolbar .address-bar-container {
+  flex: 1 1 620px;
+  width: auto !important;
+  min-width: 300px;
+  max-width: none;
+  min-height: 36px;
+  box-sizing: border-box;
+}
+
+.windows-toolbar .address-input {
+  min-width: 0;
+  flex: 1 1 auto;
+  width: auto;
+}
+
+.windows-toolbar .address-bar-container .security-icon {
+  flex: 0 0 23px;
+}
+
+.windows-toolbar .address-bar-container > .bookmark-toggle-btn,
+.windows-toolbar .address-bar-container > .zoom-indicator {
+  flex: 0 0 auto;
+}
+
+@media (min-width: 1200px) {
+  .windows-toolbar .address-bar-container {
+    flex-basis: 720px;
+  }
+}
+
+@media (max-width: 900px) {
+  .windows-toolbar .address-bar-container {
+    flex-basis: 380px;
+    min-width: 220px;
+  }
+}
+
+@media (max-width: 700px) {
+  .windows-toolbar {
+    gap: 4px;
+    padding-inline: 6px;
+  }
+
+  .windows-toolbar .address-bar-container {
+    flex-basis: 220px;
+    min-width: 150px;
+    padding-inline: 7px;
+  }
+
+  .windows-toolbar .address-bar-container .bookmark-toggle-btn,
+  .windows-toolbar .address-bar-container .zoom-indicator {
+    display: none;
+  }
+}
+
+@media (max-width: 540px) {
+  .windows-toolbar .address-bar-container {
+    min-width: 120px;
+  }
+
+  .windows-toolbar .nav-buttons {
+    gap: 0;
+    padding: 1px;
+  }
+
+  .windows-toolbar .nav-buttons .nav-btn:nth-child(2),
+  .windows-toolbar .nav-buttons .nav-btn:nth-child(5),
+  .windows-toolbar .nav-buttons .nav-btn:nth-child(6) {
+    display: none;
+  }
+}
