@@ -1,5 +1,5 @@
 import { createHash } from 'node:crypto';
-import { existsSync, readdirSync, readFileSync, writeFileSync } from 'node:fs';
+import { existsSync, readdirSync, readFileSync, statSync, writeFileSync } from 'node:fs';
 import { join, relative } from 'node:path';
 
 const releaseDir = new URL('../release/', import.meta.url);
@@ -12,7 +12,7 @@ if (!existsSync(releasePath)) {
 }
 
 const files = readdirSync(releasePath)
-  .filter((name) => !name.startsWith('SHA256SUMS-') && !name.endsWith('.blockmap') && !name.endsWith('.yml'))
+  .filter((name) => !name.startsWith('SHA256SUMS-') && !name.endsWith('.blockmap') && !name.endsWith('.yml') && !name.endsWith('.yaml') && statSync(join(releasePath, name)).isFile())
   .map((name) => {
     const path = join(releasePath, name);
     const digest = createHash('sha256').update(readFileSync(path)).digest('hex');
