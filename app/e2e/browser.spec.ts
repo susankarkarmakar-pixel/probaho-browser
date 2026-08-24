@@ -201,6 +201,39 @@ test.describe('browser shell', () => {
     await expect(addressInput).toHaveValue('javascript:alert(1)');
   });
 
+  test('renders collapsible Edge-style vertical tabs and tab groups', async ({ appPage }) => {
+    const savedSettings = await appPage.evaluate(() => JSON.parse(localStorage.getItem('probaho-settings') || '{}'));
+    await appPage.evaluate(({ savedSettings }) => {
+      localStorage.setItem('probaho-settings', JSON.stringify({ ...savedSettings, verticalTabs: true }));
+      localStorage.setItem('tabGroups', JSON.stringify([{ id: 'work', name: 'Work', color: '#2563eb' }]));
+      localStorage.setItem('savedTabs', JSON.stringify([
+        { id: 'tab-work-1', url: 'probaho://newtab', title: 'Work dashboard', workspaceId: 'default', groupId: 'work', isPrivate: false },
+        { id: 'tab-work-2', url: 'probaho://newtab', title: 'Work notes', workspaceId: 'default', groupId: 'work', isPrivate: false },
+        { id: 'tab-personal', url: 'probaho://newtab', title: 'Personal', workspaceId: 'default', isPrivate: false }
+      ]));
+      localStorage.setItem('activeTabId', 'tab-work-1');
+    }, { savedSettings });
+    await appPage.reload();
+    await expect(appPage.getByTestId('browser-shell')).toBeVisible();
+
+    const sidebar = appPage.getByTestId('vertical-tabs-sidebar');
+    await expect(sidebar).toBeVisible();
+    const groupToggle = sidebar.getByRole('button', { name: 'Collapse Work tab group' });
+    await expect(groupToggle).toHaveAttribute('aria-expanded', 'true');
+    await expect(sidebar.locator('.vertical-tab-group-count')).toHaveText('2');
+    await expect(sidebar.getByTestId('tab-tab-work-1')).toBeVisible();
+    await expect(sidebar.getByTestId('tab-tab-work-2')).toBeVisible();
+
+    await groupToggle.click();
+    await expect(sidebar.getByRole('button', { name: 'Expand Work tab group' })).toHaveAttribute('aria-expanded', 'false');
+    await expect(sidebar.getByTestId('tab-tab-work-2')).not.toBeVisible();
+    await sidebar.getByRole('button', { name: 'Expand Work tab group' }).click();
+    await expect(sidebar.getByTestId('tab-tab-work-2')).toBeVisible();
+
+    await sidebar.getByTestId('tab-tab-personal').click({ button: 'right' });
+    await expect(appPage.getByRole('menu', { name: 'Tab actions' }).getByText('Work', { exact: true })).toBeVisible();
+  });
+
   test('supports keyboard navigation in the Chrome-style overflow menu', async ({ appPage }) => {
     const menuButton = appPage.getByTestId('menu-button');
     await menuButton.click();

@@ -29,6 +29,7 @@ type TabCardProps = {
   isFirstInGroup?: boolean;
   isActive: boolean;
   isVertical?: boolean;
+  showGroupHeader?: boolean;
   onActivate: (id: string) => void;
   onContextMenu: (event: React.MouseEvent, id: string) => void;
   onDragStart: (event: React.DragEvent, id: string) => void;
@@ -46,6 +47,7 @@ const TabCard = React.memo(function TabCard({
   isFirstInGroup,
   isActive,
   isVertical = false,
+  showGroupHeader = true,
   onActivate,
   onContextMenu,
   onDragStart,
@@ -66,7 +68,7 @@ const TabCard = React.memo(function TabCard({
 
   return (
     <React.Fragment>
-      {group && isFirstInGroup && (
+      {group && isFirstInGroup && showGroupHeader && (
         <div
           style={isVertical ? {
             display: 'flex', alignItems: 'center', padding: '2px 8px', margin: '4px 0',

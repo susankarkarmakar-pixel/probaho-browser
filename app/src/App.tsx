@@ -374,6 +374,11 @@ function App() {
     const saved = localStorage.getItem('tabGroups');
     return saved ? JSON.parse(saved) : [];
   });
+  const [collapsedTabGroups, setCollapsedTabGroups] = useState<Record<string, boolean>>(() => {
+    if (isPrivateWindow) return {};
+    const saved = localStorage.getItem('collapsedTabGroups');
+    return saved ? JSON.parse(saved) : {};
+  });
 
   const [splitTabId, setSplitTabId] = useState<string | null>(null);
   const [focusedPane, setFocusedPane] = useState<'main' | 'split'>('main');
@@ -918,6 +923,11 @@ function App() {
     localStorage.setItem('tabGroups', JSON.stringify(tabGroups));
   }, [tabGroups, isPrivateWindow]);
 
+  useEffect(() => {
+    if (isPrivateWindow) return;
+    localStorage.setItem('collapsedTabGroups', JSON.stringify(collapsedTabGroups));
+  }, [collapsedTabGroups, isPrivateWindow]);
+
   const targetedTabId = focusedPane === 'split' && splitTabId ? splitTabId : activeTabId;
 
   // Keep a ref of the active tab id to avoid stale closures in event listeners
@@ -1151,6 +1161,15 @@ function App() {
     };
     setTabs(prev => [...prev, newTab]);
     setActiveTabId(newTab.id);
+  };
+
+  const toggleTabGroup = (groupId: string) => {
+    setCollapsedTabGroups(prev => ({ ...prev, [groupId]: !prev[groupId] }));
+  };
+
+  const assignTabToGroup = (tabId: string, groupId?: string) => {
+    updateTab(tabId, { groupId });
+    setTabContextMenu(null);
   };
 
   const closeTabId = (id: string) => {
@@ -1838,23 +1857,39 @@ function App() {
           </div>
           <div className="menu-divider" />
           <div className="menu-divider" />
+          <div className="menu-section-label">Tab group</div>
           <div className="menu-item" onClick={() => {
             const name = prompt('Group Name:');
-            if (name) {
-               const id = crypto.randomUUID();
-               const colors = ['#ff5252', '#4caf50', '#2196f3', '#ffeb3b', '#9c27b0', '#ff9800', '#00bcd4'];
-               const color = colors[Math.floor(Math.random() * colors.length)];
-               setTabGroups(prev => [...prev, { id, name, color }]);
-               updateTab(tabContextMenu.tabId, { groupId: id });
+            if (name?.trim()) {
+              const id = crypto.randomUUID();
+              const colors = ['#ef4444', '#16a34a', '#2563eb', '#ca8a04', '#9333ea', '#ea580c', '#0891b2'];
+              const color = colors[tabGroups.length % colors.length];
+              setTabGroups(prev => [...prev, { id, name: name.trim(), color }]);
+              setCollapsedTabGroups(prev => ({ ...prev, [id]: false }));
+              assignTabToGroup(tabContextMenu.tabId, id);
             }
           }}>
-            <div className="menu-item-icon"><FolderPlus size={15} /></div><div className="menu-item-text">Add to New Group</div>
+            <div className="menu-item-icon"><FolderPlus size={15} /></div><div className="menu-item-text">Create new group</div>
           </div>
+          {tabGroups.length > 0 && (
+            <div className="tab-group-menu-list">
+              {tabGroups.map(group => {
+                const memberCount = tabs.filter(tab => tab.groupId === group.id).length;
+                const isAssigned = tabs.find(tab => tab.id === tabContextMenu.tabId)?.groupId === group.id;
+                return (
+                  <div key={group.id} className={`menu-item tab-group-menu-item ${isAssigned ? 'is-assigned' : ''}`} onClick={() => assignTabToGroup(tabContextMenu.tabId, group.id)}>
+                    <span className="tab-group-color-dot" style={{ backgroundColor: group.color }} />
+                    <div className="menu-item-text">{group.name}</div>
+                    <span className="tab-group-count">{memberCount}</span>
+                    {isAssigned && <CheckCircle2 size={14} />}
+                  </div>
+                );
+              })}
+            </div>
+          )}
           {tabs.find(t => t.id === tabContextMenu.tabId)?.groupId && (
-            <div className="menu-item" onClick={() => {
-              updateTab(tabContextMenu.tabId, { groupId: undefined });
-            }}>
-              <div className="menu-item-icon"><FolderMinus size={15} /></div><div className="menu-item-text">Remove from Group</div>
+            <div className="menu-item" onClick={() => assignTabToGroup(tabContextMenu.tabId)}>
+              <div className="menu-item-icon"><FolderMinus size={15} /></div><div className="menu-item-text">Remove from group</div>
             </div>
           )}
           <div className="menu-divider" />
@@ -3545,63 +3580,87 @@ function App() {
       <div className="content-area" style={{ display: 'flex', flexDirection: 'row', flex: 1, overflow: 'hidden' }}>
 
         {settings.verticalTabs && (
-          <div className="vertical-tabs-sidebar" style={{
-            width: '240px',
-            background: 'var(--bg-color)',
-            borderRight: '1px solid var(--border-color)',
-            display: 'flex',
-            flexDirection: 'column',
-            overflowY: 'auto'
-          }}>
-            <div style={{ padding: '8px', borderBottom: '1px solid var(--border-color)', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-              <span style={{ fontSize: '13px', fontWeight: 'bold' }}>Tabs</span>
-              <button className="nav-btn" onClick={() => createTab(isPrivateWindow)}><Plus size={14} /></button>
+          <aside className="vertical-tabs-sidebar" data-testid="vertical-tabs-sidebar" aria-label="Vertical tabs">
+            <div className="vertical-tabs-header">
+              <div className="vertical-tabs-heading">
+                <span className="vertical-tabs-kicker">Workspace tabs</span>
+                <strong>{workspaceTabs.length} open {workspaceTabs.length === 1 ? 'tab' : 'tabs'}</strong>
+              </div>
+              <button className="vertical-tabs-new-btn" data-testid="vertical-new-tab-button" type="button" aria-label="New tab" title="New tab" onClick={() => createTab(isPrivateWindow)}><Plus size={16} /></button>
             </div>
-            <div style={{ padding: '8px', display: 'flex', flexDirection: 'column', gap: '4px' }}>
+            <div className="vertical-tabs-list" role="tablist" aria-label="Open tabs">
               {workspaceTabs.map((tab, i, arr) => {
                 const group = tab.groupId ? tabGroups.find(g => g.id === tab.groupId) : null;
-                return <TabCard
-                  key={tab.id}
-                  tab={tab}
-                  group={group}
-                  isFirstInGroup={Boolean(group && (i === 0 || arr[i - 1].groupId !== tab.groupId))}
-                  isActive={tab.id === activeTabId}
-                  isVertical
-                  onActivate={setActiveTabId}
-                  onContextMenu={(event, id) => { event.preventDefault(); setTabContextMenu({ tabId: id, x: event.clientX, y: event.clientY }); }}
-                  onDragStart={(event, id) => { setDraggedTabId(id); event.dataTransfer.effectAllowed = 'move'; }}
-                  onDragOver={(event) => { event.preventDefault(); event.dataTransfer.dropEffect = 'move'; }}
-                  onDrop={(event, id) => {
-                    event.preventDefault();
-                    if (!draggedTabId || draggedTabId === id) return;
-                    setTabs(prev => {
-                      const draggedIndex = prev.findIndex(t => t.id === draggedTabId);
-                      const dropIndex = prev.findIndex(t => t.id === id);
-                      if (draggedIndex === -1 || dropIndex === -1) return prev;
-                      const newTabs = [...prev];
-                      const [removed] = newTabs.splice(draggedIndex, 1);
-                      newTabs.splice(dropIndex, 0, removed);
-                      return newTabs;
-                    });
-                    setDraggedTabId(null);
-                  }}
-                  onDragEnd={() => setDraggedTabId(null)}
-                  onMiddleClick={(event, id) => { if (event.button === 1) closeTab(event, id); }}
-                  onClose={(event, id) => closeTab(event, id)}
-                  onToggleMute={(event, id) => {
-                    event.stopPropagation();
-                    const wv = webviewRefs.current[id];
-                    const target = tabs.find(item => item.id === id);
-                    if (wv && target) {
-                      const newMutedState = !target.isMuted;
-                      wv.setAudioMuted(newMutedState);
-                      updateTab(id, { isMuted: newMutedState });
-                    }
-                  }}
-                />;
+                const isFirstInGroup = Boolean(group && (i === 0 || arr[i - 1].groupId !== tab.groupId));
+                const isCollapsed = Boolean(group && collapsedTabGroups[group.id]);
+                if (group && !isFirstInGroup && isCollapsed) return null;
+                return (
+                  <React.Fragment key={tab.id}>
+                    {group && isFirstInGroup && (
+                      <div className="vertical-tab-group-header" style={{ '--group-color': group.color } as React.CSSProperties}>
+                        <button
+                          type="button"
+                          className="vertical-tab-group-toggle"
+                          aria-expanded={!isCollapsed}
+                          aria-label={`${isCollapsed ? 'Expand' : 'Collapse'} ${group.name} tab group`}
+                          onClick={() => toggleTabGroup(group.id)}
+                        >
+                          <span className={`vertical-tab-group-chevron ${isCollapsed ? 'is-collapsed' : ''}`}><ChevronDown size={14} /></span>
+                          <span className="vertical-tab-group-name">{group.name}</span>
+                          <span className="vertical-tab-group-count">{workspaceTabs.filter(item => item.groupId === group.id).length}</span>
+                        </button>
+                      </div>
+                    )}
+                    {(!group || !isCollapsed) && (
+                      <TabCard
+                        tab={tab}
+                        group={group}
+                        isFirstInGroup={isFirstInGroup}
+                        isActive={tab.id === activeTabId}
+                        isVertical
+                        showGroupHeader={false}
+                        onActivate={setActiveTabId}
+                        onContextMenu={(event, id) => { event.preventDefault(); setTabContextMenu({ tabId: id, x: event.clientX, y: event.clientY }); }}
+                        onDragStart={(event, id) => { setDraggedTabId(id); event.dataTransfer.effectAllowed = 'move'; }}
+                        onDragOver={(event) => { event.preventDefault(); event.dataTransfer.dropEffect = 'move'; }}
+                        onDrop={(event, id) => {
+                          event.preventDefault();
+                          if (!draggedTabId || draggedTabId === id) return;
+                          setTabs(prev => {
+                            const draggedIndex = prev.findIndex(t => t.id === draggedTabId);
+                            const dropIndex = prev.findIndex(t => t.id === id);
+                            if (draggedIndex === -1 || dropIndex === -1) return prev;
+                            const newTabs = [...prev];
+                            const [removed] = newTabs.splice(draggedIndex, 1);
+                            newTabs.splice(dropIndex, 0, removed);
+                            return newTabs;
+                          });
+                          setDraggedTabId(null);
+                        }}
+                        onDragEnd={() => setDraggedTabId(null)}
+                        onMiddleClick={(event, id) => { if (event.button === 1) closeTab(event, id); }}
+                        onClose={(event, id) => closeTab(event, id)}
+                        onToggleMute={(event, id) => {
+                          event.stopPropagation();
+                          const wv = webviewRefs.current[id];
+                          const target = tabs.find(item => item.id === id);
+                          if (wv && target) {
+                            const newMutedState = !target.isMuted;
+                            wv.setAudioMuted(newMutedState);
+                            updateTab(id, { isMuted: newMutedState });
+                          }
+                        }}
+                      />
+                    )}
+                  </React.Fragment>
+                );
               })}
             </div>
-          </div>
+            <div className="vertical-tabs-footer">
+              <span>Drag tabs to reorder</span>
+              <button type="button" className="vertical-tabs-footer-action" onClick={() => setShowSettings(true)}>Tab settings</button>
+            </div>
+          </aside>
         )}
 
         <div style={{ flex: 1, position: 'relative', display: 'flex', flexDirection: 'column' }}>
