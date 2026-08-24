@@ -5,7 +5,7 @@ import TabCard from './TabCard';
 import WebPane from './WebPane';
 import {
   ArrowLeft, ArrowRight, RotateCw, Home, Plus,
-  Lock, X, Square, Search, Star, Bookmark, Menu, History, ZoomIn, FileCode, Printer, LogOut, Info, Download, Folder, Settings, ChevronUp, ChevronDown, EyeOff, Eye, Shield, BookOpen, Volume2, VolumeX, Globe, BookPlus, PictureInPicture, Share2, MessageSquare, Music, MessageCircle, Library, Columns, PanelRight, Copy, Pin, FolderPlus, FolderMinus, Trash2, Moon, Pause, Play, CheckCircle2, AlertCircle, FileText, SlidersHorizontal, ShieldCheck, ShieldAlert
+  Lock, X, Square, Search, Star, Bookmark, Menu, History, ZoomIn, FileCode, Printer, LogOut, Info, Download, Folder, Settings, ChevronUp, ChevronDown, EyeOff, Eye, Shield, BookOpen, Volume2, VolumeX, Globe, BookPlus, PictureInPicture, Share2, MessageSquare, Music, MessageCircle, Library, Columns, PanelRight, Copy, Pin, FolderPlus, FolderMinus, Trash2, Moon, Sun, Puzzle, Power, Pause, Play, CheckCircle2, AlertCircle, FileText, SlidersHorizontal, ShieldCheck, ShieldAlert
 } from 'lucide-react';
 
 interface DownloadItem {
@@ -434,6 +434,7 @@ function App() {
   const [passwordsStore, setPasswordsStore] = useState<Record<string, any>>({});
   const [showPasswords, setShowPasswords] = useState<Record<string, boolean>>({});
   const [showMenu, setShowMenu] = useState(false);
+  const [showExtensions, setShowExtensions] = useState(false);
   const [showAbout, setShowAbout] = useState(false);
   const [showAutocomplete, setShowAutocomplete] = useState(false);
   const [showShields, setShowShields] = useState(false);
@@ -1577,6 +1578,35 @@ function App() {
     }
   };
 
+  const openSettingsPanel = () => {
+    setShowExtensions(false);
+    setShowMenu(false);
+    setShowSettings(true);
+    if (window.electronAPI?.getPermissions) window.electronAPI.getPermissions().then(setPermissions);
+    if (window.electronAPI?.getAllPasswords) window.electronAPI.getAllPasswords().then(setPasswordsStore);
+  };
+  const toggleTheme = () => {
+    setSettings((prev: typeof settings) => ({ ...prev, theme: prev.theme === 'light' ? 'dark' : 'light' }));
+  };
+  const loadUnpackedExtension = async () => {
+    setExtensionError(null);
+    const result = await window.electronAPI?.loadExtension?.();
+    if (!result) return;
+    if ('error' in result) setExtensionError(result.error);
+    else setExtensions(prev => [...prev.filter(item => item.id !== result.id), result]);
+  };
+  const toggleExtension = async (extension: ExtensionRecord) => {
+    setExtensionError(null);
+    const result = await window.electronAPI?.setExtensionEnabled?.(extension.id, !extension.enabled);
+    if (result && !('error' in result)) setExtensions(prev => prev.map(item => item.id === result.id ? result : item));
+    else if (result && 'error' in result) setExtensionError(result.error);
+  };
+  const removeInstalledExtension = async (extension: ExtensionRecord) => {
+    setExtensionError(null);
+    const removed = await window.electronAPI?.removeExtension?.(extension.id);
+    if (removed) setExtensions(prev => prev.filter(item => item.id !== extension.id));
+  };
+
   const toggleBookmark = () => {
     const tab = tabs.find(t => t.id === targetedTabId);
     if (!tab) return;
@@ -2443,7 +2473,92 @@ function App() {
           )}
         </div>
 
-        <button className="nav-btn" data-testid="menu-button" aria-label="Open menu" onClick={() => { setShowBookmarks(false); setShowHistory(false); setShowDownloads(false); setShowReadingList(false); setShowMenu(!showMenu); }}>
+        <div className="extensions-anchor">
+          <button
+            className="nav-btn extensions-trigger"
+            data-testid="extensions-button"
+            type="button"
+            aria-label="Extensions"
+            aria-expanded={showExtensions}
+            title="Extensions"
+            onClick={() => {
+              setShowBookmarks(false);
+              setShowHistory(false);
+              setShowDownloads(false);
+              setShowReadingList(false);
+              setShowMenu(false);
+              setShowShields(false);
+              setShowMediaControls(false);
+              setShowExtensions(!showExtensions);
+            }}
+          >
+            <Puzzle size={16} />
+            {extensions.filter(extension => extension.enabled).length > 0 && <span className="extensions-count">{extensions.filter(extension => extension.enabled).length}</span>}
+          </button>
+          {showExtensions && (
+            <section className="extensions-popout" data-testid="extensions-popout" aria-label="Extensions" onClick={e => e.stopPropagation()}>
+              <header className="extensions-popout-header">
+                <div>
+                  <span className="extensions-kicker">Browser tools</span>
+                  <h3>Extensions</h3>
+                  <span className="panel-subtitle">{extensions.length === 0 ? 'No extensions installed' : `${extensions.length} installed · ${extensions.filter(extension => extension.enabled).length} active`}</span>
+                </div>
+                <button className="nav-btn" type="button" aria-label="Close extensions" title="Close extensions" onClick={() => setShowExtensions(false)}><X size={15} /></button>
+              </header>
+
+              <div className="extensions-popout-intro">
+                <div className="extensions-intro-icon"><Puzzle size={17} /></div>
+                <div>
+                  <strong>Keep your tools close</strong>
+                  <span>Only validated unpacked extensions run in Probaho.</span>
+                </div>
+              </div>
+
+              <div className="extensions-list">
+                {extensions.length === 0 ? (
+                  <div className="extensions-empty" data-testid="extensions-empty">
+                    <div className="extensions-empty-icon"><Puzzle size={23} /></div>
+                    <strong>No extensions yet</strong>
+                    <span>Add an unpacked extension to get started.</span>
+                  </div>
+                ) : extensions.map(extension => (
+                  <article className={`extension-popout-card ${extension.enabled ? 'is-enabled' : 'is-disabled'}`} key={extension.id} data-testid={`extension-popout-${extension.id}`}>
+                    <div className="extension-popout-icon"><Puzzle size={17} /></div>
+                    <div className="extension-popout-copy">
+                      <div className="extension-popout-title-row">
+                        <strong title={extension.name}>{extension.name}</strong>
+                        <span>v{extension.version}</span>
+                      </div>
+                      <span className="extension-popout-status"><span className="extension-status-dot" />{extension.enabled ? 'Enabled' : 'Disabled'}</span>
+                    </div>
+                    <button className={`extension-power-btn ${extension.enabled ? 'is-enabled' : ''}`} type="button" aria-label={`${extension.enabled ? 'Disable' : 'Enable'} ${extension.name}`} aria-pressed={extension.enabled} title={extension.enabled ? 'Disable extension' : 'Enable extension'} onClick={() => toggleExtension(extension)}>
+                      <Power size={15} />
+                    </button>
+                  </article>
+                ))}
+              </div>
+
+              {extensionError && <div className="extensions-error" role="alert">{extensionError}</div>}
+              <footer className="extensions-popout-footer">
+                <button className="extensions-load-btn" type="button" onClick={loadUnpackedExtension}><Plus size={14} /> Add unpacked</button>
+                <button className="extensions-manage-btn" type="button" onClick={openSettingsPanel}>Manage extensions</button>
+              </footer>
+            </section>
+          )}
+        </div>
+
+        <button
+          className="nav-btn theme-toggle-btn"
+          data-testid="theme-toggle-button"
+          type="button"
+          aria-label={settings.theme === 'light' ? 'Switch to dark theme' : 'Switch to light theme'}
+          title={settings.theme === 'light' ? 'Switch to dark theme' : 'Switch to light theme'}
+          onClick={toggleTheme}
+        >
+          {settings.theme === 'light' ? <Moon size={16} /> : <Sun size={16} />}
+        </button>
+
+        <button className="nav-btn" data-testid="menu-button" aria-label="Open menu" onClick={() => { setShowBookmarks(false); setShowHistory(false); setShowDownloads(false); setShowReadingList(false); setShowExtensions(false); setShowMenu(!showMenu); }}>
           <Menu size={16} />
         </button>
       </div>
@@ -2477,6 +2592,11 @@ function App() {
           <div className="menu-item" onClick={() => { setShowMenu(false); setShowDownloads(true); }}>
             <div className="menu-item-icon"><Download size={16} /></div>
             <div className="menu-item-text">{t('downloads', settings.language)}</div>
+          </div>
+          <div className="menu-item" onClick={() => { setShowMenu(false); setShowExtensions(true); }}>
+            <div className="menu-item-icon"><Puzzle size={16} /></div>
+            <div className="menu-item-text">Extensions</div>
+            <div className="menu-item-shortcut">{extensions.filter(extension => extension.enabled).length || 'Off'}</div>
           </div>
           <div className="menu-item" onClick={() => { setShowMenu(false); setShowBookmarks(true); }}>
             <div className="menu-item-icon"><Bookmark size={16} /></div>
@@ -2534,16 +2654,8 @@ function App() {
 
           </div>
           <div className="menu-divider" />
-          <div className="menu-item" onClick={() => {
-            setShowMenu(false);
-            setShowSettings(true);
-            if (window.electronAPI?.getPermissions) {
-              window.electronAPI.getPermissions().then(setPermissions);
-            }
-            if (window.electronAPI?.getAllPasswords) {
-              window.electronAPI.getAllPasswords().then(setPasswordsStore);
-            }
-          }}>
+                    <div className="menu-item" onClick={openSettingsPanel}>
+
             <div className="menu-item-icon"><Settings size={16} /></div>
             <div className="menu-item-text">{t('settings', settings.language)}</div>
           </div>
@@ -2976,7 +3088,7 @@ function App() {
               </div>
 
               {/* Extensions and Plugins Section */}
-              <div className="settings-section" style={{marginTop: '24px', borderTop: '1px solid var(--border-color)', paddingTop: '16px'}} data-testid="extensions-section">
+              <div className="settings-section extensions-manager-section" style={{marginTop: '24px', borderTop: '1px solid var(--border-color)', paddingTop: '16px'}} data-testid="extensions-section">
                 <h4 className="settings-section-title" style={{marginBottom: '6px', fontSize: '14px'}}><SlidersHorizontal size={15} /> Extensions & Plugins</h4>
                 <div style={{fontSize: '11px', color: '#888', marginBottom: '12px'}}>Only manifest-validated unpacked extensions are loaded. Extension code remains isolated from this UI.</div>
                 <button
@@ -3011,10 +3123,7 @@ function App() {
                           if (result && !('error' in result)) setExtensions(prev => prev.map(item => item.id === result.id ? result : item));
                           else if (result && 'error' in result) setExtensionError(result.error);
                         }}>{extension.enabled ? 'Disable' : 'Enable'}</button>
-                        <button className="clear-history-btn" style={{padding: '4px 8px', fontSize: '10px'}} onClick={async () => {
-                          await window.electronAPI?.removeExtension?.(extension.id);
-                          setExtensions(prev => prev.filter(item => item.id !== extension.id));
-                        }}>Remove</button>
+                        <button className="clear-history-btn" style={{padding: '4px 8px', fontSize: '10px'}} onClick={() => removeInstalledExtension(extension)}>Remove</button>
                       </div>
                     </div>
                   ))}

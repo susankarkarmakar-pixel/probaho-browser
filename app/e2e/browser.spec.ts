@@ -27,6 +27,36 @@ test.describe('browser shell', () => {
     await expect(toolbar.getByTestId('menu-button')).toBeVisible();
   });
 
+  test('opens the Chrome-style Extensions manager from the toolbar', async ({ appPage }) => {
+    const extensionsButton = appPage.getByTestId('extensions-button');
+    await expect(extensionsButton).toBeVisible();
+    await expect(extensionsButton).toHaveAttribute('aria-expanded', 'false');
+    await extensionsButton.click();
+    const popout = appPage.getByTestId('extensions-popout');
+    await expect(popout).toBeVisible();
+    await expect(popout.getByText('Extensions', { exact: true })).toBeVisible();
+    await expect(popout.getByTestId('extensions-empty')).toContainText('No extensions yet');
+    await expect(popout.getByRole('button', { name: 'Add unpacked' })).toBeVisible();
+    await expect(popout.getByRole('button', { name: 'Manage extensions' })).toBeVisible();
+    await popout.getByRole('button', { name: 'Manage extensions' }).click();
+    await expect(appPage.getByTestId('settings-modal')).toBeVisible();
+    await expect(appPage.getByTestId('extensions-section')).toBeVisible();
+    await appPage.getByRole('button', { name: 'Close settings' }).click();
+    await expect(appPage.getByTestId('settings-modal')).not.toBeVisible();
+  });
+
+  test('switches dark and light themes instantly from the toolbar', async ({ appPage }) => {
+    const themeButton = appPage.getByTestId('theme-toggle-button');
+    const body = appPage.locator('body');
+    await expect(body).toHaveClass(/theme-light/);
+    await expect(themeButton).toHaveAttribute('aria-label', 'Switch to dark theme');
+    await themeButton.click();
+    await expect(body).not.toHaveClass(/theme-light/);
+    await expect(themeButton).toHaveAttribute('aria-label', 'Switch to light theme');
+    await themeButton.click();
+    await expect(body).toHaveClass(/theme-light/);
+  });
+
   test('exposes a sanitized performance snapshot', async ({ appPage }) => {
     const snapshot = await appPage.evaluate(() => window.electronAPI.getPerformanceSnapshot?.());
     expect(snapshot).toBeTruthy();
