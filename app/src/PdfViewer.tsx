@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import * as pdfjsLib from 'pdfjs-dist';
-import AnnotationLayer from './AnnotationLayer';
+import { PDFDocument, StandardFonts, rgb } from 'pdf-lib';
+import AnnotationLayer, { Annotation } from './AnnotationLayer';
 // The workerSrc is needed for pdf.js to run in the background
 // @ts-ignore
 import workerUrl from 'pdfjs-dist/build/pdf.worker.mjs?url';
@@ -25,6 +26,7 @@ const PdfViewer: React.FC<PdfViewerProps> = ({ url, privateMode = false, annotat
   const renderTaskRef = useRef<any>(null);
   const loadingTaskRef = useRef<any>(null);
   const pdfDocRef = useRef<any>(null);
+  const pdfDataRef = useRef<Uint8Array | null>(null);
 
   useEffect(() => {
     let isMounted = true;
@@ -37,6 +39,7 @@ const PdfViewer: React.FC<PdfViewerProps> = ({ url, privateMode = false, annotat
         const buffer = await (window as any).electronAPI.fetchPdf(url);
         // pdf.js needs a Uint8Array
         const data = new Uint8Array(buffer);
+        pdfDataRef.current = data;
 
         // Never execute JavaScript embedded in untrusted PDFs.
         const loadingTask = pdfjsLib.getDocument({
@@ -73,6 +76,7 @@ const PdfViewer: React.FC<PdfViewerProps> = ({ url, privateMode = false, annotat
       }
       const documentToDestroy = pdfDocRef.current;
       pdfDocRef.current = null;
+      pdfDataRef.current = null;
       documentToDestroy?.destroy?.();
     };
   }, [url]);
@@ -141,6 +145,77 @@ const PdfViewer: React.FC<PdfViewerProps> = ({ url, privateMode = false, annotat
   const handleZoomIn = () => setZoom(z => Math.min(z + 0.25, 3.0));
   const handleZoomOut = () => setZoom(z => Math.max(z - 0.25, 0.5));
 
+  const colorFromHex = (hex: string) => {
+    const normalized = hex.replace('#', '');
+    const value = normalized.length === 3 ? normalized.split('').map(char => char + char).join('') : normalized;
+    const red = Number.parseInt(value.slice(0, 2), 16) / 255;
+    const green = Number.parseInt(value.slice(2, 4), 16) / 255;
+    const blue = Number.parseInt(value.slice(4, 6), 16) / 255;
+    return rgb(Number.isFinite(red) ? red : 1, Number.isFinite(green) ? green : 0.8, Number.isFinite(blue) ? blue : 0);
+  };
+
+  const readPageAnnotations = (pageIndex: number): Annotation[] => {
+    if (privateMode) return [];
+    try {
+      const saved = localStorage.getItem(`probaho-annotations:${url}#page=${pageIndex + 1}`);
+      const parsed = saved ? JSON.parse(saved) : [];
+      return Array.isArray(parsed) ? parsed : [];
+    } catch {
+      return [];
+    }
+  };
+
+  const exportFlattenedPdf = async () => {
+    if (!pdfDataRef.current) throw new Error('PDF data is not ready for export.');
+    if (!window.electronAPI?.executeSavePdf) throw new Error('The PDF save dialog is unavailable.');
+    const outputDoc = await PDFDocument.load(pdfDataRef.current);
+    const font = await outputDoc.embedFont(StandardFonts.Helvetica);
+    outputDoc.getPages().forEach((page, pageIndex) => {
+      const pageWidth = page.getWidth();
+      const pageHeight = page.getHeight();
+      readPageAnnotations(pageIndex).forEach(annotation => {
+        const annotationColor = colorFromHex(annotation.color);
+        if (annotation.type === 'highlight') {
+          const x = annotation.x * pageWidth;
+          const y = pageHeight - (annotation.y + (annotation.height || 0)) * pageHeight;
+          page.drawRectangle({
+            x,
+            y,
+            width: Math.abs(annotation.width || 0) * pageWidth,
+            height: Math.abs(annotation.height || 0) * pageHeight,
+            color: annotationColor,
+            opacity: 0.34,
+            borderOpacity: 0
+          });
+        } else if (annotation.type === 'pen' && annotation.points?.length) {
+          for (let pointIndex = 1; pointIndex < annotation.points.length; pointIndex += 1) {
+            const previous = annotation.points[pointIndex - 1];
+            const current = annotation.points[pointIndex];
+            page.drawLine({
+              start: { x: previous.x * pageWidth, y: pageHeight - previous.y * pageHeight },
+              end: { x: current.x * pageWidth, y: pageHeight - current.y * pageHeight },
+              thickness: 2.5,
+              color: annotationColor,
+              opacity: 0.9
+            });
+          }
+        } else if (annotation.type === 'text' && annotation.text) {
+          page.drawText(annotation.text, {
+            x: annotation.x * pageWidth,
+            y: pageHeight - annotation.y * pageHeight - 16,
+            size: 15,
+            font,
+            color: annotationColor,
+            opacity: 0.95
+          });
+        }
+      });
+    });
+    const output = await outputDoc.save();
+    const arrayBuffer = output.buffer.slice(output.byteOffset, output.byteOffset + output.byteLength) as ArrayBuffer;
+    window.electronAPI.executeSavePdf(arrayBuffer);
+  };
+
   if (loading) return <div style={{ padding: 20, color: 'var(--text-color)' }}>Loading PDF...</div>;
   if (error) return <div style={{ padding: 20, color: 'red' }}>Error: {error}</div>;
 
@@ -189,6 +264,7 @@ const PdfViewer: React.FC<PdfViewerProps> = ({ url, privateMode = false, annotat
               width={renderedSize.width}
               height={renderedSize.height}
               privateMode={privateMode}
+              onExportPdf={exportFlattenedPdf}
               className="pdf-annotation-layer"
             />
           )}

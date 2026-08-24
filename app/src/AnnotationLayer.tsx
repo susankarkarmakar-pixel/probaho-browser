@@ -22,6 +22,7 @@ type AnnotationLayerProps = {
   active?: boolean;
   showToolbar?: boolean;
   privateMode?: boolean;
+  onExportPdf?: () => Promise<void> | void;
   className?: string;
 };
 
@@ -46,6 +47,7 @@ const AnnotationLayer: React.FC<AnnotationLayerProps> = ({
   active = true,
   showToolbar = true,
   privateMode = false,
+  onExportPdf,
   className = ''
 }) => {
   const canvasRef = useRef<HTMLCanvasElement>(null);
@@ -57,6 +59,8 @@ const AnnotationLayer: React.FC<AnnotationLayerProps> = ({
   const [history, setHistory] = useState<Annotation[][]>([]);
   const [future, setFuture] = useState<Annotation[][]>([]);
   const [isDrawing, setIsDrawing] = useState(false);
+  const [exportBusy, setExportBusy] = useState(false);
+  const [exportMessage, setExportMessage] = useState<string | null>(null);
 
   const persist = useCallback((next: Annotation[]) => {
     if (privateMode) return;
@@ -236,7 +240,7 @@ const AnnotationLayer: React.FC<AnnotationLayerProps> = ({
     if (annotations.length > 0) commit([]);
   };
 
-  const exportAnnotations = () => {
+  const exportAnnotationData = () => {
     const blob = new Blob([JSON.stringify({ documentKey, annotations }, null, 2)], { type: 'application/json' });
     const href = URL.createObjectURL(blob);
     const link = document.createElement('a');
@@ -244,6 +248,21 @@ const AnnotationLayer: React.FC<AnnotationLayerProps> = ({
     link.download = `probaho-annotations-${Date.now()}.json`;
     link.click();
     URL.revokeObjectURL(href);
+  };
+
+  const handleExport = async () => {
+    setExportBusy(true);
+    setExportMessage(null);
+    try {
+      if (onExportPdf) await onExportPdf();
+      else exportAnnotationData();
+      setExportMessage(onExportPdf ? 'Annotated PDF ready to save.' : 'Annotation data exported.');
+    } catch (error: any) {
+      setExportMessage(error?.message || 'Export failed.');
+    } finally {
+      setExportBusy(false);
+      window.setTimeout(() => setExportMessage(null), 3200);
+    }
   };
 
   return (
@@ -263,7 +282,8 @@ const AnnotationLayer: React.FC<AnnotationLayerProps> = ({
           <button type="button" aria-label="Undo annotation" title="Undo" onClick={undo} disabled={!history.length}><Undo2 size={14} /></button>
           <button type="button" aria-label="Redo annotation" title="Redo" onClick={redo} disabled={!future.length}><RotateCw size={14} /></button>
           <button type="button" aria-label="Clear annotations" title="Clear annotations" onClick={clear} disabled={!annotations.length}><Trash2 size={14} /></button>
-          <button type="button" aria-label="Export annotations" title="Export annotations" onClick={exportAnnotations}><Download size={14} /></button>
+          <button type="button" aria-label={onExportPdf ? 'Export annotated PDF' : 'Export annotations'} title={onExportPdf ? 'Export annotated PDF' : 'Export annotations'} onClick={handleExport} disabled={exportBusy}><Download size={14} /></button>
+          {exportMessage && <span className="annotation-export-status" role="status">{exportMessage}</span>}
         </div>
       )}
       <canvas

@@ -672,7 +672,8 @@ app.whenReady().then(async () => {
 
   ipcMain.on('execute-save-pdf', async (event, data) => {
     requireTrustedAppSender(event);
-    if (!(data instanceof Uint8Array) && !Buffer.isBuffer(data)) return;
+    const bytes = data instanceof ArrayBuffer ? new Uint8Array(data) : data;
+    if (!(bytes instanceof Uint8Array) && !Buffer.isBuffer(bytes)) return;
     const win = BrowserWindow.fromWebContents(event.sender);
     if (!win) return;
 
@@ -683,8 +684,8 @@ app.whenReady().then(async () => {
 
     if (filePath) {
       try {
-        // Here data is the Buffer sent from the renderer
-        require('fs').writeFileSync(filePath, Buffer.from(data));
+        // Accept the structured-clone payload from the renderer without altering PDF bytes.
+        require('fs').writeFileSync(filePath, Buffer.from(bytes));
       } catch (err) {
         console.error('Failed to save PDF', err);
       }
