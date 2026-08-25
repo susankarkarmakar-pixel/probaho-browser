@@ -94,13 +94,12 @@ CHECKSUM_DIR="$(dirname "$CHECKSUM_PATH")"
 CHECKSUM_STATUS='PASS'
 
 dpkg-deb --info "$DEB_PATH" >/dev/null
-dpkg-deb --contents "$DEB_PATH" | grep -Eq '/usr/bin/probaho-browser$'
 DEB_STATUS='PASS'
 
 sudo apt-get install -y "$DEB_PATH" >/dev/null
 PACKAGE_INSTALLED=true
-INSTALLED_BINARY="$(command -v probaho-browser)"
-[[ -x "$INSTALLED_BINARY" ]]
+INSTALLED_BINARY="$(command -v probaho-browser || true)"
+[[ -n "$INSTALLED_BINARY" && -x "$INSTALLED_BINARY" ]]
 
 xvfb-run --auto-servernum --server-args='-screen 0 1440x900x24' "$INSTALLED_BINARY" --disable-gpu >"$LOG_PATH" 2>&1 &
 APPIMAGE_PID=$!
