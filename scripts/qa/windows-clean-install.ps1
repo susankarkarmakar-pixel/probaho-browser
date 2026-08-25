@@ -11,6 +11,7 @@ param(
   [string]$ReportPath,
   [switch]$SkipChecksum,
   [int]$LaunchTimeoutSeconds = 30,
+  [int]$UninstallTimeoutSeconds = 30,
   [switch]$SkipSignature,
   [switch]$SkipUninstall,
   [switch]$ResetUserData,
@@ -124,6 +125,9 @@ try {
   if ($LaunchTimeoutSeconds -lt 5) {
     throw 'LaunchTimeoutSeconds must be at least 5 seconds.'
   }
+  if ($UninstallTimeoutSeconds -lt 5) {
+    throw 'UninstallTimeoutSeconds must be at least 5 seconds.'
+  }
   if ($ResetUserData -and -not $Force) {
     throw 'ResetUserData is destructive. Re-run with both -ResetUserData and -Force, or use a clean Windows profile.'
   }
@@ -205,8 +209,11 @@ try {
     Require-Check -Condition ($null -ne $uninstaller) -Name 'Uninstaller discovery' -Details 'The NSIS uninstaller was found.'
     $uninstallResult = Start-Process -FilePath $uninstaller.FullName -ArgumentList @('/S') -Wait -PassThru
     Require-Check -Condition ($uninstallResult.ExitCode -eq 0) -Name 'Silent uninstall' -Details "Uninstaller exit code: $($uninstallResult.ExitCode)."
-    Start-Sleep -Seconds 2
-    Require-Check -Condition (-not (Test-Path -LiteralPath $script:InstallDirectory)) -Name 'Install cleanup' -Details 'The installation directory was removed after uninstall.'
+    $cleanupDeadline = (Get-Date).AddSeconds($UninstallTimeoutSeconds)
+    while ((Test-Path -LiteralPath $script:InstallDirectory) -and (Get-Date) -lt $cleanupDeadline) {
+      Start-Sleep -Seconds 1
+    }
+    Require-Check -Condition (-not (Test-Path -LiteralPath $script:InstallDirectory)) -Name 'Install cleanup' -Details "The installation directory was removed within $UninstallTimeoutSeconds seconds after uninstall."
   }
 
   $report = Write-Report -Passed $true
