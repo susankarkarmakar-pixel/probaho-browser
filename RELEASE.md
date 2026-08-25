@@ -64,7 +64,7 @@ Linux clean-install acceptance is automated by `.github/workflows/linux-clean-in
 
 On macOS, test both Apple Silicon and Intel artifacts, verify Gatekeeper acceptance, first launch, window controls, private windows, PDF export, updater behavior, and notarization status. On Linux, test the AppImage and Debian package on a clean supported distribution, verify desktop integration, sandbox behavior, downloads, and profile migration.
 
-Record the operating-system version, artifact filename, checksum, installation result, and any known issue in the release checklist before publishing.
+Record the operating-system version, artifact filename, checksum, installation result, SBOM filename, provenance-attestation status, and any known issue in the release checklist before publishing. Tagged builds publish a CycloneDX dependency SBOM per platform and create GitHub artifact attestations from the published checksum manifest; these attestations should be verified with `gh attestation verify` before release announcement.
 
 ## Rollback
 

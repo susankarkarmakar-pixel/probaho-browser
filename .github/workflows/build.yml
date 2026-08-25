@@ -7,7 +7,7 @@ on:
   workflow_dispatch: {}
 
 permissions:
-  contents: write
+  contents: read
 
 jobs:
   smoke-test:
@@ -75,6 +75,11 @@ jobs:
 
   package:
     needs: [smoke-test, e2e]
+    permissions:
+      contents: read
+      id-token: write
+      attestations: write
+      artifact-metadata: write
     strategy:
       fail-fast: false
       matrix:
@@ -87,6 +92,7 @@ jobs:
               app/release/*.yml
               app/release/*.blockmap
               app/release/SHA256SUMS-*.txt
+              app/release/*.cdx.json
           - os: macos-latest
             build_cmd: npm run dist:mac -- --publish never
             artifact_name: probaho-browser-macos
@@ -95,6 +101,7 @@ jobs:
               app/release/*.yml
               app/release/*.blockmap
               app/release/SHA256SUMS-*.txt
+              app/release/*.cdx.json
           - os: macos-latest
             build_cmd: npm run dist:mac -- --x64 --publish never
             artifact_name: probaho-browser-macos-x64
@@ -103,6 +110,7 @@ jobs:
               app/release/*.yml
               app/release/*.blockmap
               app/release/SHA256SUMS-*.txt
+              app/release/*.cdx.json
           - os: ubuntu-latest
             build_cmd: npm run dist:linux
             artifact_name: probaho-browser-linux
@@ -113,6 +121,7 @@ jobs:
               app/release/*.yml
               app/release/*.blockmap
               app/release/SHA256SUMS-*.txt
+              app/release/*.cdx.json
 
     runs-on: ${{ matrix.os }}
 
@@ -130,6 +139,13 @@ jobs:
       - name: Install dependencies from lockfile
         working-directory: app
         run: npm ci --audit=false --fund=false
+
+      - name: Generate dependency SBOM
+        working-directory: app
+        shell: bash
+        run: |
+          mkdir -p release
+          npm run --silent sbom > "release/probaho-browser-${{ matrix.artifact_name }}.cdx.json"
 
       - name: Build React app
         working-directory: app
@@ -181,6 +197,12 @@ jobs:
         working-directory: app
         run: npm run checksums -- "release/SHA256SUMS-${{ matrix.artifact_name }}.txt"
 
+      - name: Attest published release subjects
+        if: startsWith(github.ref, 'refs/tags/')
+        uses: actions/attest@v4
+        with:
+          subject-checksums: app/release/SHA256SUMS-${{ matrix.artifact_name }}.txt
+
       - name: Upload platform artifacts
         uses: actions/upload-artifact@v7
         with:
@@ -192,6 +214,8 @@ jobs:
   release:
     if: startsWith(github.ref, 'refs/tags/')
     needs: package
+    permissions:
+      contents: write
     runs-on: ubuntu-latest
     steps:
       - name: Download platform artifacts

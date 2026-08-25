@@ -18,6 +18,7 @@
     "dist:mac": "electron-builder --mac",
     "dist:linux": "electron-builder --linux --publish never",
     "checksums": "node scripts/create-checksums.mjs",
+    "sbom": "npm --loglevel silent sbom --sbom-format cyclonedx --sbom-type application",
     "build:win": "electron-builder --win --x64",
     "build:linux": "electron-builder --linux --x64",
     "build:all": "electron-builder --win --linux --x64"
