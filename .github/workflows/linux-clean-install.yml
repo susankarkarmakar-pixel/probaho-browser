@@ -80,6 +80,7 @@ jobs:
           name: probaho-browser-linux-clean-install-report-${{ github.run_id }}
           path: |
             qa-results/linux-clean-install.md
+            qa-results/linux-clean-install.md.log
           if-no-files-found: warn
           retention-days: 30
 

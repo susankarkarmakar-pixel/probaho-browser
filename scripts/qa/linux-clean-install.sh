@@ -23,7 +23,7 @@ done
 
 mkdir -p "$(dirname "$REPORT_PATH")"
 WORK_DIR="$(mktemp -d)"
-LOG_PATH="$WORK_DIR/launch.log"
+LOG_PATH="${REPORT_PATH}.log"
 INSTALLED_BINARY=''
 APPIMAGE_PID=''
 PACKAGE_INSTALLED=false
@@ -79,8 +79,18 @@ write_report() {
 | Debian package metadata | $DEB_STATUS |
 | Debian install and launch | $DEB_LAUNCH_STATUS |
 | AppImage launch | $APPIMAGE_STATUS |
-| Debian uninstall | $UNINSTALL_STATUS |
+| **Debian uninstall** | $UNINSTALL_STATUS |
 EOF
+  if [[ -f "$LOG_PATH" ]]; then
+    {
+      echo
+      echo '## Launch log tail'
+      echo
+      echo '```text'
+      tail -40 "$LOG_PATH"
+      echo '```'
+    } >> "$REPORT_PATH"
+  fi
 }
 
 CHECKSUM_STATUS='FAIL'
