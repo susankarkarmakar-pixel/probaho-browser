@@ -137,10 +137,10 @@ APP_PID=''
 
 hdiutil detach "$MOUNT_DIR" -force >/dev/null
 rm -rf "$APP_DEST"
-if [[ ! -e "$APP_DEST" && ! -e "$MOUNT_DIR" ]]; then
+if ! mount | grep -Fq "$MOUNT_DIR" && [[ ! -e "$APP_DEST" ]]; then
   CLEANUP_STATUS='PASS'
 else
-  write_report 'FAIL' 'The mounted DMG or temporary application copy remained after cleanup.'
+  write_report 'FAIL' 'The DMG remained mounted or the temporary application copy remained after cleanup.'
   exit 1
 fi
 
