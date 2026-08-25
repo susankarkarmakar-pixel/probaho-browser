@@ -1,0 +1,113 @@
+name: macOS Clean-Install QA
+
+on:
+  workflow_run:
+    workflows: ["Build and Release"]
+    types: [completed]
+  workflow_dispatch:
+    inputs:
+      artifact_run_id:
+        description: 'Successful Build and Release workflow run ID containing macOS artifacts'
+        required: true
+        type: string
+      skip_signature:
+        description: 'Skip code-signature and Gatekeeper checks for unsigned exploratory artifacts only'
+        required: false
+        default: false
+        type: boolean
+
+permissions:
+  contents: read
+  actions: read
+
+jobs:
+  macos-clean-install:
+    name: macOS clean-install (${{ matrix.label }})
+    if: >-
+      github.event_name == 'workflow_dispatch' ||
+      (github.event.workflow_run.conclusion == 'success' && github.event.workflow_run.event == 'push')
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 20
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - label: Apple Silicon
+            runner: macos-latest
+            artifact_name: probaho-browser-macos
+            expected_architecture: arm64
+          - label: Intel x64
+            runner: macos-15-intel
+            artifact_name: probaho-browser-macos-x64
+            expected_architecture: x64
+
+    steps:
+      - name: Checkout the tested commit
+        uses: actions/checkout@v7
+        with:
+          ref: ${{ github.event_name == 'workflow_run' && github.event.workflow_run.head_sha || github.sha }}
+
+      - name: Download macOS release artifact
+        uses: actions/download-artifact@v8
+        with:
+          name: ${{ matrix.artifact_name }}
+          path: qa-input
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          run-id: ${{ github.event_name == 'workflow_run' && github.event.workflow_run.id || inputs.artifact_run_id }}
+
+      - name: Select macOS artifacts
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          installer_dir="$GITHUB_WORKSPACE/qa-input"
+          dmg_path="$(find "$installer_dir" -maxdepth 1 -type f -name '*.dmg' -print -quit)"
+          checksum_path="$installer_dir/SHA256SUMS-${{ matrix.artifact_name }}.txt"
+
+          [[ -n "$dmg_path" ]] || { echo 'No macOS DMG found.' >&2; exit 1; }
+          [[ -f "$checksum_path" ]] || { echo 'macOS checksum file not found.' >&2; exit 1; }
+
+          {
+            echo "DMG_PATH=$dmg_path"
+            echo "CHECKSUM_PATH=$checksum_path"
+          } >> "$GITHUB_ENV"
+          echo "DMG artifact: $(basename "$dmg_path")"
+
+      - name: Run macOS clean-install QA
+        shell: bash
+        env:
+          SKIP_SIGNATURE: ${{ inputs.skip_signature || false }}
+        run: |
+          chmod +x scripts/qa/macos-clean-install.sh
+          args=(
+            --dmg "$DMG_PATH"
+            --checksum "$CHECKSUM_PATH"
+            --architecture "${{ matrix.expected_architecture }}"
+            --report "$GITHUB_WORKSPACE/qa-results/macos-${{ matrix.expected_architecture }}-clean-install.md"
+          )
+          if [[ "$SKIP_SIGNATURE" == 'true' ]]; then
+            args+=(--skip-signature)
+          fi
+          scripts/qa/macos-clean-install.sh "${args[@]}"
+
+      - name: Publish macOS QA report
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: probaho-browser-macos-${{ matrix.expected_architecture }}-clean-install-report-${{ github.run_id }}
+          path: qa-results/macos-${{ matrix.expected_architecture }}-clean-install.md
+          if-no-files-found: warn
+          retention-days: 30
+
+      - name: Add macOS QA summary
+        if: always()
+        shell: bash
+        run: |
+          {
+            echo '## macOS clean-install QA (${{ matrix.label }})'
+            echo
+            if [[ -f qa-results/macos-${{ matrix.expected_architecture }}-clean-install.md ]]; then
+              cat qa-results/macos-${{ matrix.expected_architecture }}-clean-install.md
+            else
+              echo 'No macOS QA report was produced.'
+            fi
+          } >> "$GITHUB_STEP_SUMMARY"

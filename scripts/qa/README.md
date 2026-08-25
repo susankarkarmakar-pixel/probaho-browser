@@ -39,6 +39,12 @@ The repository workflow at `.github/workflows/windows-clean-install.yml` runs on
 
 For an existing successful build run, use **Actions → Windows Clean-Install QA → Run workflow** and provide that run’s numeric ID as `artifact_run_id`. The optional `skip_signature` input is only for unsigned exploratory artifacts; it must remain disabled for stable-release acceptance.
 
+The Linux workflow at `.github/workflows/linux-clean-install.yml` runs on `ubuntu-latest` after a successful tagged build or through manual dispatch. It downloads `probaho-browser-linux`, verifies the published checksum, installs and launches the `.deb`, launches the AppImage under Xvfb, removes the Debian package, and uploads a Markdown report.
+
+The macOS matrix workflow at `.github/workflows/macos-clean-install.yml` runs separate Apple Silicon and Intel jobs. It downloads `probaho-browser-macos` or `probaho-browser-macos-x64`, verifies the checksum, checks the application architecture, mounts the DMG, copies the application to a temporary location, runs code-signature and Gatekeeper checks for signed artifacts, performs a launch smoke test, and uploads a report. The Intel job uses GitHub’s supported `macos-15-intel` label; macOS 13 is not used.
+
+For manual exploratory validation of unsigned artifacts, provide the successful build run ID. The macOS workflow supports `skip_signature: true`; the Linux workflow does not require a signing check because Linux artifacts are unsigned in the current release configuration. Automatic tagged runs must be treated as the stable acceptance path and must not skip macOS signature or Gatekeeper checks.
+
 ## What the script cannot verify
 
 The harness cannot determine whether the browser’s rendered UI is visually correct or whether a remote website’s certificate is invalid. It also cannot prove updater behavior, private browsing isolation, PDF export correctness, extension permission boundaries, or user-facing accessibility. Those checks remain manual steps in the v2.2.0 release checklist.

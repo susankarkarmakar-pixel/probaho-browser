@@ -60,6 +60,8 @@ Set-ExecutionPolicy -Scope Process Bypass
 
 The helper verifies the checksum and Authenticode publisher, performs an isolated silent install, launches and closes the installed browser, confirms profile initialization, and uninstalls it. It does not replace manual UI, privacy, certificate-warning, updater, PDF, extension, or accessibility acceptance. See [`scripts/qa/README.md`](scripts/qa/README.md) for flags and limitations.
 
+Linux clean-install acceptance is automated by `.github/workflows/linux-clean-install.yml`. It verifies the AppImage and Debian package, installs and launches both artifact types, and removes the Debian package. macOS clean-install acceptance is automated by `.github/workflows/macos-clean-install.yml` for Apple Silicon and Intel x64. It verifies the DMG checksum and architecture, runs code-signature/Gatekeeper checks for signed artifacts, launches the app, and cleans up the temporary copy. Both workflows run automatically after a successful tagged build and support manual dispatch using a successful `Build and Release` run ID.
+
 On macOS, test both Apple Silicon and Intel artifacts, verify Gatekeeper acceptance, first launch, window controls, private windows, PDF export, updater behavior, and notarization status. On Linux, test the AppImage and Debian package on a clean supported distribution, verify desktop integration, sandbox behavior, downloads, and profile migration.
 
 Record the operating-system version, artifact filename, checksum, installation result, and any known issue in the release checklist before publishing.

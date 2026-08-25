@@ -1,0 +1,98 @@
+name: Linux Clean-Install QA
+
+on:
+  workflow_run:
+    workflows: ["Build and Release"]
+    types: [completed]
+  workflow_dispatch:
+    inputs:
+      artifact_run_id:
+        description: 'Successful Build and Release workflow run ID containing probaho-browser-linux'
+        required: true
+        type: string
+
+permissions:
+  contents: read
+  actions: read
+
+jobs:
+  linux-clean-install:
+    name: Linux clean-install acceptance
+    if: >-
+      github.event_name == 'workflow_dispatch' ||
+      (github.event.workflow_run.conclusion == 'success' && github.event.workflow_run.event == 'push')
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+
+    steps:
+      - name: Checkout the tested commit
+        uses: actions/checkout@v7
+        with:
+          ref: ${{ github.event_name == 'workflow_run' && github.event.workflow_run.head_sha || github.sha }}
+
+      - name: Download Linux release artifact
+        uses: actions/download-artifact@v8
+        with:
+          name: probaho-browser-linux
+          path: qa-input
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          run-id: ${{ github.event_name == 'workflow_run' && github.event.workflow_run.id || inputs.artifact_run_id }}
+
+      - name: Install Linux QA prerequisites
+        run: sudo apt-get update && sudo apt-get install -y xvfb dpkg
+
+      - name: Select Linux artifacts
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          installer_dir="$GITHUB_WORKSPACE/qa-input"
+          deb_path="$(find "$installer_dir" -maxdepth 1 -type f -name '*.deb' -print -quit)"
+          appimage_path="$(find "$installer_dir" -maxdepth 1 -type f -name '*.AppImage' -print -quit)"
+          checksum_path="$installer_dir/SHA256SUMS-probaho-browser-linux.txt"
+
+          [[ -n "$deb_path" ]] || { echo 'No Debian package found.' >&2; exit 1; }
+          [[ -n "$appimage_path" ]] || { echo 'No AppImage found.' >&2; exit 1; }
+          [[ -f "$checksum_path" ]] || { echo 'Linux checksum file not found.' >&2; exit 1; }
+
+          chmod +x "$appimage_path"
+          {
+            echo "DEB_PATH=$deb_path"
+            echo "APPIMAGE_PATH=$appimage_path"
+            echo "CHECKSUM_PATH=$checksum_path"
+          } >> "$GITHUB_ENV"
+          echo "Debian artifact: $(basename "$deb_path")"
+          echo "AppImage artifact: $(basename "$appimage_path")"
+
+      - name: Run Linux clean-install QA
+        shell: bash
+        run: |
+          chmod +x scripts/qa/linux-clean-install.sh
+          scripts/qa/linux-clean-install.sh \
+            --deb "$DEB_PATH" \
+            --appimage "$APPIMAGE_PATH" \
+            --checksum "$CHECKSUM_PATH" \
+            --report "$GITHUB_WORKSPACE/qa-results/linux-clean-install.md"
+
+      - name: Publish Linux QA report and launch log
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: probaho-browser-linux-clean-install-report-${{ github.run_id }}
+          path: |
+            qa-results/linux-clean-install.md
+          if-no-files-found: warn
+          retention-days: 30
+
+      - name: Add Linux QA summary
+        if: always()
+        shell: bash
+        run: |
+          {
+            echo '## Linux clean-install QA'
+            echo
+            if [[ -f qa-results/linux-clean-install.md ]]; then
+              cat qa-results/linux-clean-install.md
+            else
+              echo 'No Linux QA report was produced.'
+            fi
+          } >> "$GITHUB_STEP_SUMMARY"
