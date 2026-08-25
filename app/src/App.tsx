@@ -571,6 +571,7 @@ function App() {
   });
   const [showHistory, setShowHistory] = useState(false);
   const [historyQuery, setHistoryQuery] = useState('');
+  const [clearTimeRange, setClearTimeRange] = useState('all');
   const [showDownloads, setShowDownloads] = useState(false);
   const [downloads, setDownloads] = useState<DownloadItem[]>([]);
   const [downloadFilter, setDownloadFilter] = useState<'all' | 'active' | 'completed'>('all');
@@ -2044,7 +2045,28 @@ function App() {
              closeTabId(tabContextMenu.tabId);
           }}>
                          <div className="menu-item-icon"><Trash2 size={15} /></div><div className="menu-item-text">Close Tab</div>
-
+          </div>
+          <div className="menu-item" onClick={() => {
+             setTabs(prev => {
+                const targetIndex = prev.findIndex(t => t.id === tabContextMenu.tabId);
+                if (targetIndex === -1) return prev;
+                const newTabs = prev.filter((_, i) => i <= targetIndex);
+                if (newTabs.length > 0) setActiveTabId(newTabs[newTabs.length - 1].id);
+                return newTabs;
+             });
+             setTabContextMenu(null);
+          }}>
+             <div className="menu-item-icon"><Trash2 size={15} /></div><div className="menu-item-text">Close Tabs to the Right</div>
+          </div>
+          <div className="menu-item" onClick={() => {
+             setTabs(prev => {
+                const newTabs = prev.filter(t => t.id === tabContextMenu.tabId);
+                if (newTabs.length > 0) setActiveTabId(newTabs[0].id);
+                return newTabs;
+             });
+             setTabContextMenu(null);
+          }}>
+             <div className="menu-item-icon"><Trash2 size={15} /></div><div className="menu-item-text">Close Other Tabs</div>
           </div>
         </div>
       )}
@@ -2487,6 +2509,13 @@ function App() {
             </div>
           )}
 
+          <button className="bookmark-toggle-btn" type="button" title="Copy URL" onClick={() => {
+             if (inputUrl && inputUrl !== 'about:blank' && !inputUrl.startsWith('probaho://')) {
+                navigator.clipboard.writeText(inputUrl).then(() => alert('URL copied to clipboard!'));
+             }
+          }}>
+             <Copy size={16} color="currentColor" />
+          </button>
           <button className="bookmark-toggle-btn" type="button" title="Reader Mode" onClick={() => {
             const wv = webviewRefs.current[targetedTabId];
             if (wv) {
@@ -3276,12 +3305,34 @@ function App() {
               </div>
 
               <div style={{marginBottom: '16px'}}>
+                <div style={{display: 'flex', gap: '8px', marginBottom: '8px'}}>
+                  <select
+                    value={clearTimeRange}
+                    onChange={(e) => setClearTimeRange(e.target.value)}
+                    style={{flex: 1, padding: '8px', borderRadius: '4px', border: '1px solid var(--border-color)', background: 'var(--bg-color)', color: 'var(--text-color)'}}
+                  >
+                    <option value="all">All time</option>
+                    <option value="24h">Last 24 hours</option>
+                    <option value="1h">Last 1 hour</option>
+                  </select>
+                </div>
                 <button
                   className="clear-history-btn"
                   style={{width: '100%', padding: '10px', fontSize: '13px', fontWeight: 'bold', background: 'var(--primary-color)', color: '#fff', border: 'none', borderRadius: '4px', cursor: 'pointer'}}
                   onClick={() => {
-                    localStorage.removeItem('history');
-                    setHistory([]);
+                    if (clearTimeRange === 'all') {
+                      localStorage.removeItem('history');
+                      setHistory([]);
+                    } else {
+                      const now = new Date().getTime();
+                      const cutoff = clearTimeRange === '1h' ? now - (60 * 60 * 1000) : now - (24 * 60 * 60 * 1000);
+                      setHistory(prev => {
+                        const newHistory = prev.filter(h => new Date(h.time).getTime() < cutoff);
+                        localStorage.setItem('history', JSON.stringify(newHistory));
+                        return newHistory;
+                      });
+                    }
+
                     if (window.electronAPI?.clearCache) {
                       window.electronAPI.clearCache();
                     }
