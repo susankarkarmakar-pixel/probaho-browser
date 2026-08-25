@@ -226,11 +226,11 @@ try {
     while ((Test-Path -LiteralPath $script:InstallDirectory) -and (Get-Date) -lt $cleanupDeadline) {
       Start-Sleep -Seconds 1
     }
-    $remainingInstallItems = if (Test-Path -LiteralPath $script:InstallDirectory) {
-      @(Get-ChildItem -LiteralPath $script:InstallDirectory -Force -Recurse -ErrorAction SilentlyContinue)
-    } else {
-      @()
-    }
+    $remainingInstallItems = @(
+      if (Test-Path -LiteralPath $script:InstallDirectory) {
+        Get-ChildItem -LiteralPath $script:InstallDirectory -Force -Recurse -ErrorAction SilentlyContinue
+      }
+    )
     Require-Check -Condition ($remainingInstallItems.Count -eq 0) -Name 'Install cleanup' -Details "The installation directory was removed or left empty within $UninstallTimeoutSeconds seconds after uninstall."
   }
 
