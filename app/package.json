@@ -70,8 +70,8 @@
       ],
       "category": "Network",
       "syncDesktopName": true,
-      "maintainer": "Susankar Karmakar <your-email@example.com>",
-      "vendor": "Susankar Karmakar",
+      "maintainer": "Susankar Karmakar — SANKET PIXEL TECHNOLOGIES <your-email@example.com>",
+      "vendor": "SANKET PIXEL TECHNOLOGIES",
       "icon": "build/icon.png"
     },
     "publish": {
@@ -108,5 +108,5 @@
     "wait-on": "^7.2.0"
   },
   "homepage": "https://github.com/susankarkarmakar-pixel/probaho-browser",
-  "author": "Susankar Karmakar <susankar@example.com>"
+  "author": "Susankar Karmakar — SANKET PIXEL TECHNOLOGIES <susankar@example.com>"
 }
