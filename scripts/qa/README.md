@@ -33,6 +33,12 @@ The script fails if a Probaho profile already exists. This prevents an upgrade p
 
 `-SkipSignature`, `-SkipChecksum`, and `-SkipUninstall` are intended only for exploratory testing. They produce warnings in the JSON report and must not be used as the stable signed-release acceptance result. The generated report includes the OS version, architecture, installer hash, install directory, each check result, and the final pass/fail state. The report should be attached to the release QA record and must not contain credentials or browser profile data.
 
+## GitHub Actions workflow
+
+The repository workflow at `.github/workflows/windows-clean-install.yml` runs on `windows-latest` after a successful tagged `Build and Release` run. It downloads the `probaho-browser-windows` artifact from that exact run, verifies the signed installer and checksum, executes the harness, and uploads the JSON report as a retained workflow artifact and job summary. It does not use signing secrets and does not publish a release.
+
+For an existing successful build run, use **Actions → Windows Clean-Install QA → Run workflow** and provide that run’s numeric ID as `artifact_run_id`. The optional `skip_signature` input is only for unsigned exploratory artifacts; it must remain disabled for stable-release acceptance.
+
 ## What the script cannot verify
 
 The harness cannot determine whether the browser’s rendered UI is visually correct or whether a remote website’s certificate is invalid. It also cannot prove updater behavior, private browsing isolation, PDF export correctness, extension permission boundaries, or user-facing accessibility. Those checks remain manual steps in the v2.2.0 release checklist.

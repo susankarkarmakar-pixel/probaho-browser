@@ -1,0 +1,116 @@
+name: Windows Clean-Install QA
+
+on:
+  workflow_run:
+    workflows: ["Build and Release"]
+    types: [completed]
+  workflow_dispatch:
+    inputs:
+      artifact_run_id:
+        description: 'Successful Build and Release workflow run ID containing probaho-browser-windows'
+        required: true
+        type: string
+      skip_signature:
+        description: 'Skip Authenticode verification for unsigned exploratory artifacts only'
+        required: false
+        default: false
+        type: boolean
+
+permissions:
+  contents: read
+  actions: read
+
+jobs:
+  windows-clean-install:
+    name: Windows clean-install acceptance
+    if: >-
+      github.event_name == 'workflow_dispatch' ||
+      (github.event.workflow_run.conclusion == 'success' && github.event.workflow_run.event == 'push')
+    runs-on: windows-latest
+    timeout-minutes: 15
+
+    steps:
+      - name: Checkout the tested commit
+        uses: actions/checkout@v7
+        with:
+          ref: ${{ github.event_name == 'workflow_run' && github.event.workflow_run.head_sha || github.sha }}
+
+      - name: Download Windows release artifact
+        uses: actions/download-artifact@v8
+        with:
+          name: probaho-browser-windows
+          path: qa-input
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          run-id: ${{ github.event_name == 'workflow_run' && github.event.workflow_run.id || inputs.artifact_run_id }}
+
+      - name: Select installer and checksum
+        shell: pwsh
+        run: |
+          $installer = Get-ChildItem -LiteralPath $env:GITHUB_WORKSPACE\qa-input -Filter '*.exe' -File |
+            Where-Object { $_.Name -match 'Setup|Installer' -and $_.Name -notmatch 'uninstall' } |
+            Select-Object -First 1
+          if (-not $installer) {
+            throw 'No NSIS setup executable was found in the probaho-browser-windows artifact.'
+          }
+
+          $checksum = Get-ChildItem -LiteralPath $env:GITHUB_WORKSPACE\qa-input -Filter 'SHA256SUMS-probaho-browser-windows.txt' -File |
+            Select-Object -First 1
+          if (-not $checksum) {
+            throw 'The Windows SHA256SUMS-probaho-browser-windows.txt file was not found in the artifact.'
+          }
+
+          "INSTALLER_PATH=$($installer.FullName)" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
+          "CHECKSUM_PATH=$($checksum.FullName)" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
+          Write-Host "Installer: $($installer.Name)"
+          Write-Host "Checksum file: $($checksum.Name)"
+
+      - name: Run Windows clean-install QA
+        shell: pwsh
+        env:
+          SKIP_SIGNATURE: ${{ inputs.skip_signature || false }}
+        run: |
+          $arguments = @{
+            InstallerPath = $env:INSTALLER_PATH
+            ChecksumFile = $env:CHECKSUM_PATH
+            ReportPath = Join-Path $env:GITHUB_WORKSPACE 'qa-results/windows-clean-install.json'
+          }
+          if ($env:SKIP_SIGNATURE -eq 'true') {
+            $arguments.SkipSignature = $true
+          }
+          & .\scripts\qa\windows-clean-install.ps1 @arguments
+
+      - name: Publish QA report
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: probaho-browser-windows-clean-install-report-${{ github.run_id }}
+          path: qa-results/windows-clean-install.json
+          if-no-files-found: warn
+          retention-days: 30
+
+      - name: Add QA summary
+        if: always()
+        shell: pwsh
+        run: |
+          $reportPath = Join-Path $env:GITHUB_WORKSPACE 'qa-results/windows-clean-install.json'
+          if (-not (Test-Path -LiteralPath $reportPath)) {
+            "## Windows clean-install QA`n`nNo JSON report was produced." | Out-File $env:GITHUB_STEP_SUMMARY -Encoding utf8
+            exit 0
+          }
+
+          $report = Get-Content -LiteralPath $reportPath -Raw | ConvertFrom-Json
+          $lines = @(
+            '## Windows clean-install QA',
+            '',
+            "**Result:** $($report.passed)",
+            "**Installer SHA-256:** $($report.installerSha256)",
+            "**OS:** Windows $($report.windowsVersion) ($($report.architecture))",
+            '',
+            '| Check | Status | Details |',
+            '|---|---|---|'
+          )
+          foreach ($check in $report.checks) {
+            $details = ([string]$check.details).Replace('|', '\\|').Replace("`r", ' ').Replace("`n", ' ')
+            $lines += "| $($check.name) | $($check.status) | $details |"
+          }
+          $lines | Out-File $env:GITHUB_STEP_SUMMARY -Encoding utf8
