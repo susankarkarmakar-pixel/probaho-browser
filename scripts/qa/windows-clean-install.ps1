@@ -83,10 +83,23 @@ function Get-ChecksumFromFile {
 }
 
 function Stop-LaunchedBrowser {
-  if ($null -eq $script:LaunchProcess) { return }
+  $rootId = if ($script:LaunchProcess) { $script:LaunchProcess.Id } else { $null }
   try {
-    $process = Get-Process -Id $script:LaunchProcess.Id -ErrorAction SilentlyContinue
-    if ($process) { Stop-Process -Id $process.Id -Force -ErrorAction SilentlyContinue }
+    if ($rootId) {
+      $process = Get-Process -Id $rootId -ErrorAction SilentlyContinue
+      if ($process) { Stop-Process -Id $process.Id -Force -ErrorAction SilentlyContinue }
+    }
+
+    if ($script:InstallDirectory -and (Test-Path -LiteralPath $script:InstallDirectory)) {
+      $installRoot = ((Resolve-Path -LiteralPath $script:InstallDirectory).Path).TrimEnd('\\')
+      $childProcesses = Get-CimInstance Win32_Process -ErrorAction SilentlyContinue |
+        Where-Object {
+          $_.ExecutablePath -and $_.ExecutablePath.StartsWith($installRoot, [StringComparison]::OrdinalIgnoreCase)
+        }
+      foreach ($child in $childProcesses) {
+        Stop-Process -Id ([int]$child.ProcessId) -Force -ErrorAction SilentlyContinue
+      }
+    }
   } catch {
     # Cleanup must not replace the original test result.
   }
