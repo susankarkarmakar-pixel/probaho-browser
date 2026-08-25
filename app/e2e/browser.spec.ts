@@ -288,13 +288,13 @@ test.describe('browser shell', () => {
     const items = menu.locator('.menu-item');
     await expect(items.first()).toHaveAttribute('role', 'menuitem');
     await expect(items.first()).toBeFocused();
-    await menu.press('ArrowDown');
+    await appPage.keyboard.press('ArrowDown');
     await expect(items.nth(1)).toBeFocused();
-    await menu.press('End');
+    await appPage.keyboard.press('End');
     await expect(items.last()).toBeFocused();
-    await menu.press('Home');
+    await appPage.keyboard.press('Home');
     await expect(items.first()).toBeFocused();
-    await menu.press('Escape');
+    await appPage.keyboard.press('Escape');
     await expect(menu).not.toBeVisible();
     await expect(menuButton).toBeFocused();
   });

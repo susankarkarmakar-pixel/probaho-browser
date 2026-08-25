@@ -14,6 +14,7 @@ const { createCertificateErrorBroker } = require('./certificate-error-broker');
 
 const browserWindows = new Set();
 const unsafeNavigationOverrides = new Set();
+const CHROMIUM_USER_AGENT = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/152.0.0.0 Safari/537.36';
 const certificateErrorBroker = createCertificateErrorBroker({ requestIdFactory: randomUUID });
 const extensionManager = new ExtensionManager();
 const pluginManager = new PluginManager(path.join(app.getPath('userData'), 'plugins.json'));
@@ -60,6 +61,17 @@ function broadcastUpdaterStatus(nextState) {
   updaterState = { ...updaterState, ...nextState };
   for (const window of browserWindows) {
     if (!window.isDestroyed()) window.webContents.send('update-status', updaterState);
+  }
+}
+
+function writeClipboardText(text) {
+  try {
+    const result = clipboard.writeText(text);
+    if (result && typeof result.catch === 'function') {
+      result.catch(error => console.error('Clipboard write failed:', error));
+    }
+  } catch (error) {
+    console.error('Clipboard write failed:', error);
   }
 }
 
@@ -465,7 +477,7 @@ app.whenReady().then(async () => {
     }
 
     privateSession.webRequest.onBeforeSendHeaders((details, callback) => {
-      details.requestHeaders['User-Agent'] = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.0.0 Safari/537.36';
+      details.requestHeaders['User-Agent'] = CHROMIUM_USER_AGENT;
       if (currentSettings.doNotTrack) details.requestHeaders.DNT = '1';
       callback({ cancel: false, requestHeaders: details.requestHeaders });
     });
@@ -928,7 +940,7 @@ app.whenReady().then(async () => {
   const safeBrowsingPending = new Set();
 
   app.on('web-contents-created', (event, contents) => {
-    contents.userAgent = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.0.0 Safari/537.36';
+    contents.userAgent = CHROMIUM_USER_AGENT;
 
     contents.on('will-attach-webview', (event, webPreferences, params) => {
       delete webPreferences.preload;
@@ -1133,7 +1145,7 @@ ipcMain.on('show-context-menu', (event, params) => {
     template.push({
       label: 'Copy Link Address',
       click: () => {
-        clipboard.writeText(params.linkURL);
+        writeClipboardText(params.linkURL);
       }
     });
   }
@@ -1159,7 +1171,7 @@ ipcMain.on('show-context-menu', (event, params) => {
     template.push({
       label: 'Copy Image URL',
       click: () => {
-        clipboard.writeText(params.srcURL);
+        writeClipboardText(params.srcURL);
       }
     });
     template.push({

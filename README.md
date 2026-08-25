@@ -27,7 +27,7 @@ Safe Browsing credentials, when configured, remain in the main process. The rend
 
 ## Supported platforms
 
-The release configuration targets Windows x64 installer and portable builds, macOS DMG builds for Apple Silicon and Intel x64, and Linux x64 AppImage, Debian package, and tarball builds.
+The release configuration targets Windows x64 installer and portable builds, macOS DMG builds for Apple Silicon and Intel x64 on **macOS 13 Ventura or newer**, and Linux x64 AppImage, Debian package, and tarball builds. The application is built on Electron 44 with a current Chromium runtime.
 
 Unsigned local builds may produce operating-system trust warnings. Stable public distribution requires signed Windows and macOS artifacts, notarization where applicable, published checksums, and platform acceptance testing.
 
