@@ -5,6 +5,7 @@ DEB_PATH=''
 APPIMAGE_PATH=''
 CHECKSUM_PATH=''
 REPORT_PATH=''
+NO_SANDBOX=false
 
 while [[ $# -gt 0 ]]; do
   case "$1" in
@@ -12,6 +13,7 @@ while [[ $# -gt 0 ]]; do
     --appimage) APPIMAGE_PATH="$2"; shift 2 ;;
     --checksum) CHECKSUM_PATH="$2"; shift 2 ;;
     --report) REPORT_PATH="$2"; shift 2 ;;
+    --no-sandbox) NO_SANDBOX=true; shift ;;
     *) echo "Unknown argument: $1" >&2; exit 64 ;;
   esac
 done
@@ -70,6 +72,7 @@ write_report() {
 - **Debian artifact:** $(basename "$DEB_PATH")
 - **AppImage artifact:** $(basename "$APPIMAGE_PATH")
 - **Details:** $details
+- **CI launch mode:** $(if [[ "$NO_SANDBOX" == true ]]; then echo 'no-sandbox (headless-runner compatibility)'; else echo 'normal Electron sandbox'; fi)
 
 ## Checks
 
@@ -111,8 +114,13 @@ PACKAGE_INSTALLED=true
 INSTALLED_BINARY="$(command -v probaho-browser || true)"
 [[ -n "$INSTALLED_BINARY" && -x "$INSTALLED_BINARY" ]]
 
+launch_args=(--disable-gpu)
+if [[ "$NO_SANDBOX" == true ]]; then
+  launch_args+=(--no-sandbox)
+fi
+
 set +e
- timeout --foreground 12s xvfb-run --auto-servernum --server-args='-screen 0 1440x900x24' "$INSTALLED_BINARY" --disable-gpu >"$LOG_PATH" 2>&1
+ timeout --foreground 12s xvfb-run --auto-servernum --server-args='-screen 0 1440x900x24' "$INSTALLED_BINARY" "${launch_args[@]}" >"$LOG_PATH" 2>&1
  deb_exit=$?
 set -e
 if [[ "$deb_exit" -eq 124 ]]; then
@@ -124,7 +132,11 @@ fi
 
 chmod +x "$APPIMAGE_PATH"
 set +e
- timeout --foreground 12s xvfb-run --auto-servernum --server-args='-screen 0 1440x900x24' "$APPIMAGE_PATH" --appimage-extract-and-run --disable-gpu >>"$LOG_PATH" 2>&1
+ appimage_args=(--appimage-extract-and-run --disable-gpu)
+ if [[ "$NO_SANDBOX" == true ]]; then
+   appimage_args+=(--no-sandbox)
+ fi
+ timeout --foreground 12s xvfb-run --auto-servernum --server-args='-screen 0 1440x900x24' "$APPIMAGE_PATH" "${appimage_args[@]}" >>"$LOG_PATH" 2>&1
  appimage_exit=$?
 set -e
 if [[ "$appimage_exit" -eq 124 ]]; then

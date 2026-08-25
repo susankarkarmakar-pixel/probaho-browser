@@ -71,7 +71,8 @@ jobs:
             --deb "$DEB_PATH" \
             --appimage "$APPIMAGE_PATH" \
             --checksum "$CHECKSUM_PATH" \
-            --report "$GITHUB_WORKSPACE/qa-results/linux-clean-install.md"
+            --report "$GITHUB_WORKSPACE/qa-results/linux-clean-install.md" \
+            --no-sandbox
 
       - name: Publish Linux QA report and launch log
         if: always()
