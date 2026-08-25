@@ -10,10 +10,11 @@ const { ExtensionManager } = require('./extension-manager');
 const { PluginManager, validatePlugin } = require('./plugin-manager');
 const { isAllowedNavigationUrl } = require('./navigation-policy');
 const { lookupUrl: lookupSafeBrowsingUrl } = require('./safe-browsing');
+const { createCertificateErrorBroker } = require('./certificate-error-broker');
 
 const browserWindows = new Set();
 const unsafeNavigationOverrides = new Set();
-const pendingCertificateErrors = new Map();
+const certificateErrorBroker = createCertificateErrorBroker({ requestIdFactory: randomUUID });
 const extensionManager = new ExtensionManager();
 const pluginManager = new PluginManager(path.join(app.getPath('userData'), 'plugins.json'));
 const MAX_PDF_BYTES = 50 * 1024 * 1024;
@@ -90,26 +91,7 @@ function attachCertificateErrorHandler(contents) {
       callback(false);
       return;
     }
-    const requestId = randomUUID();
-    pendingCertificateErrors.set(requestId, {
-      callback,
-      senderId: ownerWindow.webContents.id,
-      timer: setTimeout(() => {
-        const pending = pendingCertificateErrors.get(requestId);
-        if (!pending) return;
-        pendingCertificateErrors.delete(requestId);
-        pending.callback(false);
-      }, 45_000)
-    });
-    ownerWindow.webContents.send('certificate-error', {
-      requestId,
-      url,
-      error: String(error || 'certificate-error'),
-      subjectName: certificate?.subjectName || '',
-      issuerName: certificate?.issuerName || '',
-      validStart: certificate?.validStart || 0,
-      validExpiry: certificate?.validExpiry || 0
-    });
+    certificateErrorBroker.request({ ownerWindow, url, error, certificate, callback });
   });
 }
 
@@ -345,7 +327,11 @@ function createWindow(isPrivate = false) {
 
   browserWindows.add(window);
   attachCertificateErrorHandler(window.webContents);
-  window.on('closed', () => browserWindows.delete(window));
+  const windowSenderId = window.webContents.id;
+  window.on('closed', () => {
+    certificateErrorBroker.cancelForSender(windowSenderId);
+    browserWindows.delete(window);
+  });
   return window;
 }
 
@@ -430,12 +416,7 @@ app.whenReady().then(async () => {
 
   ipcMain.handle('allow-certificate-error', (event, requestId, allow) => {
     requireTrustedAppSender(event);
-    const pending = pendingCertificateErrors.get(requestId);
-    if (!pending || pending.senderId !== event.sender.id) return false;
-    pendingCertificateErrors.delete(requestId);
-    clearTimeout(pending.timer);
-    pending.callback(Boolean(allow));
-    return true;
+    return certificateErrorBroker.resolve(requestId, event.sender.id, allow);
   });
 
   ipcMain.handle('allow-unsafe-navigation', (event, url) => {
