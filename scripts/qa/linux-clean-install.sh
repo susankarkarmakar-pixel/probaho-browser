@@ -101,21 +101,28 @@ PACKAGE_INSTALLED=true
 INSTALLED_BINARY="$(command -v probaho-browser || true)"
 [[ -n "$INSTALLED_BINARY" && -x "$INSTALLED_BINARY" ]]
 
-xvfb-run --auto-servernum --server-args='-screen 0 1440x900x24' "$INSTALLED_BINARY" --disable-gpu >"$LOG_PATH" 2>&1 &
-APPIMAGE_PID=$!
-sleep 12
-kill -0 "$APPIMAGE_PID"
-kill "$APPIMAGE_PID" 2>/dev/null || true
-wait "$APPIMAGE_PID" 2>/dev/null || true
-APPIMAGE_PID=''
-DEB_LAUNCH_STATUS='PASS'
+set +e
+ timeout --foreground 12s xvfb-run --auto-servernum --server-args='-screen 0 1440x900x24' "$INSTALLED_BINARY" --disable-gpu >"$LOG_PATH" 2>&1
+ deb_exit=$?
+set -e
+if [[ "$deb_exit" -eq 124 ]]; then
+  DEB_LAUNCH_STATUS='PASS'
+else
+  write_report 'FAIL' "The installed Debian application exited before the 12-second smoke-test timeout (exit code $deb_exit)."
+  exit 1
+fi
 
 chmod +x "$APPIMAGE_PATH"
-xvfb-run --auto-servernum --server-args='-screen 0 1440x900x24' "$APPIMAGE_PATH" --appimage-extract-and-run --disable-gpu >>"$LOG_PATH" 2>&1 &
-APPIMAGE_PID=$!
-sleep 12
-kill -0 "$APPIMAGE_PID"
-APPIMAGE_STATUS='PASS'
+set +e
+ timeout --foreground 12s xvfb-run --auto-servernum --server-args='-screen 0 1440x900x24' "$APPIMAGE_PATH" --appimage-extract-and-run --disable-gpu >>"$LOG_PATH" 2>&1
+ appimage_exit=$?
+set -e
+if [[ "$appimage_exit" -eq 124 ]]; then
+  APPIMAGE_STATUS='PASS'
+else
+  write_report 'FAIL' "The AppImage exited before the 12-second smoke-test timeout (exit code $appimage_exit)."
+  exit 1
+fi
 
 sudo apt-get remove -y probaho-browser >/dev/null
 PACKAGE_INSTALLED=false
