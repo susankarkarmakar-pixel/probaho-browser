@@ -55,7 +55,9 @@ function Require-Check {
 function Get-ProfilePaths {
   @(
     $(if ($env:APPDATA) { Join-Path $env:APPDATA 'Probaho Browser' }),
-    $(if ($env:LOCALAPPDATA) { Join-Path $env:LOCALAPPDATA 'Probaho Browser' })
+    $(if ($env:APPDATA) { Join-Path $env:APPDATA 'probaho-browser' }),
+    $(if ($env:LOCALAPPDATA) { Join-Path $env:LOCALAPPDATA 'Probaho Browser' }),
+    $(if ($env:LOCALAPPDATA) { Join-Path $env:LOCALAPPDATA 'probaho-browser' })
   ) | Where-Object { $_ -and $_.Trim() } | Select-Object -Unique
 }
 
