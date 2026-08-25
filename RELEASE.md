@@ -48,6 +48,18 @@ On Windows PowerShell, calculate a file hash with `Get-FileHash` and compare it 
 
 Before announcing the release, install the signed Windows installer and portable build on a clean Windows x64 profile, open and close the application, verify update behavior, test certificate warnings, import bookmarks, open a PDF, export an annotated PDF, load a permitted extension, and confirm private-window isolation.
 
+The repeatable Windows installer portion can be run with the repository helper:
+
+```powershell
+Set-ExecutionPolicy -Scope Process Bypass
+.\\scripts\\qa\\windows-clean-install.ps1 `
+  -InstallerPath '.\\Probaho Browser-2.2.0 Setup.exe' `
+  -ChecksumFile '.\\SHA256SUMS-probaho-browser-windows.txt' `
+  -ReportPath '.\\qa-results\\windows-clean-install.json'
+```
+
+The helper verifies the checksum and Authenticode publisher, performs an isolated silent install, launches and closes the installed browser, confirms profile initialization, and uninstalls it. It does not replace manual UI, privacy, certificate-warning, updater, PDF, extension, or accessibility acceptance. See [`scripts/qa/README.md`](scripts/qa/README.md) for flags and limitations.
+
 On macOS, test both Apple Silicon and Intel artifacts, verify Gatekeeper acceptance, first launch, window controls, private windows, PDF export, updater behavior, and notarization status. On Linux, test the AppImage and Debian package on a clean supported distribution, verify desktop integration, sandbox behavior, downloads, and profile migration.
 
 Record the operating-system version, artifact filename, checksum, installation result, and any known issue in the release checklist before publishing.
