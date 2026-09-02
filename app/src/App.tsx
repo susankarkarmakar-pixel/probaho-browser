@@ -1965,6 +1965,22 @@ function App() {
             <span className="context-menu-kicker">Tab actions</span>
             <span className="context-menu-title">{tabs.find(t => t.id === tabContextMenu.tabId)?.title || 'Current tab'}</span>
           </div>
+          <div className="menu-item" onClick={() => {
+            const wv = webviewRefs.current[tabContextMenu.tabId];
+            if (wv) wv.reload();
+            setTabContextMenu(null);
+          }}>
+            <div className="menu-item-icon"><RotateCw size={15} /></div><div className="menu-item-text">Reload Tab</div>
+          </div>
+          <div className="menu-item" onClick={() => {
+            const tab = tabs.find(t => t.id === tabContextMenu.tabId);
+            if (tab && tab.url) {
+              navigator.clipboard.writeText(tab.url).catch(() => {});
+            }
+            setTabContextMenu(null);
+          }}>
+            <div className="menu-item-icon"><Copy size={15} /></div><div className="menu-item-text">Copy Link</div>
+          </div>
           <div className="menu-item" role="menuitem" tabIndex={0} onClick={() => {
             const tab = tabs.find(t => t.id === tabContextMenu.tabId);
             if (tab) {
@@ -3598,9 +3614,15 @@ function App() {
               <div className="no-bookmarks">{t('noBookmarks', settings.language)}</div>
             ) : (
               bookmarks.map((b, i) => (
-                <div key={i} className="bookmark-item" onClick={() => { navigate(b.url); setShowBookmarks(false); }}>
-                  <div className="bookmark-title">{b.title}</div>
-                  <div className="bookmark-url">{b.url}</div>
+                <div key={i} className="bookmark-item history-item" onClick={() => { navigate(b.url); setShowBookmarks(false); }}>
+                  <span className="history-item-main">
+                    <span className="bookmark-title">{b.title}</span>
+                    <span className="bookmark-url">{b.url}</span>
+                  </span>
+                  <button type="button" className="download-action-btn remove" aria-label="Remove bookmark" onClick={(e) => {
+                     e.stopPropagation();
+                     setBookmarks(prev => prev.filter((_, idx) => idx !== i));
+                  }}><Trash2 size={14} /></button>
                 </div>
               ))
             )}
@@ -3630,11 +3652,17 @@ function App() {
                     setShowReadingList(false);
                   }
                 }}>
-                  <div className="bookmark-title">{item.title}</div>
-                  <div className="bookmark-url" style={{ display: 'flex', justifyContent: 'space-between' }}>
-                    <span>{item.url}</span>
-                    <span>{item.savedAt}</span>
-                  </div>
+                  <span className="history-item-main" style={{ width: '100%' }}>
+                    <span className="bookmark-title">{item.title}</span>
+                    <span className="bookmark-url" style={{ display: 'flex', justifyContent: 'space-between' }}>
+                      <span>{item.url}</span>
+                      <span>{item.savedAt}</span>
+                    </span>
+                  </span>
+                  <button type="button" className="download-action-btn remove" aria-label="Remove from reading list" onClick={(e) => {
+                     e.stopPropagation();
+                     setReadingList(prev => prev.filter((_, idx) => idx !== i));
+                  }}><Trash2 size={14} /></button>
                 </div>
               ))
             )}
