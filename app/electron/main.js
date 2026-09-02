@@ -942,6 +942,15 @@ app.whenReady().then(async () => {
   app.on('web-contents-created', (event, contents) => {
     contents.userAgent = CHROMIUM_USER_AGENT;
 
+    contents.on('enter-html-full-screen', () => {
+      const win = BrowserWindow.fromWebContents(contents.hostWebContents || contents);
+      if (win) win.setFullScreen(true);
+    });
+    contents.on('leave-html-full-screen', () => {
+      const win = BrowserWindow.fromWebContents(contents.hostWebContents || contents);
+      if (win) win.setFullScreen(false);
+    });
+
     contents.on('will-attach-webview', (event, webPreferences, params) => {
       delete webPreferences.preload;
       webPreferences.nodeIntegration = false;
